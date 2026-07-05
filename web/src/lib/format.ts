@@ -21,7 +21,11 @@ export const TYPE_FULL: Record<string, string> = {
 export function shortSchoolName(name: string): string {
   return name
     .replace(/^群馬県立/, '')
-    .replace(/^[^\s]{2,4}市立/, '')
+    // 「N市立N…」= 前橋市立前橋 / 太田市立太田 / 高崎市立高崎経済… は市名 N まで剥がす
+    .replace(/^([^\s]{2,4})市立\1/, '$1')
+    // 「N市立X…」（X ≠ N）= 桐生市立商業 / 伊勢崎市立四ツ葉学園 等は「市立」だけ剥がし
+    // 市名 N は残す（残さないと「商業高校」のようにどの市か分からなくなる）
+    .replace(/^([^\s]{2,4})市立/, '$1')
     .replace(/^国立/, '')
     .replace(/高等専門学校$/, '高専')
     .replace(/高等学校$/, '高校')
