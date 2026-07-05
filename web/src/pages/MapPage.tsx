@@ -11,7 +11,8 @@ import type { useUserData } from '../hooks/useUserData'
 import { SchoolDetailSheet } from '../components/SchoolDetailSheet'
 import { AdSlot } from '../components/AdSlot'
 
-const RADIUS_OPTIONS = [20, 30, 50, 70] as const
+const RADIUS_MIN = 5
+const RADIUS_MAX = 80
 const ALL_BANDS = [70, 60, 50, 40] as const
 const OWN_CHIPS = [
   ['prefectural', '県立'], ['municipal', '市立'], ['national', '国立'],
@@ -19,6 +20,25 @@ const OWN_CHIPS = [
 ] as const
 const TYPE_CHIPS = [['high_school', '高校'], ['kosen', '高専(5年制)']] as const
 const GEN_CHIPS = [['coed', '共学'], ['boys', '男子'], ['girls', '女子']] as const
+const DEPT_CHIPS = [
+  ['general', '普通科系'],
+  ['commercial', '商業系'],
+  ['industrial', '工業系'],
+  ['agricultural', '農業系'],
+  ['welfare', '福祉・看護'],
+] as const
+
+function deptGroupOf(courseType: string | null): (typeof DEPT_CHIPS)[number][0] | null {
+  if (!courseType) return null
+  const c = courseType
+  if (c === 'general' || c === 'comprehensive' || c === 'science' || c === 'international' || c === 'chuko_ikkan')
+    return 'general'
+  if (c === 'commercial' || c === 'accounting' || c === 'information_processing') return 'commercial'
+  if (c.startsWith('industrial') || c.startsWith('kosen') || c === 'civil') return 'industrial'
+  if (c.startsWith('agricultural')) return 'agricultural'
+  if (c === 'health_nursing' || c === 'human_service') return 'welfare'
+  return null
+}
 
 function schoolIcon(s: School, isFav: boolean): L.DivIcon {
   const top = topDev(s)
@@ -53,8 +73,11 @@ interface Filters {
   own: Set<string>
   gen: Set<string>
   types: Set<string>
+  depts: Set<string>
   onlyIntegrated: boolean
 }
+
+type PopoverKey = 'own' | 'bands' | 'gen' | 'depts' | null
 
 interface Props {
   userData: ReturnType<typeof useUserData>
@@ -76,8 +99,10 @@ export function MapPage({ userData }: Props) {
     own: new Set(OWN_CHIPS.map(([k]) => k)),
     gen: new Set(GEN_CHIPS.map(([k]) => k)),
     types: new Set(TYPE_CHIPS.map(([k]) => k)),
+    depts: new Set(DEPT_CHIPS.map(([k]) => k)),
     onlyIntegrated: false,
   })
+  const [popover, setPopover] = useState<PopoverKey>(null)
 
   const center = useMemo<[number, number]>(
     () => (home ? [home.lat, home.lng] : [36.3907, 139.0604]),
@@ -97,7 +122,13 @@ export function MapPage({ userData }: Props) {
       const passGen = filters.gen.has(s.gender_type)
       const passType = filters.types.has(s.type)
       const passInt = !filters.onlyIntegrated || s.is_integrated
-      return passRadius && passBand && passOwn && passGen && passType && passInt
+      // 学科: 少なくとも 1 学科がグループにマッチすれば通す。全学科の course_type が
+      // 不明（deptGroupOf=null）の校は「未分類」として常に通す（除外しない）。
+      const groups = s.departments
+        .map((d) => deptGroupOf(d.course_type))
+        .filter((g): g is (typeof DEPT_CHIPS)[number][0] => g != null)
+      const passDept = groups.length === 0 || groups.some((g) => filters.depts.has(g))
+      return passRadius && passBand && passOwn && passGen && passType && passDept && passInt
     })
   }, [schools, favorites, home, filters])
 
@@ -106,7 +137,7 @@ export function MapPage({ userData }: Props) {
     [schools, favorites],
   )
 
-  const toggleSet = (key: 'bands' | 'own' | 'gen' | 'types', value: never) => {
+  const toggleSet = (key: 'bands' | 'own' | 'gen' | 'types' | 'depts', value: never) => {
     setFilters((f) => {
       const next = new Set(f[key] as Set<unknown>)
       if (next.has(value)) next.delete(value)
@@ -115,14 +146,8 @@ export function MapPage({ userData }: Props) {
     })
   }
 
-  const cycleRadius = () => {
-    setFilters((f) => {
-      const i = RADIUS_OPTIONS.indexOf(f.radius as (typeof RADIUS_OPTIONS)[number])
-      const next = RADIUS_OPTIONS[(i + 1) % RADIUS_OPTIONS.length]
-      toast(`半径 ${next}km`)
-      return { ...f, radius: next }
-    })
-  }
+  const activeCount = <T,>(set: Set<T>, all: readonly (readonly [T, string])[]) =>
+    set.size === all.length ? '全' : String(set.size)
 
   useEffect(() => {
     if (!mapNodeRef.current) return
@@ -180,19 +205,52 @@ export function MapPage({ userData }: Props) {
       </div>
 
       <div className="float-bar">
-        <button className="chip" onClick={cycleRadius}>
-          半径 {filters.radius}km
-        </button>
-        {ALL_BANDS.map((b) => (
-          <button
-            key={b}
-            className={`chip ${filters.bands.has(b) ? 'on' : ''}`}
-            onClick={() => toggleSet('bands', b as never)}
-          >
-            {b === 70 ? '70+' : `${b}台`}
-          </button>
+        <div className="radius-slider" aria-label="表示半径">
+          <span className="rs-label">半径</span>
+          <input
+            type="range"
+            min={RADIUS_MIN}
+            max={RADIUS_MAX}
+            step={5}
+            value={filters.radius}
+            onChange={(e) => setFilters((f) => ({ ...f, radius: Number(e.target.value) }))}
+            onMouseUp={() => toast(`半径 ${filters.radius}km`)}
+            onTouchEnd={() => toast(`半径 ${filters.radius}km`)}
+          />
+          <span className="rs-value">{filters.radius}km</span>
+        </div>
+        {(
+          [
+            ['own', '種別', OWN_CHIPS, filters.own],
+            ['bands', '偏差値', ALL_BANDS.map((b) => [b, b === 70 ? '70+' : `${b}台`] as const), filters.bands],
+            ['gen', '性別', GEN_CHIPS, filters.gen],
+            ['depts', '学科', DEPT_CHIPS, filters.depts],
+          ] as const
+        ).map(([key, label, list, set]) => (
+          <div className="dropdown" key={key}>
+            <button
+              className={`chip drop ${popover === key ? 'open' : ''}`}
+              onClick={() => setPopover((p) => (p === key ? null : (key as PopoverKey)))}
+            >
+              {label} ({activeCount(set as Set<unknown>, list as unknown as readonly (readonly [unknown, string])[])}) ▾
+            </button>
+            {popover === key && (
+              <div className="popover">
+                {(list as readonly (readonly [unknown, string])[]).map(([k, l]) => (
+                  <button
+                    key={String(k)}
+                    className={`chip ${(set as Set<unknown>).has(k) ? 'on' : ''}`}
+                    onClick={() => toggleSet(key as 'own', k as never)}
+                  >
+                    {l}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
         ))}
       </div>
+      {popover && <div className="popover-scrim" onClick={() => setPopover(null)} />}
 
       <div className="map-controls">
         <button onClick={() => mapRef?.setZoom(mapRef.getZoom() + 1)} aria-label="ズームイン">
@@ -282,6 +340,21 @@ export function MapPage({ userData }: Props) {
                   key={k}
                   className={`chip ${filters.gen.has(k) ? 'on' : ''}`}
                   onClick={() => toggleSet('gen', k as never)}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="filter-group">
+            <div className="label">学科</div>
+            <div className="chips">
+              {DEPT_CHIPS.map(([k, label]) => (
+                <button
+                  key={k}
+                  className={`chip ${filters.depts.has(k) ? 'on' : ''}`}
+                  onClick={() => toggleSet('depts', k as never)}
                 >
                   {label}
                 </button>

@@ -239,6 +239,48 @@ body {
   color: var(--ink);
 }
 .chip.on { background: var(--accent); color: #fff; }
+.chip.drop { padding-right: 10px; }
+.chip.drop.open { background: var(--ink); color: #fff; }
+
+.radius-slider {
+  pointer-events: auto; flex: 0 0 auto;
+  display: flex; align-items: center; gap: 6px;
+  padding: 6px 12px;
+  border: 2px solid var(--ink); border-radius: 999px; background: rgba(255, 255, 255, 0.95);
+  box-shadow: 2px 2px 0 var(--line);
+  font-family: var(--display); font-weight: 700; font-size: 0.8rem; color: var(--ink);
+}
+.radius-slider .rs-label { flex: 0 0 auto; }
+.radius-slider .rs-value { flex: 0 0 auto; min-width: 3.2em; text-align: right; color: var(--accent); }
+.radius-slider input[type="range"] {
+  flex: 0 0 auto; width: 100px; height: 22px; appearance: none; background: transparent; cursor: pointer;
+}
+.radius-slider input[type="range"]::-webkit-slider-runnable-track {
+  height: 4px; background: var(--line); border-radius: 2px;
+}
+.radius-slider input[type="range"]::-moz-range-track {
+  height: 4px; background: var(--line); border-radius: 2px;
+}
+.radius-slider input[type="range"]::-webkit-slider-thumb {
+  appearance: none; width: 16px; height: 16px; margin-top: -6px;
+  background: var(--accent); border: 2px solid var(--ink); border-radius: 50%;
+}
+.radius-slider input[type="range"]::-moz-range-thumb {
+  width: 16px; height: 16px; background: var(--accent); border: 2px solid var(--ink); border-radius: 50%;
+}
+
+.dropdown { pointer-events: auto; position: relative; flex: 0 0 auto; }
+.dropdown .popover {
+  position: absolute; top: calc(100% + 6px); left: 0;
+  display: flex; gap: 6px; flex-wrap: wrap; max-width: 240px;
+  padding: 8px; border: 2px solid var(--ink); border-radius: 12px;
+  background: #fff; box-shadow: 2px 3px 0 var(--line);
+  z-index: 660;
+}
+.popover-scrim {
+  position: absolute; inset: 0; z-index: 640; pointer-events: auto;
+  background: transparent;
+}
 .map-controls {
   position: absolute; right: 10px; bottom: 112px; display: flex; flex-direction: column; gap: 6px;
   z-index: 600;
