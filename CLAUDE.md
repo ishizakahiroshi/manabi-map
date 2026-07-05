@@ -62,7 +62,7 @@ cd web && pnpm build       # 本番ビルド（dist/）
 node scripts/secrets-scan.mjs --staged --block   # 手動 secrets-scan（layer 1）
 ```
 
-Supabase / LINE の接続情報はリポジトリ外に保管する（作者環境では `~/.env/` 配下）。`web/.env.local`（gitignored）に `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY` を転記して使う。
+Supabase / LINE の接続情報はリポジトリ外に保管する。`web/.env.local`（gitignored）に `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY` を転記して使う。作者ローカルの保管パスなど個人環境固有の情報は `CLAUDE.local.md`（gitignored）に記載する。
 
 ## AI 作業共通ルール
 
