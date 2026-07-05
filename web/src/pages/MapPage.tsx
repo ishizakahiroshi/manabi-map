@@ -25,6 +25,14 @@ import { AdSlot } from '../components/AdSlot'
 const RADIUS_MIN = 5
 const RADIUS_MAX = 80
 const ALL_BANDS = [70, 60, 50, 40] as const
+const UNRATED = -1 as const
+const BAND_CHIPS = [
+  [70, '70+'],
+  [60, '60台'],
+  [50, '50台'],
+  [40, '40台'],
+  [UNRATED, '未測定'],
+] as const
 const OWN_CHIPS = [
   ['prefectural', '県立'], ['municipal', '市立'], ['national', '国立'],
   ['private', '私立'], ['union', '組合立'],
@@ -136,7 +144,7 @@ export function MapPage({ userData }: Props) {
   const [detail, setDetail] = useState<School | null>(null)
   const [filters, setFilters] = useState<Filters>({
     radius: 50,
-    bands: new Set(ALL_BANDS),
+    bands: new Set([...ALL_BANDS, UNRATED as number]),
     own: new Set(OWN_CHIPS.map(([k]) => k)),
     gen: new Set(GEN_CHIPS.map(([k]) => k)),
     types: new Set(TYPE_CHIPS.map(([k]) => k)),
@@ -157,8 +165,8 @@ export function MapPage({ userData }: Props) {
       const dist = home ? haversine(home, { lat: s.latitude, lng: s.longitude }) : 0
       // 志望校は半径フィルタを無視して常時表示（§7.6.3）
       const passRadius = isFav || !home || dist <= filters.radius
-      // 偏差値未確定校は帯フィルタの対象外にせず常に表示（0 埋めしない方針と整合）
-      const passBand = top == null || filters.bands.has(band(top))
+      // 偏差値未測定校は sentinel UNRATED として明示的にフィルタ制御可能
+      const passBand = top == null ? filters.bands.has(UNRATED) : filters.bands.has(band(top))
       const passOwn = filters.own.has(s.ownership)
       const passGen = filters.gen.has(s.gender_type)
       const passType = filters.types.has(s.type)
@@ -280,7 +288,7 @@ export function MapPage({ userData }: Props) {
         {(
           [
             ['own', '種別', OWN_CHIPS, filters.own],
-            ['bands', '偏差値', ALL_BANDS.map((b) => [b, b === 70 ? '70+' : `${b}台`] as const), filters.bands],
+            ['bands', '偏差値', BAND_CHIPS, filters.bands],
             ['gen', '性別', GEN_CHIPS, filters.gen],
             ['depts', '学科', DEPT_CHIPS, filters.depts],
           ] as const
