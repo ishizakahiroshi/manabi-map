@@ -44,11 +44,32 @@ function deptGroupOf(courseType: string | null): (typeof DEPT_CHIPS)[number][0] 
   if (!courseType) return null
   const c = courseType
   if (c === 'comprehensive') return 'comprehensive'
-  if (c === 'general' || c === 'science' || c === 'international' || c === 'chuko_ikkan') return 'general'
-  if (c === 'commercial' || c === 'accounting' || c === 'information_processing') return 'commercial'
-  if (c.startsWith('industrial') || c.startsWith('kosen') || c === 'civil') return 'industrial'
-  if (c.startsWith('agricultural')) return 'agricultural'
-  if (c === 'health_nursing' || c === 'human_service') return 'welfare'
+  // 普通科系: 普通・理数・国際・IB・スポーツ・芸術・中高一貫
+  if (
+    c === 'general' ||
+    c.startsWith('science') ||
+    c === 'international' ||
+    c === 'chuko_ikkan' ||
+    c === 'ib_diploma' ||
+    c === 'sports' ||
+    c === 'arts'
+  )
+    return 'general'
+  // 商業系: commercial* / accounting / information_processing
+  if (c.startsWith('commercial') || c === 'accounting' || c === 'information_processing') return 'commercial'
+  // 工業系: industrial* / kosen* / civil / environmental_engineering / environmental_technology
+  if (
+    c.startsWith('industrial') ||
+    c.startsWith('kosen') ||
+    c === 'civil' ||
+    c === 'environmental_engineering' ||
+    c === 'environmental_technology'
+  )
+    return 'industrial'
+  // 農業系: agricultur* / natural_environment
+  if (c.startsWith('agricultur') || c === 'natural_environment') return 'agricultural'
+  // 福祉・看護（家庭系含む）: health_nursing / human_service / welfare / culinary
+  if (c === 'health_nursing' || c === 'human_service' || c === 'welfare' || c === 'culinary') return 'welfare'
   return null
 }
 
