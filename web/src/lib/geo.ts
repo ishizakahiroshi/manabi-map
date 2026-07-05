@@ -27,14 +27,14 @@ export function estimateTransitMinutes(distanceKm: number): number {
   return Math.max(1, Math.round(distanceKm * 2.5))
 }
 
-/** 直線距離から自転車の粗い所要分（15km/h ≒ × 4 min/km） */
+/** 直線距離から自転車の粗い所要分（× 5 min/km・道の迂回や登坂を考慮した現実寄り係数） */
 export function estimateBikeMinutes(distanceKm: number): number {
-  return Math.max(1, Math.round(distanceKm * 4))
+  return Math.max(1, Math.round(distanceKm * 5))
 }
 
-/** 直線距離から徒歩の粗い所要分（5km/h ≒ × 12 min/km） */
+/** 直線距離から徒歩の粗い所要分（× 15 min/km・道の迂回や登坂を考慮した現実寄り係数） */
 export function estimateWalkMinutes(distanceKm: number): number {
-  return Math.max(1, Math.round(distanceKm * 12))
+  return Math.max(1, Math.round(distanceKm * 15))
 }
 
 /** 郵便番号 → 代表地点（群馬中心の簡易マップ・郵便番号先頭3桁） */
