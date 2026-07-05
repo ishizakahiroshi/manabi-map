@@ -1,0 +1,47 @@
+# === OS / エディタ ===
+.DS_Store
+Thumbs.db
+desktop.ini
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# === ログ・一時・スクラッチ ===
+*.log
+*.jsonl
+*.tmp
+*.bak
+*.orig
+*.rej
+
+# === AI ツールのローカル状態（トークンを含む可能性あり） ===
+.claude/
+.codex-tmp/
+
+# === ローカル/プライベート追記（fresh public clone から除外） ===
+.env
+.env.*
+!.env.example
+*.local
+*.local.*
+*.local.md
+*.local.json
+docs/local/
+
+# === 認証情報・secrets・鍵（public へ絶対に出さない） ===
+*.pem
+*.key
+*.p12
+*.pfx
+*.ppk
+id_rsa
+id_dsa
+id_ecdsa
+id_ed25519
+secrets.*
+*.secret.*
+*credential*
+.netrc
+.npmrc
+.pypirc
