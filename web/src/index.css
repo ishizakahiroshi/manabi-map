@@ -469,6 +469,10 @@ body {
   color: var(--ink); opacity: 0.75; font-weight: 500;
 }
 
+/* PC 向け: マウスホバーでピンを最前面に持ってくる（Leaflet の inline z-index を上書き） */
+.leaflet-marker-icon:hover { z-index: 10000 !important; }
+.pin:hover .label { border-color: var(--accent, #ff7a3d); box-shadow: 2px 3px 0 var(--accent, #ff7a3d); }
+
 .school-cluster {
   width: 40px; height: 40px; border-radius: 50%;
   background: var(--accent, #ff7a3d); color: #fff;
