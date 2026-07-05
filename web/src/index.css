@@ -225,7 +225,7 @@ body {
 .map-canvas { position: absolute; inset: 52px 0 96px 0; }
 .float-bar {
   position: absolute; top: 60px; left: 8px; right: 8px;
-  display: flex; gap: 6px; flex-wrap: nowrap; overflow: auto;
+  display: flex; gap: 6px; flex-wrap: wrap;
   pointer-events: none;
   z-index: 650;
 }
