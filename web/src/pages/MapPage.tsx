@@ -4,7 +4,15 @@ import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import type { School } from '../types/school'
 import { band, topDev, displayCode, devLabel, shortSchoolName } from '../lib/format'
-import { haversine, shortLabel } from '../lib/geo'
+import {
+  haversine,
+  shortLabel,
+  estimateWalkMinutes,
+  estimateBikeMinutes,
+  estimateCarMinutes,
+  estimateTransitMinutes,
+} from '../lib/geo'
+import type { HomeLocation } from '../types/school'
 import { useApp } from '../contexts/AppContext'
 import { useSchools } from '../hooks/useSchools'
 import type { useUserData } from '../hooks/useUserData'
@@ -40,18 +48,25 @@ function deptGroupOf(courseType: string | null): (typeof DEPT_CHIPS)[number][0] 
   return null
 }
 
-function schoolIcon(s: School, isFav: boolean): L.DivIcon {
+function schoolIcon(s: School, isFav: boolean, home: HomeLocation | null): L.DivIcon {
   const top = topDev(s)
   const b = top != null ? band(top) : null
   const badge = s.type === 'kosen' ? ' <small>[高専]</small>' : s.is_integrated ? ' <small>[一貫]</small>' : ''
+  const commute = home
+    ? (() => {
+        const d = haversine(home, { lat: s.latitude, lng: s.longitude })
+        return `<div class="label-commute">🚶${estimateWalkMinutes(d)}/🚲${estimateBikeMinutes(d)}/🚗${estimateCarMinutes(d)}/🚃${estimateTransitMinutes(d)}分</div>`
+      })()
+    : ''
   return L.divIcon({
     className: '',
-    iconSize: [200, 56],
-    iconAnchor: [100, 56],
+    iconSize: [200, home ? 70 : 56],
+    iconAnchor: [100, home ? 70 : 56],
     html: `<div class="pin ${isFav ? 'fav' : ''}" ${b != null ? `data-band="${b}"` : ''}>
       <div class="label">
         <div class="label-name">${shortSchoolName(s.name)}</div>
         <div class="label-dev">${displayCode(s)}<span class="dev-value">${devLabel(s)}</span>${badge}</div>
+        ${commute}
       </div>
       <div class="dot"></div>
     </div>`,
@@ -182,7 +197,7 @@ export function MapPage({ userData }: Props) {
       L.marker([home.lat, home.lng], { icon: homeIcon() }).addTo(layer)
     }
     visibleSchools.forEach((s) => {
-      L.marker([s.latitude, s.longitude], { icon: schoolIcon(s, !!favorites[s.id]) })
+      L.marker([s.latitude, s.longitude], { icon: schoolIcon(s, !!favorites[s.id], home) })
         .on('click', () => setDetail(s))
         .addTo(layer)
     })

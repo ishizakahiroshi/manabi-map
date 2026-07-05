@@ -1,7 +1,14 @@
 import { useEffect, useState } from 'react'
 import type { School } from '../types/school'
 import { displayName, OWN_FULL, GEN_FULL, TYPE_FULL } from '../lib/format'
-import { haversine, estimateCommuteMinutes, googleMapsRoute } from '../lib/geo'
+import {
+  haversine,
+  estimateWalkMinutes,
+  estimateBikeMinutes,
+  estimateCarMinutes,
+  estimateTransitMinutes,
+  googleMapsRoute,
+} from '../lib/geo'
 import { useApp } from '../contexts/AppContext'
 import { useAuth } from '../contexts/AuthContext'
 import type { useUserData } from '../hooks/useUserData'
@@ -261,7 +268,9 @@ export function SchoolDetailSheet({ school, onClose, userData }: Props) {
             <div className="row">
               <span>概算通学時間</span>
               <b>
-                車 約{estimateCommuteMinutes(dist)}分 <span className="todo">推定</span>
+                🚶 約{estimateWalkMinutes(dist)}分 ／ 🚲 約{estimateBikeMinutes(dist)}分 ／
+                🚗 約{estimateCarMinutes(dist)}分 ／ 🚃 約{estimateTransitMinutes(dist)}分
+                <span className="todo"> 推定</span>
               </b>
             </div>
             {routeUrl && (
