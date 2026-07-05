@@ -13,6 +13,21 @@ export const TYPE_FULL: Record<string, string> = {
   high_school: '高等学校', kosen: '高等専門学校（5年制）',
 }
 
+/**
+ * 地図ピン・一覧カード用の短縮校名。設置者情報は §7.7 の運営コード（県/市/国/私/組）で
+ * 併記されるため、名称からは冗長な設置者接頭辞と「高等学校」を落とす。
+ * 例: 群馬県立前橋高等学校 → 前橋高校 / 群馬工業高等専門学校 → 群馬工業高専
+ */
+export function shortSchoolName(name: string): string {
+  return name
+    .replace(/^群馬県立/, '')
+    .replace(/^[^\s]{2,4}市立/, '')
+    .replace(/^国立/, '')
+    .replace(/高等専門学校$/, '高専')
+    .replace(/高等学校$/, '高校')
+    .replace(/中等教育学校$/, '中等')
+}
+
 export function band(dev: number): 70 | 60 | 50 | 40 {
   if (dev >= 70) return 70
   if (dev >= 60) return 60

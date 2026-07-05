@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import type { School } from '../types/school'
-import { displayCode, devLabel, OWN_FULL, GEN_FULL } from '../lib/format'
+import { displayCode, devLabel, OWN_FULL, GEN_FULL, shortSchoolName } from '../lib/format'
 import { useSchools } from '../hooks/useSchools'
 import type { useUserData } from '../hooks/useUserData'
 import { SchoolDetailSheet } from '../components/SchoolDetailSheet'
@@ -56,7 +56,7 @@ export function FavoritesPage({ userData }: Props) {
               <span className="rank">{i + 1}位</span>
               <span className="stars-inline">{stars}</span>
               <h3>
-                {s.name}（{displayCode(s)}：{devLabel(s)}）
+                {shortSchoolName(s.name)}（{displayCode(s)}：{devLabel(s)}）
               </h3>
               <div className="meta">
                 {OWN_FULL[s.ownership]} / {GEN_FULL[s.gender_type]} /{' '}

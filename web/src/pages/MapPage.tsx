@@ -1,10 +1,10 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { MapContainer, TileLayer, Marker, useMap } from 'react-leaflet'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import type { School } from '../types/school'
-import { band, topDev, displayCode, devLabel } from '../lib/format'
+import { band, topDev, displayCode, devLabel, shortSchoolName } from '../lib/format'
 import { haversine, shortLabel } from '../lib/geo'
 import { useApp } from '../contexts/AppContext'
 import { useSchools } from '../hooks/useSchools'
@@ -30,7 +30,7 @@ function schoolIcon(s: School, isFav: boolean): L.DivIcon {
     iconSize: [200, 40],
     iconAnchor: [100, 40],
     html: `<div class="pin ${isFav ? 'fav' : ''}" ${b != null ? `data-band="${b}"` : ''}>
-      <div class="label">${s.name}（${displayCode(s)}：${devLabel(s)}）${badge}</div>
+      <div class="label">${shortSchoolName(s.name)}（${displayCode(s)}：${devLabel(s)}）${badge}</div>
       <div class="dot"></div>
     </div>`,
   })
@@ -48,7 +48,9 @@ function homeIcon(): L.DivIcon {
 /** MapContainer の外のボタンから地図を操作するためのブリッジ */
 function MapBridge({ onReady }: { onReady: (m: L.Map) => void }) {
   const map = useMap()
-  onReady(map)
+  useEffect(() => {
+    onReady(map)
+  }, [map, onReady])
   return null
 }
 
@@ -212,7 +214,7 @@ export function MapPage({ userData }: Props) {
               favSchools.map((s) => (
                 <button className="row" key={s.id} onClick={() => setDetail(s)}>
                   <span className="star">★</span>
-                  <span className="name">{s.name}</span>
+                  <span className="name">{shortSchoolName(s.name)}</span>
                   <span className="badge">
                     {displayCode(s)}：{devLabel(s)}
                   </span>
