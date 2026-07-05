@@ -17,6 +17,26 @@ export function estimateCommuteMinutes(distanceKm: number): number {
   return Math.round(((distanceKm * 1.3) / 40) * 60)
 }
 
+/** 直線距離から車の粗い所要分（× 1.5 min/km） */
+export function estimateCarMinutes(distanceKm: number): number {
+  return Math.max(1, Math.round(distanceKm * 1.5))
+}
+
+/** 直線距離から公共交通の粗い所要分（× 2.5 min/km） */
+export function estimateTransitMinutes(distanceKm: number): number {
+  return Math.max(1, Math.round(distanceKm * 2.5))
+}
+
+/** 直線距離から自転車の粗い所要分（15km/h ≒ × 4 min/km） */
+export function estimateBikeMinutes(distanceKm: number): number {
+  return Math.max(1, Math.round(distanceKm * 4))
+}
+
+/** 直線距離から徒歩の粗い所要分（5km/h ≒ × 12 min/km） */
+export function estimateWalkMinutes(distanceKm: number): number {
+  return Math.max(1, Math.round(distanceKm * 12))
+}
+
 /** 郵便番号 → 代表地点（群馬中心の簡易マップ・郵便番号先頭3桁） */
 export const POSTAL_MAP: Record<string, HomeLocation> = {
   '370': { label: '高崎周辺', lat: 36.322, lng: 139.0033 },

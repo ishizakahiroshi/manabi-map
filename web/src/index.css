@@ -225,7 +225,7 @@ body {
 .map-canvas { position: absolute; inset: 52px 0 96px 0; }
 .float-bar {
   position: absolute; top: 60px; left: 8px; right: 8px;
-  display: flex; gap: 6px; flex-wrap: nowrap; overflow: auto;
+  display: flex; gap: 6px; flex-wrap: wrap;
   pointer-events: none;
   z-index: 650;
 }
@@ -239,6 +239,48 @@ body {
   color: var(--ink);
 }
 .chip.on { background: var(--accent); color: #fff; }
+.chip.drop { padding-right: 10px; }
+.chip.drop.open { background: var(--ink); color: #fff; }
+
+.radius-slider {
+  pointer-events: auto; flex: 0 0 auto;
+  display: flex; align-items: center; gap: 6px;
+  padding: 6px 12px;
+  border: 2px solid var(--ink); border-radius: 999px; background: rgba(255, 255, 255, 0.95);
+  box-shadow: 2px 2px 0 var(--line);
+  font-family: var(--display); font-weight: 700; font-size: 0.8rem; color: var(--ink);
+}
+.radius-slider .rs-label { flex: 0 0 auto; }
+.radius-slider .rs-value { flex: 0 0 auto; min-width: 3.2em; text-align: right; color: var(--accent); }
+.radius-slider input[type="range"] {
+  flex: 0 0 auto; width: 100px; height: 22px; appearance: none; background: transparent; cursor: pointer;
+}
+.radius-slider input[type="range"]::-webkit-slider-runnable-track {
+  height: 4px; background: var(--line); border-radius: 2px;
+}
+.radius-slider input[type="range"]::-moz-range-track {
+  height: 4px; background: var(--line); border-radius: 2px;
+}
+.radius-slider input[type="range"]::-webkit-slider-thumb {
+  appearance: none; width: 16px; height: 16px; margin-top: -6px;
+  background: var(--accent); border: 2px solid var(--ink); border-radius: 50%;
+}
+.radius-slider input[type="range"]::-moz-range-thumb {
+  width: 16px; height: 16px; background: var(--accent); border: 2px solid var(--ink); border-radius: 50%;
+}
+
+.dropdown { pointer-events: auto; position: relative; flex: 0 0 auto; }
+.dropdown .popover {
+  position: absolute; top: calc(100% + 6px); left: 0;
+  display: flex; gap: 6px; flex-wrap: wrap; max-width: 240px;
+  padding: 8px; border: 2px solid var(--ink); border-radius: 12px;
+  background: #fff; box-shadow: 2px 3px 0 var(--line);
+  z-index: 660;
+}
+.popover-scrim {
+  position: absolute; inset: 0; z-index: 640; pointer-events: auto;
+  background: transparent;
+}
 .map-controls {
   position: absolute; right: 10px; bottom: 112px; display: flex; flex-direction: column; gap: 6px;
   z-index: 600;
@@ -409,10 +451,39 @@ body {
   font-family: var(--display); font-weight: 700; pointer-events: auto;
 }
 .pin .label {
-  padding: 2px 8px; background: #fff; border: 2px solid var(--ink); border-radius: 999px;
-  font-size: 0.75rem; white-space: nowrap; box-shadow: 1px 2px 0 var(--line);
-  max-width: 180px; text-overflow: ellipsis; overflow: hidden;
+  padding: 3px 8px 4px; background: #fff; border: 2px solid var(--ink); border-radius: 10px;
+  font-size: 0.72rem; box-shadow: 1px 2px 0 var(--line);
+  max-width: 180px; line-height: 1.2;
 }
+.pin .label-name {
+  white-space: nowrap; text-overflow: ellipsis; overflow: hidden;
+}
+.pin .label-dev {
+  white-space: nowrap; margin-top: 1px; font-weight: 600;
+  display: flex; align-items: baseline; gap: 3px;
+}
+.pin .label-dev .dev-value { color: var(--accent, #ff7a3d); font-size: 0.82rem; }
+.pin .label-dev small { font-weight: 400; opacity: 0.7; margin-left: 2px; }
+.pin .label-commute {
+  white-space: nowrap; margin-top: 2px; font-size: 0.65rem;
+  color: var(--ink); opacity: 0.75; font-weight: 500;
+}
+
+/* PC 向け: マウスホバーでピンを最前面に持ってくる（Leaflet の inline z-index を上書き） */
+.leaflet-marker-icon:hover { z-index: 10000 !important; }
+.pin:hover .label { border-color: var(--accent, #ff7a3d); box-shadow: 2px 3px 0 var(--accent, #ff7a3d); }
+
+.school-cluster {
+  width: 40px; height: 40px; border-radius: 50%;
+  background: var(--accent, #ff7a3d); color: #fff;
+  border: 3px solid var(--ink); box-shadow: 2px 2px 0 var(--line);
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--display); font-weight: 800; font-size: 1rem;
+}
+.school-cluster span { line-height: 1; }
+.marker-cluster { background: transparent; }
+.marker-cluster div { background: transparent; }
+.pin.home .label { padding: 2px 8px; border-radius: 999px; }
 .pin .dot {
   width: 14px; height: 14px; border-radius: 50% 50% 50% 0; background: var(--ink-soft);
   border: 2px solid var(--ink); transform: rotate(-45deg); margin-top: -2px;
