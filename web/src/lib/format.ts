@@ -1,0 +1,59 @@
+import type { School } from '../types/school'
+
+/** §7.7 学校表示規約 */
+export const OWN_LABEL: Record<string, string> = {
+  prefectural: '県', municipal: '市', national: '国', private: '私', union: '組',
+}
+export const GEN_LABEL: Record<string, string> = { coed: '共', boys: '男', girls: '女' }
+export const OWN_FULL: Record<string, string> = {
+  prefectural: '県立', municipal: '市立', national: '国立', private: '私立', union: '組合立',
+}
+export const GEN_FULL: Record<string, string> = { coed: '共学', boys: '男子校', girls: '女子校' }
+export const TYPE_FULL: Record<string, string> = {
+  high_school: '高等学校', kosen: '高等専門学校（5年制）',
+}
+
+export function band(dev: number): 70 | 60 | 50 | 40 {
+  if (dev >= 70) return 70
+  if (dev >= 60) return 60
+  if (dev >= 50) return 50
+  return 40
+}
+
+function devValues(s: School): number[] {
+  return s.departments.map((d) => d.deviation).filter((v): v is number => v != null)
+}
+
+export function topDev(s: School): number | null {
+  const vs = devValues(s)
+  return vs.length ? Math.max(...vs) : null
+}
+
+export function botDev(s: School): number | null {
+  const vs = devValues(s)
+  return vs.length ? Math.min(...vs) : null
+}
+
+/** 偏差値レンジ表記。未確定は「−」（§7.7.5: 0 や null を数値で見せない） */
+export function devLabel(s: School): string {
+  const t = topDev(s)
+  const b = botDev(s)
+  if (t == null || b == null) return '−'
+  return t === b ? `${t}` : `${b}〜${t}`
+}
+
+export function displayCode(s: School): string {
+  return (OWN_LABEL[s.ownership] ?? '') + (GEN_LABEL[s.gender_type] ?? '')
+}
+
+export function extraBadge(s: School): string {
+  if (s.type === 'kosen') return ' [5年制]'
+  if (s.is_integrated) return ' [中高一貫]'
+  return ''
+}
+
+/** 校名（[運営][性別]：偏差値）+ 特殊バッジ */
+export function displayName(s: School): string {
+  const recruiting = s.is_recruiting ? '' : '[募集停止] '
+  return `${recruiting}${s.name}（${displayCode(s)}：${devLabel(s)}）${extraBadge(s)}`
+}
