@@ -1,7 +1,7 @@
 {
   "name": "manabi-map-web",
   "private": true,
-  "version": "0.1.2",
+  "version": "0.1.2-hotfix.1",
   "author": "Hiroshi Ishizaka (ishizakahiroshi) <ishizakahiroshi.dev@gmail.com>",
   "license": "AGPL-3.0-or-later",
   "type": "module",
