@@ -136,8 +136,7 @@ export function Sidebar({ favCount, noteCount }: SidebarProps) {
             <button
               className="sb-item"
               onClick={() => {
-                close()
-                toast('コード: AGPL-3.0 / データ: CC BY-SA 4.0')
+                go('/legal/third-party')
               }}
             >
               <span className="ic">⚖️</span>

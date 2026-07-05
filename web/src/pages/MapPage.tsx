@@ -1,6 +1,5 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { MapContainer, TileLayer, Marker, useMap } from 'react-leaflet'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import type { School } from '../types/school'
@@ -45,15 +44,6 @@ function homeIcon(): L.DivIcon {
   })
 }
 
-/** MapContainer の外のボタンから地図を操作するためのブリッジ */
-function MapBridge({ onReady }: { onReady: (m: L.Map) => void }) {
-  const map = useMap()
-  useEffect(() => {
-    onReady(map)
-  }, [map, onReady])
-  return null
-}
-
 interface Filters {
   radius: number
   bands: Set<number>
@@ -72,6 +62,8 @@ export function MapPage({ userData }: Props) {
   const { home, toast } = useApp()
   const { schools, loading, error } = useSchools()
   const { favorites } = userData
+  const mapNodeRef = useRef<HTMLDivElement | null>(null)
+  const markerLayerRef = useRef<L.LayerGroup | null>(null)
   const [mapRef, setMapRef] = useState<L.Map | null>(null)
   const [sheetExpanded, setSheetExpanded] = useState(false)
   const [detail, setDetail] = useState<School | null>(null)
@@ -84,7 +76,10 @@ export function MapPage({ userData }: Props) {
     onlyIntegrated: false,
   })
 
-  const center: [number, number] = home ? [home.lat, home.lng] : [36.3907, 139.0604]
+  const center = useMemo<[number, number]>(
+    () => (home ? [home.lat, home.lng] : [36.3907, 139.0604]),
+    [home],
+  )
 
   const visibleSchools = useMemo(() => {
     return schools.filter((s) => {
@@ -126,6 +121,45 @@ export function MapPage({ userData }: Props) {
     })
   }
 
+  useEffect(() => {
+    if (!mapNodeRef.current) return
+
+    const map = L.map(mapNodeRef.current, { zoomControl: false }).setView([36.3907, 139.0604], 10)
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 18,
+      attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a>',
+    }).addTo(map)
+
+    markerLayerRef.current = L.layerGroup().addTo(map)
+    setMapRef(map)
+
+    return () => {
+      markerLayerRef.current = null
+      setMapRef(null)
+      map.remove()
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!mapRef) return
+    mapRef.setView(center, mapRef.getZoom())
+  }, [center, mapRef])
+
+  useEffect(() => {
+    const layer = markerLayerRef.current
+    if (!layer) return
+
+    layer.clearLayers()
+    if (home) {
+      L.marker([home.lat, home.lng], { icon: homeIcon() }).addTo(layer)
+    }
+    visibleSchools.forEach((s) => {
+      L.marker([s.latitude, s.longitude], { icon: schoolIcon(s, !!favorites[s.id]) })
+        .on('click', () => setDetail(s))
+        .addTo(layer)
+    })
+  }, [favorites, home, visibleSchools])
+
   return (
     <div className="screen map-screen">
       <div className="header">
@@ -139,23 +173,7 @@ export function MapPage({ userData }: Props) {
       </div>
 
       <div className="map-canvas">
-        <MapContainer center={center} zoom={10} zoomControl={false} style={{ width: '100%', height: '100%' }}>
-          <MapBridge onReady={setMapRef} />
-          <TileLayer
-            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-            maxZoom={18}
-            attribution='© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-          />
-          {home && <Marker position={[home.lat, home.lng]} icon={homeIcon()} />}
-          {visibleSchools.map((s) => (
-            <Marker
-              key={s.id}
-              position={[s.latitude, s.longitude]}
-              icon={schoolIcon(s, !!favorites[s.id])}
-              eventHandlers={{ click: () => setDetail(s) }}
-            />
-          ))}
-        </MapContainer>
+        <div ref={mapNodeRef} className="leaflet-map" />
       </div>
 
       <div className="float-bar">

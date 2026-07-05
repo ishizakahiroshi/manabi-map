@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="96 66 320 384" width="320" height="384" role="img" aria-label="Manabi Map mark">
+  <path
+    d="M256 72
+       c-84 0-152 66-152 148
+       c0 108 152 220 152 220
+       s152-112 152-220
+       c0-82-68-148-152-148z"
+    fill="#ff7a3d"
+    stroke="#241f1a"
+    stroke-width="12"
+    stroke-linejoin="round"
+  />
+
+  <g transform="translate(256 224)">
+    <path
+      d="M-78 -6
+         C -78 -34 -54 -50 -6 -50
+         L -6 44
+         C -54 44 -78 28 -78 6
+         Z"
+      fill="#f7f3ea"
+      stroke="#241f1a"
+      stroke-width="10"
+      stroke-linejoin="round"
+    />
+    <path
+      d="M78 -6
+         C 78 -34 54 -50 6 -50
+         L 6 44
+         C 54 44 78 28 78 6
+         Z"
+      fill="#f7f3ea"
+      stroke="#241f1a"
+      stroke-width="10"
+      stroke-linejoin="round"
+    />
+    <line x1="0" y1="-50" x2="0" y2="44" stroke="#241f1a" stroke-width="10" stroke-linecap="round" />
+
+    <line x1="-62" y1="-24" x2="-20" y2="-30" stroke="#241f1a" stroke-width="6" stroke-linecap="round" />
+    <line x1="-62" y1="-6" x2="-20" y2="-10" stroke="#241f1a" stroke-width="6" stroke-linecap="round" />
+    <line x1="-62" y1="12" x2="-20" y2="10" stroke="#241f1a" stroke-width="6" stroke-linecap="round" />
+
+    <line x1="62" y1="-24" x2="20" y2="-30" stroke="#241f1a" stroke-width="6" stroke-linecap="round" />
+    <line x1="62" y1="-6" x2="20" y2="-10" stroke="#241f1a" stroke-width="6" stroke-linecap="round" />
+    <line x1="62" y1="12" x2="20" y2="10" stroke="#241f1a" stroke-width="6" stroke-linecap="round" />
+  </g>
+</svg>
