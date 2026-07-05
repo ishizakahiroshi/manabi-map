@@ -409,10 +409,20 @@ body {
   font-family: var(--display); font-weight: 700; pointer-events: auto;
 }
 .pin .label {
-  padding: 2px 8px; background: #fff; border: 2px solid var(--ink); border-radius: 999px;
-  font-size: 0.75rem; white-space: nowrap; box-shadow: 1px 2px 0 var(--line);
-  max-width: 180px; text-overflow: ellipsis; overflow: hidden;
+  padding: 3px 8px 4px; background: #fff; border: 2px solid var(--ink); border-radius: 10px;
+  font-size: 0.72rem; box-shadow: 1px 2px 0 var(--line);
+  max-width: 180px; line-height: 1.2;
 }
+.pin .label-name {
+  white-space: nowrap; text-overflow: ellipsis; overflow: hidden;
+}
+.pin .label-dev {
+  white-space: nowrap; margin-top: 1px; font-weight: 600;
+  display: flex; align-items: baseline; gap: 3px;
+}
+.pin .label-dev .dev-value { color: var(--accent, #ff7a3d); font-size: 0.82rem; }
+.pin .label-dev small { font-weight: 400; opacity: 0.7; margin-left: 2px; }
+.pin.home .label { padding: 2px 8px; border-radius: 999px; }
 .pin .dot {
   width: 14px; height: 14px; border-radius: 50% 50% 50% 0; background: var(--ink-soft);
   border: 2px solid var(--ink); transform: rotate(-45deg); margin-top: -2px;

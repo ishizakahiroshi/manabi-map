@@ -26,10 +26,13 @@ function schoolIcon(s: School, isFav: boolean): L.DivIcon {
   const badge = s.type === 'kosen' ? ' <small>[高専]</small>' : s.is_integrated ? ' <small>[一貫]</small>' : ''
   return L.divIcon({
     className: '',
-    iconSize: [200, 40],
-    iconAnchor: [100, 40],
+    iconSize: [200, 56],
+    iconAnchor: [100, 56],
     html: `<div class="pin ${isFav ? 'fav' : ''}" ${b != null ? `data-band="${b}"` : ''}>
-      <div class="label">${shortSchoolName(s.name)}（${displayCode(s)}：${devLabel(s)}）${badge}</div>
+      <div class="label">
+        <div class="label-name">${shortSchoolName(s.name)}</div>
+        <div class="label-dev">${displayCode(s)}<span class="dev-value">${devLabel(s)}</span>${badge}</div>
+      </div>
       <div class="dot"></div>
     </div>`,
   })
