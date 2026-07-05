@@ -1,6 +1,6 @@
 # 親子で使う、学校選びの地図ノート。
 
-<img src="web/public/icon.svg" alt="Manabi Map アイコン（地図ピンと本のシルエット）" width="96" height="96" />
+<img src="web/public/icon.svg" alt="Manabi Map アイコン（地図ピンと校舎のシルエット）" width="96" height="96" />
 
 住所を入れると、周辺の高校が地図に出てきます。
 気になる学校はワンタップでお気に入りに保存できます。
@@ -8,18 +8,22 @@
 
 [![License: AGPL-3.0-or-later](https://img.shields.io/badge/license-AGPL--3.0--or--later-blue.svg)](LICENSE)
 [![Data License: CC BY-SA 4.0](https://img.shields.io/badge/data-CC%20BY--SA%204.0-lightgrey.svg)](https://creativecommons.org/licenses/by-sa/4.0/)
-![Status: WIP](https://img.shields.io/badge/status-WIP-orange.svg)
+![Version: v0.1](https://img.shields.io/badge/version-v0.1%20群馬版-orange.svg)
+
+**公開中 → https://manabi-map.app** （群馬県版・無料）
 
 ## 動作環境
 
 - Web ブラウザで完結（アプリのインストール不要）
 - スマホブラウザでの利用に最適化（基準画面幅 390px・iPhone 標準サイズ）
-- PWA（Progressive Web App）対応予定。ホーム画面に追加してアプリのように使えるようになります
+- ブラウザの「ホーム画面に追加」でアプリのように使えます（PWA・オフライン対応は今後拡充）
 
 ## スクリーンショット
 
-<img src="docs/screenshots/01-home.png" alt="トップページ: キャッチコピーと住所入力フォーム" width="280" />
-<img src="docs/screenshots/02-map.png" alt="地図画面: 住所周辺の高校を偏差値付きピンで表示" width="280" />
+<p>
+  <img src="docs/screenshots/01-home.png" alt="トップページ: キャッチコピーと住所入力フォーム" width="220" />
+  <img src="docs/screenshots/02-map.png" alt="地図画面: 住所周辺の高校を偏差値付きピンで表示" width="220" />
+</p>
 
 ## 使い方
 
@@ -38,17 +42,22 @@
 
 ## ライセンス
 
+- **著作権**: Copyright (c) 2026 Hiroshi Ishizaka (ishizakahiroshi)
 - **コード**: [AGPL-3.0-or-later](LICENSE)
 - **公開データ（学校情報等）**: [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/)
+- **サードパーティライセンス**: [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)
 
 ## コントリビュート
 
-学校情報の修正提案や誤りの報告は GitHub Issue でお願いします。データに関する Issue には `data-correction` ラベルを付けてください。コードの Contribution ガイドは v0.1 リリース後に整備予定です。
+学校情報の修正提案や誤りの報告は GitHub Issue でお願いします。データに関する Issue には `data-correction` ラベルを付けてください。コードの Contribution ガイドは順次整備していきます。
 
 ## ロードマップ
 
-群馬県版 v0.1 を **2026-08-01 リリース目標** で開発中です。
+- **v0.1**（公開中）: 群馬県の主要高校を地図に掲載・お気に入り・家族メモ・LINE / 匿名ログイン
+- **v0.1.2**（予定）: 群馬県全域の高校をカバー
+- **v0.2**（予定）: 関東 1 都 6 県への拡大・地図の表示改善（多数のピンの見せ方）
+- 以降: 家族共有・多言語対応・偏差値推計ロジックの公開などを検討
 
 ## リンク
 
-- 本番サイト: https://manabi-map.app （準備中）
+- 本番サイト: https://manabi-map.app

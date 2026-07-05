@@ -33,6 +33,7 @@
   --fav-yellow: #e6a419;
   --phone-w: 390px;
   --phone-h: 844px;
+  --app-max-w: 960px;
 }
 
 * { box-sizing: border-box; }
@@ -42,26 +43,38 @@ body {
   line-height: 1.6; font-size: 16px; overflow: auto;
 }
 
-/* デスクトップ時: 中央にスマホ枠（§7.8 案A） */
+/* アプリ枠: PC は地図を広く、スマホは画面幅いっぱいに使う */
 .stage {
   min-height: 100dvh;
   display: flex; justify-content: center; align-items: flex-start;
-  padding: 24px 0;
+  padding: 24px 16px;
   background: radial-gradient(1200px 600px at 50% -10%, #fff9ef 0%, var(--bg) 55%);
 }
 .phone {
-  position: relative; width: var(--phone-w); max-width: 100vw;
-  height: var(--phone-h); max-height: 100dvh;
+  position: relative;
+  width: min(var(--app-max-w), calc(100vw - 32px));
+  min-width: var(--phone-w);
+  height: min(var(--phone-h), calc(100dvh - 48px));
+  min-height: min(var(--phone-h), calc(100dvh - 48px));
   background: var(--bg);
   border: 2px solid var(--ink);
-  border-radius: 36px;
+  border-radius: 28px;
   box-shadow: 6px 8px 0 var(--line);
   overflow: hidden;
   display: flex; flex-direction: column;
 }
-@media (max-width: 430px) {
+@media (max-width: 640px) {
   .stage { padding: 0; background: var(--bg); }
-  .phone { width: 100vw; height: 100dvh; max-height: none; border-radius: 0; border: 0; box-shadow: none; }
+  .phone {
+    width: 100vw;
+    min-width: 0;
+    height: 100dvh;
+    min-height: 100dvh;
+    max-height: none;
+    border-radius: 0;
+    border: 0;
+    box-shadow: none;
+  }
 }
 
 /* 共通 */
@@ -73,6 +86,9 @@ body {
   font-family: var(--display); font-weight: 700;
   z-index: 800; position: relative;
 }
+.header .brand-icon {
+  width: 24px; height: 24px; flex: 0 0 auto; display: block;
+}
 .header .brand { flex: 1; letter-spacing: -0.01em; }
 .icon-btn {
   width: 36px; height: 36px; border: 2px solid var(--ink); border-radius: 12px;
@@ -80,6 +96,7 @@ body {
   font-family: var(--display); font-size: 1rem; cursor: pointer;
 }
 .icon-btn:active { transform: translate(1px, 1px); }
+.header-fav-icon { color: var(--fav-yellow); font-size: 1.25rem; line-height: 1; }
 
 .screen {
   position: absolute; inset: 0;
@@ -104,7 +121,7 @@ body {
 .input:focus { outline: none; border-color: var(--accent); }
 .form-label { font-family: var(--display); font-weight: 700; font-size: 0.9rem; }
 .cta {
-  display: block; width: 100%; margin-top: 12px; padding: 14px 16px; text-align: center;
+  display: block; width: 100%; max-width: 420px; margin: 12px auto 0; padding: 14px 16px; text-align: center;
   font-family: var(--display); font-weight: 700; font-size: 1.05rem;
   border: 2px solid var(--ink); border-radius: 14px; cursor: pointer;
   background: var(--accent); color: #fff;
@@ -157,7 +174,10 @@ body {
 
 .divider { display: flex; align-items: center; gap: 8px; margin: 20px 0; color: var(--ink-soft); font-size: 0.85rem; }
 .divider::before, .divider::after { content: ""; flex: 1; height: 1px; background: var(--line); }
-.demo-links { display: flex; flex-direction: column; gap: 8px; margin: 8px 0 20px; }
+.demo-links {
+  display: flex; flex-direction: column; gap: 8px;
+  width: 100%; max-width: 420px; margin: 8px auto 20px;
+}
 .demo-links button {
   text-decoration: none; color: var(--ink); padding: 10px 12px;
   border: 2px solid var(--ink); border-radius: 12px; background: #fff;
@@ -170,11 +190,15 @@ body {
 .feature-list li::before { content: "✓"; color: var(--accent); font-weight: 800; font-family: var(--display); }
 
 .login-btn {
-  display: block; width: 100%; text-align: center; padding: 12px; margin-top: 16px;
+  display: block; width: 100%; max-width: 420px; text-align: center; padding: 12px; margin: 16px auto 0;
   border: 2px solid var(--ink); border-radius: 14px; background: #fff;
   font-family: var(--display); font-weight: 700; cursor: pointer; font-size: 1rem;
   text-decoration: none; color: var(--ink);
   box-shadow: 3px 3px 0 var(--line);
+}
+
+@media (max-width: 640px) {
+  .cta, .login-btn, .demo-links { max-width: none; }
 }
 
 .ad-slot {
@@ -425,6 +449,7 @@ body {
 }
 
 /* Leaflet 微調整 */
+.leaflet-map { width: 100%; height: 100%; }
 .leaflet-container { background: #dbe9d7; font-family: var(--body); }
 
 /* --- サイドバー --- */

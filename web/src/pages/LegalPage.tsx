@@ -3,10 +3,16 @@ import { useNavigate } from 'react-router-dom'
 import Markdown from 'react-markdown'
 
 interface Props {
-  doc: 'terms' | 'privacy'
+  doc: 'terms' | 'privacy' | 'third-party'
 }
 
-/** /legal/terms・/legal/privacy。本文は web/public/legal/*.md（Task G 成果物）を表示する */
+const TITLES: Record<Props['doc'], string> = {
+  terms: '利用規約',
+  privacy: 'プライバシーポリシー',
+  'third-party': 'サードパーティライセンス',
+}
+
+/** /legal/*。本文は web/public/legal/*.md を表示する */
 export function LegalPage({ doc }: Props) {
   const navigate = useNavigate()
   const [body, setBody] = useState<string | null>(null)
@@ -30,7 +36,7 @@ export function LegalPage({ doc }: Props) {
         <button className="icon-btn" onClick={() => navigate(-1)} aria-label="戻る">
           ←
         </button>
-        <div className="brand">{doc === 'terms' ? '利用規約' : 'プライバシーポリシー'}</div>
+        <div className="brand">{TITLES[doc]}</div>
       </div>
       <div className="content legal-content">
         {error && <div className="error-banner">文書の読み込みに失敗しました。時間をおいて再読み込みしてください。</div>}

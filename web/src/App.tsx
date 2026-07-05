@@ -36,13 +36,14 @@ export default function App() {
             <button className="icon-btn" onClick={() => setSidebarOpen(true)} aria-label="メニュー">
               ≡
             </button>
+            <img className="brand-icon" src="/brand-mark.svg" alt="" aria-hidden="true" />
             <div className="brand">Manabi Map</div>
             <button
               className="icon-btn"
               onClick={() => (session && kind === 'line' ? navigate('/favorites') : setLoginOpen(true))}
-              aria-label="ログイン"
+              aria-label={session && kind === 'line' ? 'お気に入り一覧' : 'ログイン'}
             >
-              👤
+              <span className="header-fav-icon" aria-hidden="true">★</span>
             </button>
           </div>
         )}
@@ -54,6 +55,7 @@ export default function App() {
           <Route path="/auth/callback" element={<AuthCallbackPage />} />
           <Route path="/legal/terms" element={<LegalPage doc="terms" />} />
           <Route path="/legal/privacy" element={<LegalPage doc="privacy" />} />
+          <Route path="/legal/third-party" element={<LegalPage doc="third-party" />} />
         </Routes>
 
         <Sidebar favCount={favCount} noteCount={noteCount} />
