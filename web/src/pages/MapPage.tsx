@@ -33,6 +33,7 @@ const TYPE_CHIPS = [['high_school', '高校'], ['kosen', '高専(5年制)']] as 
 const GEN_CHIPS = [['coed', '共学'], ['boys', '男子'], ['girls', '女子']] as const
 const DEPT_CHIPS = [
   ['general', '普通科系'],
+  ['comprehensive', '総合学科'],
   ['commercial', '商業系'],
   ['industrial', '工業系'],
   ['agricultural', '農業系'],
@@ -42,8 +43,8 @@ const DEPT_CHIPS = [
 function deptGroupOf(courseType: string | null): (typeof DEPT_CHIPS)[number][0] | null {
   if (!courseType) return null
   const c = courseType
-  if (c === 'general' || c === 'comprehensive' || c === 'science' || c === 'international' || c === 'chuko_ikkan')
-    return 'general'
+  if (c === 'comprehensive') return 'comprehensive'
+  if (c === 'general' || c === 'science' || c === 'international' || c === 'chuko_ikkan') return 'general'
   if (c === 'commercial' || c === 'accounting' || c === 'information_processing') return 'commercial'
   if (c.startsWith('industrial') || c.startsWith('kosen') || c === 'civil') return 'industrial'
   if (c.startsWith('agricultural')) return 'agricultural'
