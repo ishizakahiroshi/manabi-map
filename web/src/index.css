@@ -468,6 +468,17 @@ body {
   white-space: nowrap; margin-top: 2px; font-size: 0.65rem;
   color: var(--ink); opacity: 0.75; font-weight: 500;
 }
+
+.school-cluster {
+  width: 40px; height: 40px; border-radius: 50%;
+  background: var(--accent, #ff7a3d); color: #fff;
+  border: 3px solid var(--ink); box-shadow: 2px 2px 0 var(--line);
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--display); font-weight: 800; font-size: 1rem;
+}
+.school-cluster span { line-height: 1; }
+.marker-cluster { background: transparent; }
+.marker-cluster div { background: transparent; }
 .pin.home .label { padding: 2px 8px; border-radius: 999px; }
 .pin .dot {
   width: 14px; height: 14px; border-radius: 50% 50% 50% 0; background: var(--ink-soft);

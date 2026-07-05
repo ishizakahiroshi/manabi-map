@@ -2,6 +2,9 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
+import 'leaflet.markercluster'
+import 'leaflet.markercluster/dist/MarkerCluster.css'
+import 'leaflet.markercluster/dist/MarkerCluster.Default.css'
 import type { School } from '../types/school'
 import { band, topDev, displayCode, devLabel, shortSchoolName } from '../lib/format'
 import {
@@ -105,6 +108,7 @@ export function MapPage({ userData }: Props) {
   const { favorites } = userData
   const mapNodeRef = useRef<HTMLDivElement | null>(null)
   const markerLayerRef = useRef<L.LayerGroup | null>(null)
+  const clusterLayerRef = useRef<L.MarkerClusterGroup | null>(null)
   const [mapRef, setMapRef] = useState<L.Map | null>(null)
   const [sheetExpanded, setSheetExpanded] = useState(false)
   const [detail, setDetail] = useState<School | null>(null)
@@ -174,10 +178,25 @@ export function MapPage({ userData }: Props) {
     }).addTo(map)
 
     markerLayerRef.current = L.layerGroup().addTo(map)
+    clusterLayerRef.current = L.markerClusterGroup({
+      showCoverageOnHover: false,
+      spiderfyOnMaxZoom: true,
+      maxClusterRadius: 40,
+      iconCreateFunction: (cluster) => {
+        const n = cluster.getChildCount()
+        return L.divIcon({
+          className: '',
+          iconSize: [40, 40],
+          iconAnchor: [20, 20],
+          html: `<div class="school-cluster"><span>${n}</span></div>`,
+        })
+      },
+    }).addTo(map)
     setMapRef(map)
 
     return () => {
       markerLayerRef.current = null
+      clusterLayerRef.current = null
       setMapRef(null)
       map.remove()
     }
@@ -189,18 +208,20 @@ export function MapPage({ userData }: Props) {
   }, [center, mapRef])
 
   useEffect(() => {
-    const layer = markerLayerRef.current
-    if (!layer) return
+    const homeLayer = markerLayerRef.current
+    const cluster = clusterLayerRef.current
+    if (!homeLayer || !cluster) return
 
-    layer.clearLayers()
+    homeLayer.clearLayers()
+    cluster.clearLayers()
     if (home) {
-      L.marker([home.lat, home.lng], { icon: homeIcon() }).addTo(layer)
+      L.marker([home.lat, home.lng], { icon: homeIcon() }).addTo(homeLayer)
     }
-    visibleSchools.forEach((s) => {
+    const schoolMarkers = visibleSchools.map((s) =>
       L.marker([s.latitude, s.longitude], { icon: schoolIcon(s, !!favorites[s.id], home) })
-        .on('click', () => setDetail(s))
-        .addTo(layer)
-    })
+        .on('click', () => setDetail(s)),
+    )
+    cluster.addLayers(schoolMarkers)
   }, [favorites, home, visibleSchools])
 
   return (
