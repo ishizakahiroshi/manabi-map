@@ -1,6 +1,6 @@
 # 親子で使う、学校選びの地図ノート。
 
-<img src="web/public/icon.svg" alt="Manabi Map アイコン（地図ピンと本のシルエット）" width="96" height="96" />
+<img src="web/public/icon.svg" alt="Manabi Map アイコン（地図ピンと校舎のシルエット）" width="96" height="96" />
 
 住所を入れると、周辺の高校が地図に出てきます。
 気になる学校はワンタップでお気に入りに保存できます。
@@ -18,8 +18,10 @@
 
 ## スクリーンショット
 
-<img src="docs/screenshots/01-home.png" alt="トップページ: キャッチコピーと住所入力フォーム" width="280" />
-<img src="docs/screenshots/02-map.png" alt="地図画面: 住所周辺の高校を偏差値付きピンで表示" width="280" />
+<p>
+  <img src="docs/screenshots/01-home.png" alt="トップページ: キャッチコピーと住所入力フォーム" width="220" />
+  <img src="docs/screenshots/02-map.png" alt="地図画面: 住所周辺の高校を偏差値付きピンで表示" width="220" />
+</p>
 
 ## 使い方
 
@@ -40,6 +42,7 @@
 
 - **コード**: [AGPL-3.0-or-later](LICENSE)
 - **公開データ（学校情報等）**: [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/)
+- **サードパーティライセンス**: [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)
 
 ## コントリビュート
 
