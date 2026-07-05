@@ -18,11 +18,8 @@
 
 ## スクリーンショット
 
-準備中です。順次差し替えます。
-
-<img src="docs/screenshots/01-home.png" alt="トップページ: キャッチコピーと住所入力フォーム（準備中）" width="280" />
-<img src="docs/screenshots/02-map.png" alt="地図画面: 住所周辺の高校をピン表示（準備中）" width="280" />
-<img src="docs/screenshots/03-detail.png" alt="学校詳細画面: 偏差値・通学情報・家族メモ（準備中）" width="280" />
+<img src="docs/screenshots/01-home.png" alt="トップページ: キャッチコピーと住所入力フォーム" width="280" />
+<img src="docs/screenshots/02-map.png" alt="地図画面: 住所周辺の高校を偏差値付きピンで表示" width="280" />
 
 ## 使い方
 
