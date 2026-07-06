@@ -35,7 +35,7 @@ function normalizeQuery(s: string): string {
     .replace(/[ぁ-ゖ]/g, (c) => String.fromCharCode(c.charCodeAt(0) + 0x60))
     .replace(/\s+/g, '')
 }
-const ALL_BANDS = [70, 60, 50, 40] as const
+const ALL_BANDS = [70, 60, 50, 40, 30] as const
 const UNRATED = -1 as const
 // 学科フィルタ 10 分類（course_type_master.ui_group / types/school.ts DeptUiGroup と一致）
 // 並びは plan_v0.2.0_taxonomy-mext.md D2「進路検討 想起順」に従う。
@@ -203,6 +203,7 @@ export function MapPage({ userData }: Props) {
         [60, t('filter.band.b60')],
         [50, t('filter.band.b50')],
         [40, t('filter.band.b40')],
+        [30, t('filter.band.b30')],
         [UNRATED, t('filter.band.unrated')],
       ] as const,
     [t],

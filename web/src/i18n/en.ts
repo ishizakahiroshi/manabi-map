@@ -166,7 +166,8 @@ export const en: MessageTree = {
       b70: '70+',
       b60: '60s',
       b50: '50s',
-      b40: '40s or below',
+      b40: '40s',
+      b30: 'Below 40',
       unrated: 'Unrated',
     },
     dept: {

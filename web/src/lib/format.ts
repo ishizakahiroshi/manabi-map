@@ -57,11 +57,12 @@ export function escapeHtml(s: string): string {
     .replace(/'/g, '&#39;')
 }
 
-export function band(dev: number): 70 | 60 | 50 | 40 {
+export function band(dev: number): 70 | 60 | 50 | 40 | 30 {
   if (dev >= 70) return 70
   if (dev >= 60) return 60
   if (dev >= 50) return 50
-  return 40
+  if (dev >= 40) return 40
+  return 30
 }
 
 function devValues(s: School): number[] {

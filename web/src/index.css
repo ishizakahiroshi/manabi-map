@@ -603,6 +603,7 @@ body {
 .pin[data-band="60"] .dot { background: #3f51b5; }
 .pin[data-band="50"] .dot { background: #546e7a; }
 .pin[data-band="40"] .dot { background: #8d6e63; }
+.pin[data-band="30"] .dot { background: #5d4037; }
 .pin.fav[data-band] .dot { background: var(--fav-yellow) !important; }
 
 /* Toast */

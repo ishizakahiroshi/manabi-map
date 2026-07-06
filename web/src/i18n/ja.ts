@@ -167,7 +167,8 @@ export const ja: MessageTree = {
       b70: '70+',
       b60: '60台',
       b50: '50台',
-      b40: '40台以下',
+      b40: '40台',
+      b30: '40未満',
       unrated: '未測定',
     },
     dept: {
