@@ -8,10 +8,12 @@ import { MapPage } from './pages/MapPage'
 import { FavoritesPage } from './pages/FavoritesPage'
 import { ComparePage } from './pages/ComparePage'
 import { AuthCallbackPage } from './pages/AuthCallbackPage'
+import { FamilyJoinPage } from './pages/FamilyJoinPage'
 import { LegalPage } from './pages/LegalPage'
 import { Sidebar } from './components/Sidebar'
 import { LoginSheet } from './components/LoginSheet'
 import { Toast } from './components/Toast'
+import { OfflineBanner } from './components/OfflineBanner'
 
 export default function App() {
   const navigate = useNavigate()
@@ -57,6 +59,7 @@ export default function App() {
           <Route path="/favorites" element={<FavoritesPage userData={userData} />} />
           <Route path="/compare" element={<ComparePage userData={userData} />} />
           <Route path="/auth/callback" element={<AuthCallbackPage />} />
+          <Route path="/family/join" element={<FamilyJoinPage />} />
           <Route path="/legal/terms" element={<LegalPage doc="terms" />} />
           <Route path="/legal/privacy" element={<LegalPage doc="privacy" />} />
           <Route path="/legal/third-party" element={<LegalPage doc="third-party" />} />
@@ -64,6 +67,7 @@ export default function App() {
 
         <Sidebar favCount={favCount} noteCount={noteCount} />
         <LoginSheet />
+        <OfflineBanner />
         <Toast />
       </div>
     </div>
