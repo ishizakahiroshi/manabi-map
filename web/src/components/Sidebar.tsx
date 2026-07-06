@@ -168,7 +168,7 @@ export function Sidebar({ favCount, noteCount }: SidebarProps) {
           </div>
 
           <div className="sb-footer">
-            <div>Manabi Map v0.1.0</div>
+            <div>Manabi Map v{__APP_VERSION__}</div>
             <div className="sb-oss">🌱 Open Source · AGPL-3.0</div>
             <div style={{ marginTop: 4 }}>
               <a href="/legal/privacy" onClick={(e) => { e.preventDefault(); go('/legal/privacy') }}>

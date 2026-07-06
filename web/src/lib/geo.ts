@@ -51,10 +51,22 @@ export const POSTAL_MAP: Record<string, HomeLocation> = {
   '379': { label: 'みなかみ・榛東周辺', lat: 36.6779, lng: 138.995 },
 }
 
+/** 全角数字→半角、全角ハイフン/長音→半角、先頭〒を除去した文字列を返す（判定用の正規化） */
+function normalizePostalInput(v: string): string {
+  return v
+    .trim()
+    .replace(/^〒/, '')
+    .replace(/[０-９]/g, (ch) => String.fromCharCode(ch.charCodeAt(0) - 0xfee0))
+    .replace(/[－ー―‐−–—]/g, '-')
+    .trim()
+}
+
 export function parsePostal(v: string): HomeLocation | null {
-  const clean = v.replace(/[^0-9]/g, '')
+  const normalized = normalizePostalInput(v)
+  if (!normalized) return null
+  if (!/^[\d-]+$/.test(normalized)) return null
+  const clean = normalized.replace(/[^0-9]/g, '')
   if (clean.length < 3 || clean.length > 7) return null
-  if (!/^[\d\-－ー]+$/.test(v.trim())) return null
   const p3 = clean.slice(0, 3)
   return POSTAL_MAP[p3] ?? null
 }

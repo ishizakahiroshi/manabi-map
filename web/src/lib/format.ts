@@ -43,6 +43,20 @@ export function shortSchoolName(name: string): string {
     .replace(/中等教育学校$/, '中等')
 }
 
+/**
+ * Leaflet divIcon 等、innerHTML に連結する箇所向けの HTML エスケープ。
+ * schools への書込は service_role 限定だが、外部提供データが混入した場合の
+ * stored XSS を防ぐ多層防御として、DB 由来テキストは必ずこれを通す。
+ */
+export function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
+
 export function band(dev: number): 70 | 60 | 50 | 40 {
   if (dev >= 70) return 70
   if (dev >= 60) return 60
