@@ -36,10 +36,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
-      setSession(data.session)
-      setLoading(false)
-    })
+    supabase.auth
+      .getSession()
+      .then(({ data }) => {
+        setSession(data.session)
+        setLoading(false)
+      })
+      .catch(() => {
+        // 異常系（ストレージアダプタ例外等）でも loading を解除してスタックさせない
+        setLoading(false)
+      })
     const { data: sub } = supabase.auth.onAuthStateChange((_event, s) => {
       setSession(s)
       setLoading(false)
