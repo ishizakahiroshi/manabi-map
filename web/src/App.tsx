@@ -6,6 +6,7 @@ import { useI18n } from './contexts/I18nContext'
 import { useUserData } from './hooks/useUserData'
 import { HomePage } from './pages/HomePage'
 import { MapPage } from './pages/MapPage'
+import { SchoolSearchPage } from './pages/SchoolSearchPage'
 import { FavoritesPage } from './pages/FavoritesPage'
 import { ComparePage } from './pages/ComparePage'
 import { AuthCallbackPage } from './pages/AuthCallbackPage'
@@ -59,6 +60,7 @@ export default function App() {
         <Routes>
           <Route path="/" element={<HomePage />} />
           <Route path="/map" element={<MapPage userData={userData} />} />
+          <Route path="/search" element={<SchoolSearchPage />} />
           <Route path="/school/:id" element={<MapPage userData={userData} />} />
           <Route path="/favorites" element={<FavoritesPage userData={userData} />} />
           <Route path="/compare" element={<ComparePage userData={userData} />} />
