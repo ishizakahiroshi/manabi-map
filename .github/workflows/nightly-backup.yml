@@ -55,10 +55,20 @@ jobs:
           R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
           R2_BUCKET: ${{ secrets.R2_BUCKET }}
 
-      - name: Install pg_dump and age
+      - name: Install pg_dump (PostgreSQL 17) and age
         run: |
+          # Supabase は PostgreSQL 17 系。Ubuntu 24.04 標準の postgresql-client は 16 系で
+          # meta-version 不一致のため pg_dump が失敗する。PostgreSQL 公式 apt repo から 17 を入れる。
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends postgresql-client age
+          sudo apt-get install -y --no-install-recommends curl ca-certificates gnupg lsb-release age
+          sudo install -d /usr/share/postgresql-common/pgdg
+          sudo curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc \
+            -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" \
+            | sudo tee /etc/apt/sources.list.d/pgdg.list > /dev/null
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends postgresql-client-17
+          pg_dump --version
           # aws-cli v2 は ubuntu-latest ランナーにプリインストール済み
 
       - name: pg_dump (custom format, no owner/acl)
