@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import type { School, Department } from '../types/school'
 
+const FETCH_ERROR_MESSAGE = '学校データの取得に失敗しました。時間をおいて再読み込みしてください。'
+
 interface DeviationRow {
   department_id: string | null
   value: number
@@ -109,32 +111,76 @@ async function fetchSchoolRows(): Promise<SchoolRow[]> {
   return (await response.json()) as SchoolRow[]
 }
 
+// ---------------------------------------------------------------------------
+// モジュールレベル共有ストア
+//
+// useSchools() は MapPage / FavoritesPage / ComparePage から個別に呼ばれるが、
+// 学校データは全画面で同一なので、モジュール変数に 1 度だけキャッシュして
+// 画面遷移での再フェッチをなくす。マウント中のすべての useSchools が同じ
+// ストアを購読し、reload() 明示時のみ再取得（バックグラウンド再検証）する。
+//
+// 将来の分県ロード / 遅延ロード（v0.2 関東拡大）へは、この 1 キャッシュを
+// 「県キー付きの Map<pref, School[]>」へ拡張する最小差分で移行できる。
+// ---------------------------------------------------------------------------
+
+type Listener = () => void
+
+const listeners = new Set<Listener>()
+let cachedSchools: School[] | null = null
+let cacheError: string | null = null
+let inFlight: Promise<void> | null = null
+
+function emit(): void {
+  for (const listener of listeners) listener()
+}
+
+/** 学校データをロードする。cache があり force=false なら何もしない（再フェッチしない）。 */
+function loadSchools(force: boolean): Promise<void> {
+  if (!force && cachedSchools != null) return Promise.resolve()
+  // 既に取得中なら、その完了を共有する（重複フェッチ防止）。
+  if (inFlight != null && !force) return inFlight
+
+  const run = async () => {
+    try {
+      const rows = await fetchSchoolRows()
+      cachedSchools = mapSchoolRows(rows)
+      cacheError = null
+    } catch {
+      cacheError = FETCH_ERROR_MESSAGE
+    }
+    emit()
+  }
+
+  const promise = run().finally(() => {
+    if (inFlight === promise) inFlight = null
+  })
+  inFlight = promise
+  cacheError = null
+  emit()
+  return promise
+}
+
 export function useSchools(): SchoolsState {
-  const [schools, setSchools] = useState<School[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [nonce, setNonce] = useState(0)
+  // ストア更新の通知でのみ再レンダリングさせるためのダミー state。
+  const [, forceRender] = useState(0)
 
   useEffect(() => {
-    let cancelled = false
-    setLoading(true)
-    void (async () => {
-      if (cancelled) return
-      try {
-        const rows = await fetchSchoolRows()
-        if (cancelled) return
-        setSchools(mapSchoolRows(rows))
-        setError(null)
-      } catch {
-        if (cancelled) return
-        setError('学校データの取得に失敗しました。時間をおいて再読み込みしてください。')
-      }
-      setLoading(false)
-    })()
+    const listener = () => forceRender((n) => n + 1)
+    listeners.add(listener)
+    // 初回のみ（キャッシュも取得中フローも無ければ）ロード開始。
+    if (cachedSchools == null && inFlight == null) void loadSchools(false)
     return () => {
-      cancelled = true
+      listeners.delete(listener)
     }
-  }, [nonce])
+  }, [])
 
-  return { schools, loading, error, reload: () => setNonce((n) => n + 1) }
+  return {
+    schools: cachedSchools ?? [],
+    // データ未取得・エラー未発生の両方が成り立つ間だけ loading（取得中）扱い。
+    loading: cachedSchools == null && cacheError == null,
+    error: cacheError,
+    reload: () => {
+      void loadSchools(true)
+    },
+  }
 }
