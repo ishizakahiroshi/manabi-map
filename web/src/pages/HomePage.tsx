@@ -9,8 +9,7 @@ import { AdSlot } from './../components/AdSlot'
 import { slotsForPlacement } from '../data/ad-slots'
 
 const DEMO_HOMES: Record<string, HomeLocation & { fill: string }> = {
-  前橋市: { label: '前橋市 大手町', lat: 36.3907, lng: 139.0604, fill: '群馬県前橋市大手町' },
-  高崎市: { label: '高崎市 高松町', lat: 36.322, lng: 139.0033, fill: '群馬県高崎市高松町' },
+  東京駅: { label: '東京駅 丸の内', lat: 35.6812, lng: 139.7671, fill: '東京都千代田区丸の内一丁目' },
 }
 
 type Hint = { text: string; tone: 'accent' | 'ok' | 'bad' | 'soft' }
@@ -208,19 +207,15 @@ export function HomePage() {
       </button>
 
       <div className="divider">{t('common.or')}</div>
-      <button className="cta secondary" onClick={() => toast(t('home.searchBySchoolSoon'))}>
+      <button className="cta secondary" onClick={() => navigate('/search')}>
         🔍 {t('home.searchBySchool')}
       </button>
 
       <div className="divider">{t('home.demo')}</div>
       <div className="demo-links">
-        <button onClick={() => loadDemo('前橋市')}>
-          <span>▸ {t('home.demoMaebashi')}</span>
-          <small>{t('home.demoMaebashiSub')}</small>
-        </button>
-        <button onClick={() => loadDemo('高崎市')}>
-          <span>▸ {t('home.demoTakasaki')}</span>
-          <small>{t('home.demoTakasakiSub')}</small>
+        <button onClick={() => loadDemo('東京駅')}>
+          <span>▸ {t('home.demoTokyoStation')}</span>
+          <small>{t('home.demoTokyoStationSub')}</small>
         </button>
       </div>
 
