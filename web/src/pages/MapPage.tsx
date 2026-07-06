@@ -330,6 +330,17 @@ export function MapPage({ userData }: Props) {
     })
   }
 
+  const clearFilters = () => {
+    setFilters((f) => ({
+      ...f,
+      bands: new Set([...ALL_BANDS, UNRATED as number]),
+      own: new Set(['prefectural', 'municipal', 'national', 'private', 'union']),
+      gen: new Set(['coed', 'boys', 'girls']),
+      courseTimes: new Set<CourseTime>(['fulltime', 'parttime']),
+      depts: new Set(DEPT_KEYS),
+    }))
+  }
+
   const activeCount = <T,>(set: Set<T>, all: readonly (readonly [T, string])[]) =>
     set.size === all.length ? t('map.filterAll') : String(set.size)
 
@@ -623,7 +634,14 @@ export function MapPage({ userData }: Props) {
             <div className="filter-sheet-foot">
               <button
                 type="button"
-                className="cta"
+                className="cta secondary filter-sheet-clear"
+                onClick={clearFilters}
+              >
+                {t('map.filtersClear')}
+              </button>
+              <button
+                type="button"
+                className="cta filter-sheet-apply"
                 onClick={() => setFilterSheetOpen(false)}
               >
                 {t('map.filtersApply')}
