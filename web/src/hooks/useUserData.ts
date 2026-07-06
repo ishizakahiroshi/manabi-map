@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
+import { trackEvent } from '../lib/analytics'
 import { useAuth } from '../contexts/AuthContext'
 import type { Favorite, MineRecord, SchoolNote } from '../types/school'
 
@@ -117,6 +118,7 @@ export function useUserData(): UserData {
         })
         throw error
       }
+      trackEvent('favorite_add', { school_id: schoolId })
       return true
     },
     [userId, favorites],
@@ -171,6 +173,7 @@ export function useUserData(): UserData {
         })
         throw error
       }
+      trackEvent('memo_save', { school_id: schoolId })
     },
     [userId, notes],
   )
