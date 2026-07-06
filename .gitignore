@@ -29,6 +29,12 @@ desktop.ini
 *.local.json
 docs/local/
 
+# === DB ダンプ・バックアップ（本番 PII を含む可能性あり・public へ絶対に出さない） ===
+*.dump
+*.sql.gz
+backup_*.sql
+backup_*.tar
+
 # === 認証情報・secrets・鍵（public へ絶対に出さない） ===
 *.pem
 *.key

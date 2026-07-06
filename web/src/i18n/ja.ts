@@ -110,6 +110,7 @@ export const ja: MessageTree = {
     filtersOpen: '絞り込みを開く',
     filtersClose: '絞り込みを閉じる',
     filtersApply: '適用',
+    filtersClear: 'クリア',
     zoomIn: 'ズームイン',
     zoomOut: 'ズームアウト',
     recenter: '自宅に戻す',
