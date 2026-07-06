@@ -1,6 +1,15 @@
 import { useEffect, useState } from 'react'
 import type { School } from '../types/school'
-import { displayName, OWN_FULL, GEN_FULL, TYPE_FULL } from '../lib/format'
+import {
+  displayName,
+  OWN_FULL,
+  GEN_FULL,
+  TYPE_FULL,
+  CAMPUS_TYPE_FULL,
+  courseTimeLabel,
+  enrollmentLabel,
+  genderRatioLabel,
+} from '../lib/format'
 import {
   haversine,
   estimateWalkMinutes,
@@ -54,6 +63,7 @@ export function SchoolDetailSheet({ school, onClose, userData }: Props) {
   const mineRec = mine[school.id]
   const dist = home ? haversine(home, { lat: school.latitude, lng: school.longitude }) : null
   const routeUrl = home ? googleMapsRoute(home, school) : null
+  const genderRatio = genderRatioLabel(school)
 
   const requireLogin = (): boolean => {
     if (session) return false
@@ -131,6 +141,32 @@ export function SchoolDetailSheet({ school, onClose, userData }: Props) {
           {[OWN_FULL[school.ownership], GEN_FULL[school.gender_type], TYPE_FULL[school.type]].join(' / ')} —{' '}
           {school.address}
         </p>
+
+        <div className="info-grid">
+          <div>
+            <span>課程</span>
+            <b>{courseTimeLabel(school)}</b>
+          </div>
+          <div>
+            <span>規模</span>
+            <b>{enrollmentLabel(school)}</b>
+          </div>
+          {genderRatio && (
+            <div>
+              <span>男女比</span>
+              <b>{genderRatio}</b>
+            </div>
+          )}
+          {school.campus_type !== 'main' && (
+            <div>
+              <span>キャンパス</span>
+              <b>
+                {CAMPUS_TYPE_FULL[school.campus_type] ?? '情報募集中'}
+                {school.main_school_name ? ` / 本校: ${school.main_school_name}` : ''}
+              </b>
+            </div>
+          )}
+        </div>
 
         <div className="detail-actions">
           <button className={`fav-toggle ${fav ? 'on' : ''}`} onClick={() => void handleFav()}>
@@ -291,7 +327,7 @@ export function SchoolDetailSheet({ school, onClose, userData }: Props) {
         <div className="memo-section">
           <h4>📝 メモ</h4>
           <textarea
-            placeholder="文化祭に行ってみたい / 吹奏楽部を調べる"
+            placeholder="例: 説明会日程 / 文化祭で見たいこと / 吹奏楽部を調べる"
             value={memo}
             onChange={(e) => setMemo(e.target.value)}
             aria-label="学校メモ"

@@ -1,6 +1,8 @@
 export type SchoolType = 'high_school' | 'kosen'
 export type Ownership = 'prefectural' | 'municipal' | 'national' | 'private' | 'union'
 export type GenderType = 'coed' | 'boys' | 'girls'
+export type CourseTime = 'fulltime' | 'parttime' | 'correspondence'
+export type CampusType = 'main' | 'partner_school' | 'satellite_campus' | 'support_school'
 
 export interface Department {
   id: string
@@ -28,6 +30,12 @@ export interface School {
   official_url: string | null
   is_active: boolean
   is_recruiting: boolean
+  course_times: CourseTime[]
+  main_school_name: string | null
+  campus_type: CampusType
+  total_students: number | null
+  enrollment_year: number | null
+  male_ratio: number | null
   departments: Department[]
 }
 
