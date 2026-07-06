@@ -133,7 +133,7 @@ export function ComparePage({ userData }: Props) {
                         <div className="cc-head">
                           <h3>{shortSchoolName(s.name)}</h3>
                           <div className="cc-sub">
-                            {fmt.displayCode(s)} ・ {fmt.ownFull(s.ownership)} / {fmt.genFull(s.gender_type)} ・{' '}
+                            {fmt.displayCode(s)} ・ {fmt.ownFull(s)} / {fmt.genFull(s.gender_type)} ・{' '}
                             <span className="cc-stars">{'★'.repeat(pri) || '☆'}</span>
                           </div>
                         </div>

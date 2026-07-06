@@ -1,5 +1,5 @@
 import type { School } from '../types/school'
-import { GEN_LABEL, OWN_LABEL, band, botDev, topDev } from '../lib/format'
+import { GEN_LABEL, band, botDev, ownershipFull, ownershipShort, topDev } from '../lib/format'
 import { useI18n, type TFunction } from '../contexts/I18nContext'
 
 function label(t: TFunction, prefix: string, key: string): string {
@@ -11,7 +11,21 @@ export function useFormat() {
   const { t, locale } = useI18n()
 
   return {
-    ownFull: (key: string) => label(t, 'labels.own', key),
+    /**
+     * 設立主体のフル表記（都立/道立/府立/県立/市立/国立/私立/組合立）。
+     * ownership + prefecture から動的に判定するため School 全体を渡すこと。
+     * en locale では labels.own の 'metropolitan/dou/fu/prefectural/...' を使う。
+     */
+    ownFull: (s: School) => {
+      if (locale === 'ja') return ownershipFull(s)
+      if (s.ownership === 'prefectural') {
+        if (s.prefecture === '東京都') return label(t, 'labels.own', 'metropolitan')
+        if (s.prefecture === '北海道') return label(t, 'labels.own', 'dou')
+        if (s.prefecture === '大阪府' || s.prefecture === '京都府')
+          return label(t, 'labels.own', 'fu')
+      }
+      return label(t, 'labels.own', s.ownership)
+    },
     genFull: (key: string) => label(t, 'labels.gen', key),
     typeFull: (key: string) => label(t, 'labels.type', key),
     courseFull: (key: string) => label(t, 'labels.course', key),
@@ -58,7 +72,7 @@ export function useFormat() {
 
     displayName: (s: School) => {
       const recruiting = s.is_recruiting ? '' : t('labels.notRecruiting')
-      const own = label(t, 'labels.own', s.ownership)
+      const own = locale === 'ja' ? ownershipFull(s) : label(t, 'labels.own', s.ownership)
       const gen = label(t, 'labels.gen', s.gender_type)
       const code = `${own}${gen}`
       const dev = (() => {
@@ -72,7 +86,7 @@ export function useFormat() {
 
     displayCode: (s: School) => {
       if (locale === 'ja') {
-        return (OWN_LABEL[s.ownership] ?? '') + (GEN_LABEL[s.gender_type] ?? '')
+        return ownershipShort(s) + (GEN_LABEL[s.gender_type] ?? '')
       }
       const OWN_SHORT: Record<string, string> = {
         prefectural: 'P',

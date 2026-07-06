@@ -242,6 +242,30 @@ body {
 .chip.drop { padding-right: 10px; }
 .chip.drop.open { background: var(--ink); color: #fff; }
 
+.map-search {
+  pointer-events: auto; flex: 0 0 auto;
+  display: flex; align-items: center; gap: 4px;
+}
+.map-search .chip.search-btn {
+  padding: 4px 10px; font-size: 0.95rem; line-height: 1;
+}
+.map-search-input {
+  height: 28px; width: 180px; padding: 0 10px;
+  border: 2px solid var(--ink); border-radius: 999px;
+  background: rgba(255, 255, 255, 0.95); color: var(--ink);
+  font-family: var(--display); font-weight: 700; font-size: 0.8rem;
+  outline: none; box-shadow: 2px 2px 0 var(--line);
+}
+.map-search-input:focus { border-color: var(--accent); }
+.map-search-input::-webkit-search-cancel-button { display: none; }
+.map-search-clear {
+  pointer-events: auto;
+  width: 22px; height: 22px; padding: 0; line-height: 1;
+  border: 2px solid var(--ink); border-radius: 50%;
+  background: #fff; color: var(--ink); cursor: pointer;
+  font-family: var(--display); font-weight: 700; font-size: 0.85rem;
+}
+
 .radius-slider {
   pointer-events: auto; flex: 0 0 auto;
   display: flex; align-items: center; gap: 6px;
@@ -349,6 +373,16 @@ body {
 .filter-group .chips { display: flex; gap: 6px; flex-wrap: wrap; }
 .filter-group .chips .chip { background: #fff; }
 .filter-group .chips .chip.on { background: var(--accent); color: #fff; }
+/* 学科フィルタの「普通科系 / 専門学科」区切り (plan_v0.2.0_taxonomy-mext D3) */
+.filter-group .chips-divider {
+  display: flex; align-items: center; gap: 8px;
+  margin: 8px 0 6px; font-size: 0.72rem; color: var(--ink-soft);
+  font-family: var(--display); font-weight: 700; letter-spacing: 0.02em;
+}
+.filter-group .chips-divider::before,
+.filter-group .chips-divider::after {
+  content: ''; flex: 1; height: 1px; background: var(--line);
+}
 
 /* --- 学校詳細 --- */
 .detail-title { font-family: var(--display); font-weight: 800; font-size: 1.25rem; line-height: 1.25; margin: 0; }
