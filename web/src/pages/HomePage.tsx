@@ -2,6 +2,7 @@ import { useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useApp } from '../contexts/AppContext'
 import { parsePostal, searchNominatim, type GeocodeCandidate } from '../lib/geo'
+import { trackEvent } from '../lib/analytics'
 import type { HomeLocation } from '../types/school'
 import { AdSlot } from './../components/AdSlot'
 import { slotsForPlacement } from '../data/ad-slots'
@@ -112,12 +113,15 @@ export function HomePage() {
 
   const goToMap = () => {
     if (selected) {
+      // 検索実行。PII（住所文字列・座標）は載せず、経路種別と候補件数のみ
+      trackEvent('search', { source: selected.source, result_count: candidates?.length })
       setHome({ label: selected.label, lat: selected.lat, lng: selected.lng })
       navigate('/map')
       return
     }
     const p = parsePostal(q.trim())
     if (p) {
+      trackEvent('search', { source: 'postal' })
       setHome(p)
       navigate('/map')
       return
@@ -131,6 +135,7 @@ export function HomePage() {
 
   const loadDemo = (key: keyof typeof DEMO_HOMES) => {
     const d = DEMO_HOMES[key]
+    trackEvent('search', { source: 'demo' })
     setHome({ label: d.label, lat: d.lat, lng: d.lng })
     setQ(d.fill)
     setCandidates(null)

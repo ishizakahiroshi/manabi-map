@@ -21,6 +21,7 @@ import {
 import { useApp } from '../contexts/AppContext'
 import { useAuth } from '../contexts/AuthContext'
 import type { useUserData } from '../hooks/useUserData'
+import { trackEvent } from '../lib/analytics'
 import { AdSlot } from './AdSlot'
 import { slotsForPlacement } from '../data/ad-slots'
 
@@ -45,6 +46,8 @@ export function SchoolDetailSheet({ school, onClose, userData }: Props) {
 
   useEffect(() => {
     if (!schoolId) return
+    // 詳細シート開封（school 切替時に 1 回）。PII は載せない（school_id / prefecture のみ）
+    trackEvent('detail_open', { school_id: schoolId, prefecture: school?.prefecture })
     const n = notes[schoolId]
     setMemo(n?.note ?? '')
     setCommuteNote(n?.commute_note ?? '')

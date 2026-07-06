@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import type { School } from '../types/school'
 import {
@@ -13,6 +13,7 @@ import { haversine, estimateBikeMinutes, estimateCarMinutes, estimateTransitMinu
 import { useApp } from '../contexts/AppContext'
 import { useSchools } from '../hooks/useSchools'
 import type { useUserData } from '../hooks/useUserData'
+import { trackEvent } from '../lib/analytics'
 import { SchoolDetailSheet } from '../components/SchoolDetailSheet'
 
 interface Props {
@@ -57,6 +58,14 @@ export function ComparePage({ userData }: Props) {
   }
 
   const compareList = favList.filter((s) => selected.includes(s.id))
+
+  // 比較表の表示計測。選択構成が変わって 2 校以上そろった時だけ 1 回。校名等の PII は載せない
+  const selectionKey = selected.join(',')
+  useEffect(() => {
+    if (selected.length >= 2) trackEvent('compare_view', { count: selected.length })
+    // selectionKey は selected の内容ダイジェスト。選択が変わるたびに再計測する
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectionKey])
 
   return (
     <div className="screen">
