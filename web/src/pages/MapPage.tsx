@@ -5,7 +5,7 @@ import 'leaflet/dist/leaflet.css'
 import 'leaflet.markercluster'
 import 'leaflet.markercluster/dist/MarkerCluster.css'
 import 'leaflet.markercluster/dist/MarkerCluster.Default.css'
-import type { School } from '../types/school'
+import type { CourseTime, School } from '../types/school'
 import { band, topDev, displayCode, devLabel, shortSchoolName } from '../lib/format'
 import {
   haversine,
@@ -39,6 +39,7 @@ const OWN_CHIPS = [
 ] as const
 const TYPE_CHIPS = [['high_school', '高校'], ['kosen', '高専(5年制)']] as const
 const GEN_CHIPS = [['coed', '共学'], ['boys', '男子'], ['girls', '女子']] as const
+const COURSE_TIME_CHIPS = [['fulltime', '全日'], ['parttime', '定時'], ['correspondence', '通信']] as const
 const DEPT_CHIPS = [
   ['general', '普通科系'],
   ['comprehensive', '総合学科'],
@@ -121,11 +122,12 @@ interface Filters {
   own: Set<string>
   gen: Set<string>
   types: Set<string>
+  courseTimes: Set<CourseTime>
   depts: Set<string>
   onlyIntegrated: boolean
 }
 
-type PopoverKey = 'own' | 'bands' | 'gen' | 'depts' | null
+type PopoverKey = 'own' | 'bands' | 'gen' | 'courseTimes' | 'depts' | null
 
 interface Props {
   userData: ReturnType<typeof useUserData>
@@ -148,6 +150,7 @@ export function MapPage({ userData }: Props) {
     own: new Set(OWN_CHIPS.map(([k]) => k)),
     gen: new Set(GEN_CHIPS.map(([k]) => k)),
     types: new Set(TYPE_CHIPS.map(([k]) => k)),
+    courseTimes: new Set<CourseTime>(['fulltime', 'parttime']),
     depts: new Set(DEPT_CHIPS.map(([k]) => k)),
     onlyIntegrated: false,
   })
@@ -170,6 +173,7 @@ export function MapPage({ userData }: Props) {
       const passOwn = filters.own.has(s.ownership)
       const passGen = filters.gen.has(s.gender_type)
       const passType = filters.types.has(s.type)
+      const passCourseTime = s.course_times.some((courseTime) => filters.courseTimes.has(courseTime))
       const passInt = !filters.onlyIntegrated || s.is_integrated
       // 学科: 少なくとも 1 学科がグループにマッチすれば通す。全学科の course_type が
       // 不明（deptGroupOf=null）の校は「未分類」として常に通す（除外しない）。
@@ -177,7 +181,7 @@ export function MapPage({ userData }: Props) {
         .map((d) => deptGroupOf(d.course_type))
         .filter((g): g is (typeof DEPT_CHIPS)[number][0] => g != null)
       const passDept = groups.length === 0 || groups.some((g) => filters.depts.has(g))
-      return passRadius && passBand && passOwn && passGen && passType && passDept && passInt
+      return passRadius && passBand && passOwn && passGen && passType && passCourseTime && passDept && passInt
     })
   }, [schools, favorites, home, filters])
 
@@ -186,7 +190,7 @@ export function MapPage({ userData }: Props) {
     [schools, favorites],
   )
 
-  const toggleSet = (key: 'bands' | 'own' | 'gen' | 'types' | 'depts', value: never) => {
+  const toggleSet = (key: 'bands' | 'own' | 'gen' | 'types' | 'courseTimes' | 'depts', value: never) => {
     setFilters((f) => {
       const next = new Set(f[key] as Set<unknown>)
       if (next.has(value)) next.delete(value)
@@ -290,6 +294,7 @@ export function MapPage({ userData }: Props) {
             ['own', '種別', OWN_CHIPS, filters.own],
             ['bands', '偏差値', BAND_CHIPS, filters.bands],
             ['gen', '性別', GEN_CHIPS, filters.gen],
+            ['courseTimes', '課程', COURSE_TIME_CHIPS, filters.courseTimes],
             ['depts', '学科', DEPT_CHIPS, filters.depts],
           ] as const
         ).map(([key, label, list, set]) => (
@@ -391,6 +396,21 @@ export function MapPage({ userData }: Props) {
                   key={k}
                   className={`chip ${filters.types.has(k) ? 'on' : ''}`}
                   onClick={() => toggleSet('types', k as never)}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="filter-group">
+            <div className="label">課程</div>
+            <div className="chips">
+              {COURSE_TIME_CHIPS.map(([k, label]) => (
+                <button
+                  key={k}
+                  className={`chip ${filters.courseTimes.has(k) ? 'on' : ''}`}
+                  onClick={() => toggleSet('courseTimes', k as never)}
                 >
                   {label}
                 </button>
