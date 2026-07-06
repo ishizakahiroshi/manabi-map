@@ -168,13 +168,14 @@ interface GsiItem {
 }
 
 /**
- * 国土地理院 AddressSearch フリー検索（住所 / 駅名 / 地名）。
+ * 国土地理院 AddressSearch フリー検索（住所・地名）。
  * 無料・無登録・API キー不要。国土地理院コンテンツ利用規約（PDL1.0）に基づき
  * 商用可・出典表記必須（attribution.ts の GSI クレジットで表示）。
- * 呼び出し側で 400ms デバウンスすること（現行と同じ頻度で運用する）。
+ * 呼び出し側で 400ms デバウンスすること。
  *
- * 注意: 商業施設名（イオンモール等）は引けない（駅名は可）。0 件時に
- * Nominatim へ自動フォールバックはしない（TOS 遵守・明示切替のみ）。
+ * 注意: **駅名・商業施設名は引けない**（AddressSearch は住所 index のみ。
+ * 「東京駅」等の駅クエリは 東京→東 のような部分マッチで無関係な地名が返るため、
+ * geocodeSearch() 側で "駅|Station" を含むクエリは Nominatim へ振り分ける）。
  */
 export async function searchGsi(q: string): Promise<GeocodeCandidate[]> {
   const url =
@@ -212,10 +213,13 @@ export const ACTIVE_GEOCODER: 'gsi' | 'nominatim' =
 
 /**
  * provider 抽象。呼び出し側は provider を意識せずこれを使う。
- * GSI が 0 件でも Nominatim へは自動で流さない（TOS 遵守・明示切替のみ）。
+ * GSI 既定でも 駅名・"Station" を含むクエリだけは Nominatim へ振り分ける
+ * （GSI AddressSearch は駅を引けず、東京駅→北海道東区のような誤マッチを返すため）。
  */
 export async function geocodeSearch(q: string): Promise<GeocodeCandidate[]> {
-  return ACTIVE_GEOCODER === 'nominatim' ? searchNominatim(q) : searchGsi(q)
+  if (ACTIVE_GEOCODER === 'nominatim') return searchNominatim(q)
+  if (/駅|Station/i.test(q)) return searchNominatim(q)
+  return searchGsi(q)
 }
 
 export function shortLabel(s: string): string {
