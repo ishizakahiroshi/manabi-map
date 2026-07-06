@@ -538,6 +538,8 @@ body {
 /* Leaflet 微調整 */
 .leaflet-map { width: 100%; height: 100%; }
 .leaflet-container { background: #dbe9d7; font-family: var(--body); }
+/* 学校詳細シート表示中は地図右下 attribution が広告カードとかぶるため非表示にする */
+body[data-sheet-open="true"] .leaflet-bottom.leaflet-right { display: none; }
 
 /* --- サイドバー --- */
 .sb-backdrop {

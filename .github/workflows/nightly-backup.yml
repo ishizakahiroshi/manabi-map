@@ -1,0 +1,105 @@
+name: nightly-backup
+
+# v0.1.4 C1: Supabase Free には自動バックアップが無いため、自前で
+# pg_dump → gzip → age 暗号化 → Cloudflare R2 (S3 互換 API) へ PUT する。
+# Supabase Pro の日次スナップショット(7日保持)を超える長期保険、および
+# Supabase 自体が飛んだ場合(アカウント BAN・課金トラブル等)の唯一の保険。
+# 詳細: docs/local/pending_backup-and-data-portability.md 層2 / docs/local/task_v0.1.4-c1-backup-layer2.md
+#
+# 復号鍵(age 秘密鍵)は本 workflow のどこにも存在しない。作者ローカルの
+# secure store で保管し、復元手順は docs/local/backup-restore-runbook.md を参照。
+
+on:
+  schedule:
+    # 03:00 JST = 18:00 UTC(前日)
+    - cron: '0 18 * * *'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  backup:
+    name: pg_dump -> encrypt -> R2
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Verify required secrets are configured
+        run: |
+          missing=""
+          for name in SUPABASE_DB_URL BACKUP_AGE_PUBLIC_KEY R2_ACCOUNT_ID R2_ACCESS_KEY_ID R2_SECRET_ACCESS_KEY R2_BUCKET; do
+            value="${!name}"
+            if [ -z "$value" ]; then
+              missing="$missing $name"
+            fi
+          done
+          if [ -n "$missing" ]; then
+            echo "::error::Missing required secrets:$missing"
+            echo "Settings > Secrets and variables > Actions で登録してください。"
+            exit 1
+          fi
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          BACKUP_AGE_PUBLIC_KEY: ${{ secrets.BACKUP_AGE_PUBLIC_KEY }}
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+
+      - name: Install pg_dump and age
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends postgresql-client age
+          # aws-cli v2 は ubuntu-latest ランナーにプリインストール済み
+
+      - name: pg_dump (custom format, no owner/acl)
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          pg_dump "$SUPABASE_DB_URL" --format=custom --no-owner --no-acl -f backup.dump
+
+      - name: gzip
+        run: gzip backup.dump
+
+      - name: Encrypt with age (public key only; secret key never touches CI)
+        env:
+          BACKUP_AGE_PUBLIC_KEY: ${{ secrets.BACKUP_AGE_PUBLIC_KEY }}
+        run: |
+          age -r "$BACKUP_AGE_PUBLIC_KEY" -o backup.dump.gz.age backup.dump.gz
+          rm -f backup.dump.gz
+
+      - name: Upload to Cloudflare R2
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+        run: |
+          DATE="$(date -u +%Y-%m-%d)"
+          aws --endpoint-url "https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com" \
+            s3 cp backup.dump.gz.age "s3://${R2_BUCKET}/nightly/${DATE}.dump.gz.age"
+
+      - name: Rotate backups older than 30 days
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+        run: |
+          ENDPOINT="https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com"
+          CUTOFF="$(date -u -d '30 days ago' +%Y-%m-%dT00:00:00.000Z)"
+          KEYS="$(aws --endpoint-url "$ENDPOINT" s3api list-objects-v2 \
+            --bucket "$R2_BUCKET" --prefix "nightly/" \
+            --query "Contents[?LastModified<=\`${CUTOFF}\`].Key" \
+            --output text)"
+          if [ -z "$KEYS" ] || [ "$KEYS" = "None" ]; then
+            echo "No objects older than 30 days."
+            exit 0
+          fi
+          echo "$KEYS" | tr '\t' '\n' | while IFS= read -r key; do
+            [ -n "$key" ] || continue
+            echo "Deleting s3://${R2_BUCKET}/${key}"
+            aws --endpoint-url "$ENDPOINT" s3 rm "s3://${R2_BUCKET}/${key}"
+          done

@@ -16,11 +16,13 @@ import {
   estimateTransitMinutes,
 } from '../lib/geo'
 import type { HomeLocation } from '../types/school'
+import { OSM_ATTRIBUTION_HTML } from '../lib/attribution'
 import { useApp } from '../contexts/AppContext'
 import { useSchools } from '../hooks/useSchools'
 import type { useUserData } from '../hooks/useUserData'
 import { SchoolDetailSheet } from '../components/SchoolDetailSheet'
 import { AdSlot } from '../components/AdSlot'
+import { slotsForPlacement } from '../data/ad-slots'
 
 const RADIUS_MIN = 5
 const RADIUS_MAX = 80
@@ -206,9 +208,10 @@ export function MapPage({ userData }: Props) {
     if (!mapNodeRef.current) return
 
     const map = L.map(mapNodeRef.current, { zoomControl: false }).setView([36.3907, 139.0604], 10)
+    map.attributionControl.setPrefix(false)
     L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxZoom: 18,
-      attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a>',
+      attribution: OSM_ATTRIBUTION_HTML,
     }).addTo(map)
 
     markerLayerRef.current = L.layerGroup().addTo(map)
@@ -240,6 +243,13 @@ export function MapPage({ userData }: Props) {
     if (!mapRef) return
     mapRef.setView(center, mapRef.getZoom())
   }, [center, mapRef])
+
+  useEffect(() => {
+    document.body.dataset.sheetOpen = detail ? 'true' : 'false'
+    return () => {
+      delete document.body.dataset.sheetOpen
+    }
+  }, [detail])
 
   useEffect(() => {
     const homeLayer = markerLayerRef.current
@@ -460,13 +470,9 @@ export function MapPage({ userData }: Props) {
             </div>
           </div>
 
-          <AdSlot
-            className="mt-2"
-            category="受験対策"
-            title="群馬県公立高校 過去問集"
-            description="志望校対策に。過去5年分＋解説付き。"
-            cta="見る"
-          />
+          {slotsForPlacement('map').map((s) => (
+            <AdSlot key={s.id} slot={s} categoryLabel="受験対策" className="mt-2" />
+          ))}
         </div>
       </div>
 
