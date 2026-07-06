@@ -266,6 +266,54 @@ body {
   font-family: var(--display); font-weight: 700; font-size: 0.85rem;
 }
 
+/* モバイル: 個別 chip を隠して「絞り込み」1 個にまとめ、シートで多選択させる */
+.mobile-only { display: none; }
+@media (max-width: 640px) {
+  .desktop-only { display: none !important; }
+  .mobile-only { display: inline-flex; }
+}
+.filters-btn { pointer-events: auto; }
+.filters-badge { color: var(--accent); }
+
+.filter-sheet-scrim {
+  position: absolute; inset: 0;
+  background: rgba(0, 0, 0, 0.35);
+  z-index: 1200;
+}
+.filter-sheet {
+  position: absolute; left: 0; right: 0; bottom: 0;
+  max-height: 80%;
+  background: var(--card);
+  border-top: 2px solid var(--ink);
+  border-radius: 20px 20px 0 0;
+  box-shadow: 0 -6px 0 var(--line);
+  display: flex; flex-direction: column;
+  z-index: 1201;
+  animation: sheet-in 0.18s ease-out;
+}
+@keyframes sheet-in { from { transform: translateY(20%); opacity: 0.6; } to { transform: translateY(0); opacity: 1; } }
+.filter-sheet-head {
+  flex: 0 0 auto;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 14px; border-bottom: 2px solid var(--line);
+}
+.filter-sheet-title { font-family: var(--display); font-weight: 800; font-size: 1.05rem; }
+.filter-sheet-body { flex: 1; overflow-y: auto; padding: 12px 14px 8px; }
+.filter-sheet-section { margin-bottom: 14px; }
+.filter-sheet-section-title {
+  margin: 0 0 8px; font-family: var(--display); font-weight: 700; font-size: 0.9rem; color: var(--ink);
+}
+.filter-sheet-section-count { margin-left: 6px; color: var(--accent); font-weight: 700; }
+.filter-sheet-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.filter-sheet-chips .chip { pointer-events: auto; }
+.filter-sheet-foot {
+  flex: 0 0 auto;
+  padding: 10px 14px calc(14px + env(safe-area-inset-bottom));
+  border-top: 2px solid var(--line);
+  background: var(--card);
+}
+.filter-sheet-foot .cta { margin: 0; }
+
 .radius-slider {
   pointer-events: auto; flex: 0 0 auto;
   display: flex; align-items: center; gap: 6px;

@@ -271,6 +271,7 @@ export function MapPage({ userData }: Props) {
   const [searchOpen, setSearchOpen] = useState(false)
   const [query, setQuery] = useState('')
   const searchInputRef = useRef<HTMLInputElement | null>(null)
+  const [filterSheetOpen, setFilterSheetOpen] = useState(false)
 
   const center = useMemo<[number, number]>(
     () => (home ? [home.lat, home.lng] : [36.3907, 139.0604]),
@@ -331,6 +332,23 @@ export function MapPage({ userData }: Props) {
 
   const activeCount = <T,>(set: Set<T>, all: readonly (readonly [T, string])[]) =>
     set.size === all.length ? t('map.filterAll') : String(set.size)
+
+  const FILTER_CATEGORIES = useMemo(
+    () =>
+      [
+        ['own', t('map.filterCategory.own'), OWN_CHIPS, filters.own],
+        ['bands', t('map.filterCategory.bands'), BAND_CHIPS, filters.bands],
+        ['gen', t('map.filterCategory.gen'), GEN_CHIPS, filters.gen],
+        ['courseTimes', t('map.filterCategory.courseTimes'), COURSE_TIME_CHIPS, filters.courseTimes],
+        ['depts', t('map.filterCategory.depts'), DEPT_CHIPS, filters.depts],
+      ] as const,
+    [t, OWN_CHIPS, BAND_CHIPS, GEN_CHIPS, COURSE_TIME_CHIPS, DEPT_CHIPS, filters],
+  )
+
+  const activeFilterCount = FILTER_CATEGORIES.reduce(
+    (n, [, , list, set]) => (set.size < list.length ? n + 1 : n),
+    0,
+  )
 
   useEffect(() => {
     if (!mapNodeRef.current) return
@@ -513,16 +531,8 @@ export function MapPage({ userData }: Props) {
           />
           <span className="rs-value">{filters.radius}km</span>
         </div>
-        {(
-          [
-            ['own', t('map.filterCategory.own'), OWN_CHIPS, filters.own],
-            ['bands', t('map.filterCategory.bands'), BAND_CHIPS, filters.bands],
-            ['gen', t('map.filterCategory.gen'), GEN_CHIPS, filters.gen],
-            ['courseTimes', t('map.filterCategory.courseTimes'), COURSE_TIME_CHIPS, filters.courseTimes],
-            ['depts', t('map.filterCategory.depts'), DEPT_CHIPS, filters.depts],
-          ] as const
-        ).map(([key, label, list, set]) => (
-          <div className="dropdown" key={key}>
+        {FILTER_CATEGORIES.map(([key, label, list, set]) => (
+          <div className="dropdown desktop-only" key={key}>
             <button
               type="button"
               className={`chip drop ${popover === key ? 'open' : ''}`}
@@ -550,9 +560,77 @@ export function MapPage({ userData }: Props) {
             )}
           </div>
         ))}
+        <button
+          type="button"
+          className="chip drop mobile-only filters-btn"
+          aria-label={filterSheetOpen ? t('map.filtersClose') : t('map.filtersOpen')}
+          aria-expanded={filterSheetOpen}
+          onClick={() => setFilterSheetOpen(true)}
+        >
+          {t('map.filters')}
+          {activeFilterCount > 0 && <span className="filters-badge"> ({activeFilterCount})</span>}
+          {' '}▾
+        </button>
       </div>
       {popover && (
         <div className="popover-scrim" onClick={() => setPopover(null)} aria-hidden="true" />
+      )}
+
+      {filterSheetOpen && (
+        <>
+          <div
+            className="filter-sheet-scrim"
+            onClick={() => setFilterSheetOpen(false)}
+            aria-hidden="true"
+          />
+          <div className="filter-sheet" role="dialog" aria-label={t('map.filters')}>
+            <div className="filter-sheet-head">
+              <div className="filter-sheet-title">{t('map.filters')}</div>
+              <button
+                type="button"
+                className="icon-btn"
+                onClick={() => setFilterSheetOpen(false)}
+                aria-label={t('map.filtersClose')}
+              >
+                ×
+              </button>
+            </div>
+            <div className="filter-sheet-body">
+              {FILTER_CATEGORIES.map(([key, label, list, set]) => (
+                <section className="filter-sheet-section" key={key}>
+                  <h3 className="filter-sheet-section-title">
+                    {label}
+                    <span className="filter-sheet-section-count">
+                      ({activeCount(set as Set<unknown>, list as unknown as readonly (readonly [unknown, string])[])})
+                    </span>
+                  </h3>
+                  <div className="filter-sheet-chips">
+                    {(list as readonly (readonly [unknown, string])[]).map(([k, l]) => (
+                      <button
+                        type="button"
+                        key={String(k)}
+                        aria-pressed={(set as Set<unknown>).has(k)}
+                        className={`chip ${(set as Set<unknown>).has(k) ? 'on' : ''}`}
+                        onClick={() => toggleSet(key as 'own', k as never)}
+                      >
+                        {l}
+                      </button>
+                    ))}
+                  </div>
+                </section>
+              ))}
+            </div>
+            <div className="filter-sheet-foot">
+              <button
+                type="button"
+                className="cta"
+                onClick={() => setFilterSheetOpen(false)}
+              >
+                {t('map.filtersApply')}
+              </button>
+            </div>
+          </div>
+        </>
       )}
 
       <div className="map-controls">
