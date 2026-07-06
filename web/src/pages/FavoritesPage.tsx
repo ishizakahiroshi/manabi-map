@@ -90,7 +90,7 @@ export function FavoritesPage({ userData }: Props) {
                 {shortSchoolName(s.name)}（{fmt.displayCode(s)}：{fmt.devLabel(s)}）
               </h3>
               <div className="meta">
-                {fmt.ownFull(s.ownership)} / {fmt.genFull(s.gender_type)} /{' '}
+                {fmt.ownFull(s)} / {fmt.genFull(s.gender_type)} /{' '}
                 {s.departments.map((d) => d.name).join('・') || t('favorites.noDept')}
               </div>
               <div className="memo">{memo}</div>

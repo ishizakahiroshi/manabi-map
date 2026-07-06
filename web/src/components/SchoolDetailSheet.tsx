@@ -165,7 +165,7 @@ export function SchoolDetailSheet({ school, onClose, userData }: Props) {
       </div>
       <div className="body">
         <p className="detail-meta">
-          {[fmt.ownFull(school.ownership), fmt.genFull(school.gender_type), fmt.typeFull(school.type)].join(' / ')} —{' '}
+          {[fmt.ownFull(school), fmt.genFull(school.gender_type), fmt.typeFull(school.type)].join(' / ')} —{' '}
           {school.address}
         </p>
 

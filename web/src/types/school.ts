@@ -3,8 +3,31 @@ export type Ownership = 'prefectural' | 'municipal' | 'national' | 'private' | '
 export type GenderType = 'coed' | 'boys' | 'girls'
 export type CourseTime = 'fulltime' | 'parttime' | 'correspondence'
 export type CampusType = 'main' | 'partner_school' | 'satellite_campus' | 'support_school'
-/** UI の学科フィルタ 6 分類（course_type_master.ui_group と一致）。null = その他 */
-export type DeptUiGroup = 'general' | 'comprehensive' | 'commercial' | 'industrial' | 'agricultural' | 'welfare'
+/**
+ * UI の学科フィルタ 10 分類（course_type_master.ui_group と一致）。
+ * MEXT 学校基本調査の 17 分類を UI 上 9+1 chip に集約したもの:
+ *   general              普通科
+ *   comprehensive        総合学科
+ *   sciences_langs       理数・国際（理数 + 外国語 + 国際関係）
+ *   arts_sports          芸術・体育（音楽 + 美術 + 体育）
+ *   industrial           工業
+ *   informatics          情報（工業寄り + 商業寄り 両方）
+ *   commercial           商業
+ *   agriculture_marine   農業・水産
+ *   home_welfare_nursing 家庭・福祉・看護
+ *   other                その他
+ */
+export type DeptUiGroup =
+  | 'general'
+  | 'comprehensive'
+  | 'sciences_langs'
+  | 'arts_sports'
+  | 'industrial'
+  | 'informatics'
+  | 'commercial'
+  | 'agriculture_marine'
+  | 'home_welfare_nursing'
+  | 'other'
 
 export interface Department {
   id: string

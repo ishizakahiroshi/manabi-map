@@ -5,7 +5,7 @@ import 'leaflet/dist/leaflet.css'
 import 'leaflet.markercluster'
 import 'leaflet.markercluster/dist/MarkerCluster.css'
 import 'leaflet.markercluster/dist/MarkerCluster.Default.css'
-import type { CourseTime, School } from '../types/school'
+import type { CourseTime, DeptUiGroup, School } from '../types/school'
 import { band, topDev, shortSchoolName, escapeHtml } from '../lib/format'
 import { useI18n } from '../contexts/I18nContext'
 import { useFormat } from '../hooks/useFormat'
@@ -28,16 +28,34 @@ import { slotsForPlacement } from '../data/ad-slots'
 
 const RADIUS_MIN = 5
 const RADIUS_MAX = 80
+
+function normalizeQuery(s: string): string {
+  return s
+    .toLowerCase()
+    .replace(/[ぁ-ゖ]/g, (c) => String.fromCharCode(c.charCodeAt(0) + 0x60))
+    .replace(/\s+/g, '')
+}
 const ALL_BANDS = [70, 60, 50, 40] as const
 const UNRATED = -1 as const
-const DEPT_KEYS = [
+// 学科フィルタ 10 分類（course_type_master.ui_group / types/school.ts DeptUiGroup と一致）
+// 並びは plan_v0.2.0_taxonomy-mext.md D2「進路検討 想起順」に従う。
+// 上段（普通科系 4 chip）と下段（専門学科 6 chip = 専門 5 + その他）は
+// UI で薄い区切りを入れる（D3）。
+const DEPT_KEYS_ACADEMIC = [
   'general',
   'comprehensive',
-  'commercial',
-  'industrial',
-  'agricultural',
-  'welfare',
+  'sciences_langs',
+  'arts_sports',
 ] as const
+const DEPT_KEYS_SPECIALIZED = [
+  'industrial',
+  'informatics',
+  'commercial',
+  'agriculture_marine',
+  'home_welfare_nursing',
+  'other',
+] as const
+const DEPT_KEYS = [...DEPT_KEYS_ACADEMIC, ...DEPT_KEYS_SPECIALIZED] as const
 
 /**
  * 地図タイルソース。env `VITE_TILE_SOURCE`（'osm' | 'protomaps'）で切替。
@@ -230,6 +248,14 @@ export function MapPage({ userData }: Props) {
     () => DEPT_KEYS.map((k) => [k, t(`filter.dept.${k}`)] as const),
     [t],
   )
+  const DEPT_CHIPS_ACADEMIC = useMemo(
+    () => DEPT_KEYS_ACADEMIC.map((k) => [k, t(`filter.dept.${k}`)] as const),
+    [t],
+  )
+  const DEPT_CHIPS_SPECIALIZED = useMemo(
+    () => DEPT_KEYS_SPECIALIZED.map((k) => [k, t(`filter.dept.${k}`)] as const),
+    [t],
+  )
 
   const [filters, setFilters] = useState<Filters>({
     radius: 50,
@@ -242,11 +268,16 @@ export function MapPage({ userData }: Props) {
     onlyIntegrated: false,
   })
   const [popover, setPopover] = useState<PopoverKey>(null)
+  const [searchOpen, setSearchOpen] = useState(false)
+  const [query, setQuery] = useState('')
+  const searchInputRef = useRef<HTMLInputElement | null>(null)
 
   const center = useMemo<[number, number]>(
     () => (home ? [home.lat, home.lng] : [36.3907, 139.0604]),
     [home],
   )
+
+  const normalizedQuery = useMemo(() => normalizeQuery(query.trim()), [query])
 
   const visibleSchools = useMemo(() => {
     return schools.filter((s) => {
@@ -255,6 +286,15 @@ export function MapPage({ userData }: Props) {
       const dist = home ? haversine(home, { lat: s.latitude, lng: s.longitude }) : 0
       // 志望校は半径フィルタを無視して常時表示（§7.6.3）
       const passRadius = isFav || !home || dist <= filters.radius
+      // フリーワード（学校名 / かな / 学科名 / 都道府県 / 市区町村 / 住所）
+      let passQuery = true
+      if (normalizedQuery.length >= 1) {
+        const deptNames = s.departments.map((d) => d.name).join(' ')
+        const hay = normalizeQuery(
+          `${s.name} ${s.name_kana ?? ''} ${deptNames} ${s.prefecture} ${s.city ?? ''} ${s.address}`,
+        )
+        passQuery = hay.includes(normalizedQuery)
+      }
       // 偏差値未測定校は sentinel UNRATED として明示的にフィルタ制御可能
       const passBand = top == null ? filters.bands.has(UNRATED) : filters.bands.has(band(top))
       const passOwn = filters.own.has(s.ownership)
@@ -263,19 +303,17 @@ export function MapPage({ userData }: Props) {
       const passCourseTime = s.course_times.some((courseTime) => filters.courseTimes.has(courseTime))
       const passInt = !filters.onlyIntegrated || s.is_integrated
       // 学科: 少なくとも 1 学科がグループ（course_type_master.ui_group）にマッチすれば通す。
-      // 全学科の ui_group が null（course_type='other' 相当・master で ui_group 未設定）の
-      // 校は「未分類」として、フィルタが既定（全選択）の時だけ通す。特定のカテゴリだけ
-      // 選択された時は隠す（そうしないと未分類校が特定選択に紛れ込む）。
-      const groups = s.departments
-        .map((d) => d.ui_group)
-        .filter((g): g is (typeof DEPT_KEYS)[number] => g != null)
-      const passDept =
-        groups.length === 0
-          ? filters.depts.size === DEPT_KEYS.length
-          : groups.some((g) => filters.depts.has(g))
-      return passRadius && passBand && passOwn && passGen && passType && passCourseTime && passDept && passInt
+      // ui_group が null（master に未登録の code）や、そもそも学科が 1 件も無い校は
+      // 「その他」chip 相当として扱う。10 chip 全選択の既定状態では全学校が通り、
+      // 特定 chip を絞ると未分類・学科なしも 'その他' chip 経由で明示制御できる。
+      const groups: DeptUiGroup[] =
+        s.departments.length > 0
+          ? s.departments.map((d) => d.ui_group ?? 'other')
+          : ['other']
+      const passDept = groups.some((g) => filters.depts.has(g))
+      return passRadius && passBand && passOwn && passGen && passType && passCourseTime && passDept && passInt && passQuery
     })
-  }, [schools, favorites, home, filters])
+  }, [schools, favorites, home, filters, normalizedQuery])
 
   const favSchools = useMemo(
     () => schools.filter((s) => favorites[s.id]),
@@ -408,6 +446,55 @@ export function MapPage({ userData }: Props) {
       </div>
 
       <div className="float-bar">
+        <div className={`map-search ${searchOpen ? 'open' : ''}`}>
+          <button
+            type="button"
+            className={`chip search-btn ${query ? 'on' : ''}`}
+            aria-label={searchOpen ? t('map.searchClose') : t('map.searchOpen')}
+            aria-expanded={searchOpen}
+            onClick={() => {
+              setSearchOpen((v) => {
+                const next = !v
+                if (next) setTimeout(() => searchInputRef.current?.focus(), 0)
+                return next
+              })
+            }}
+          >
+            🔍
+          </button>
+          {searchOpen && (
+            <>
+              <input
+                ref={searchInputRef}
+                type="search"
+                className="map-search-input"
+                value={query}
+                placeholder={t('map.searchPlaceholder')}
+                aria-label={t('map.searchPlaceholder')}
+                onChange={(e) => setQuery(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Escape') {
+                    setQuery('')
+                    setSearchOpen(false)
+                  }
+                }}
+              />
+              {query && (
+                <button
+                  type="button"
+                  className="map-search-clear"
+                  aria-label={t('map.searchClear')}
+                  onClick={() => {
+                    setQuery('')
+                    searchInputRef.current?.focus()
+                  }}
+                >
+                  ×
+                </button>
+              )}
+            </>
+          )}
+        </div>
         <div className="radius-slider" aria-label={t('map.radiusAria')}>
           <span className="rs-label">{t('map.radius')}</span>
           <input
@@ -628,7 +715,21 @@ export function MapPage({ userData }: Props) {
           <div className="filter-group">
             <div className="label">{t('map.filterDept')}</div>
             <div className="chips">
-              {DEPT_CHIPS.map(([k, label]) => (
+              {DEPT_CHIPS_ACADEMIC.map(([k, label]) => (
+                <button
+                  key={k}
+                  className={`chip ${filters.depts.has(k) ? 'on' : ''}`}
+                  onClick={() => toggleSet('depts', k as never)}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            <div className="chips-divider">
+              <span>{t('map.deptSpecialized')}</span>
+            </div>
+            <div className="chips">
+              {DEPT_CHIPS_SPECIALIZED.map(([k, label]) => (
                 <button
                   key={k}
                   className={`chip ${filters.depts.has(k) ? 'on' : ''}`}
