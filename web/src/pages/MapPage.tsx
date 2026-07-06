@@ -93,38 +93,9 @@ function attachBaseTileLayer(map: L.Map): () => void {
   }
 }
 
-function deptGroupOf(courseType: string | null): (typeof DEPT_KEYS)[number] | null {
-  if (!courseType) return null
-  const c = courseType
-  if (c === 'comprehensive') return 'comprehensive'
-  // 普通科系: 普通・理数・国際・IB・スポーツ・芸術・中高一貫
-  if (
-    c === 'general' ||
-    c.startsWith('science') ||
-    c === 'international' ||
-    c === 'chuko_ikkan' ||
-    c === 'ib_diploma' ||
-    c === 'sports' ||
-    c === 'arts'
-  )
-    return 'general'
-  // 商業系: commercial* / accounting / information_processing
-  if (c.startsWith('commercial') || c === 'accounting' || c === 'information_processing') return 'commercial'
-  // 工業系: industrial* / kosen* / civil / environmental_engineering / environmental_technology
-  if (
-    c.startsWith('industrial') ||
-    c.startsWith('kosen') ||
-    c === 'civil' ||
-    c === 'environmental_engineering' ||
-    c === 'environmental_technology'
-  )
-    return 'industrial'
-  // 農業系: agricultur* / natural_environment
-  if (c.startsWith('agricultur') || c === 'natural_environment') return 'agricultural'
-  // 福祉・看護（家庭系含む）: health_nursing / human_service / welfare / culinary
-  if (c === 'health_nursing' || c === 'human_service' || c === 'welfare' || c === 'culinary') return 'welfare'
-  return null
-}
+// 学科の UI 6 分類は course_type_master.ui_group を DB 側 trigger で
+// school_departments.ui_group に非正規化してあるので、フロントでは
+// department.ui_group をそのまま読むだけでよい（旧 deptGroupOf() は撤去）。
 
 function schoolIcon(
   s: School,
@@ -291,14 +262,12 @@ export function MapPage({ userData }: Props) {
       const passType = filters.types.has(s.type)
       const passCourseTime = s.course_times.some((courseTime) => filters.courseTimes.has(courseTime))
       const passInt = !filters.onlyIntegrated || s.is_integrated
-      // 学科: 少なくとも 1 学科がグループにマッチすれば通す。全学科の course_type が
-      // どのグループにも当てはまらない校（deptGroupOf=null。都立の家政・工芸・デュアル
-      // システム等の特殊学科・course_type='other'）は「未分類」として、フィルタが
-      // 既定（全選択）の時だけ通す。特定のカテゴリだけ選択された時は隠す
-      // （そうしないと「商業系」だけ選んでも 筑駒 のような無関係な学校が
-      // 素通りしてしまう）。
+      // 学科: 少なくとも 1 学科がグループ（course_type_master.ui_group）にマッチすれば通す。
+      // 全学科の ui_group が null（course_type='other' 相当・master で ui_group 未設定）の
+      // 校は「未分類」として、フィルタが既定（全選択）の時だけ通す。特定のカテゴリだけ
+      // 選択された時は隠す（そうしないと未分類校が特定選択に紛れ込む）。
       const groups = s.departments
-        .map((d) => deptGroupOf(d.course_type))
+        .map((d) => d.ui_group)
         .filter((g): g is (typeof DEPT_KEYS)[number] => g != null)
       const passDept =
         groups.length === 0

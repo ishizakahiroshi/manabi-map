@@ -14,6 +14,7 @@ interface DepartmentRow {
   school_id: string
   name: string
   course_type: string | null
+  ui_group: Department['ui_group']
 }
 
 interface SchoolRow {
@@ -63,6 +64,7 @@ function mapSchoolRows(rows: SchoolRow[]): School[] {
         school_id: d.school_id,
         name: d.name,
         course_type: d.course_type,
+        ui_group: d.ui_group ?? null,
         deviation: devByDept.get(d.id) ?? null,
       }))
       return {
@@ -99,7 +101,7 @@ async function fetchSchoolRows(): Promise<SchoolRow[]> {
     const { data, error } = await supabase
       .from('schools')
       .select(
-        '*, school_departments(id, school_id, name, course_type), school_deviation_values(department_id, value, is_active)',
+        '*, school_departments(id, school_id, name, course_type, ui_group), school_deviation_values(department_id, value, is_active)',
       )
       .eq('is_active', true)
     if (error) throw error

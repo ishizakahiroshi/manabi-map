@@ -3,12 +3,16 @@ export type Ownership = 'prefectural' | 'municipal' | 'national' | 'private' | '
 export type GenderType = 'coed' | 'boys' | 'girls'
 export type CourseTime = 'fulltime' | 'parttime' | 'correspondence'
 export type CampusType = 'main' | 'partner_school' | 'satellite_campus' | 'support_school'
+/** UI の学科フィルタ 6 分類（course_type_master.ui_group と一致）。null = その他 */
+export type DeptUiGroup = 'general' | 'comprehensive' | 'commercial' | 'industrial' | 'agricultural' | 'welfare'
 
 export interface Department {
   id: string
   school_id: string
   name: string
   course_type: string | null
+  /** course_type_master から自動同期された UI 分類。DB 側の trigger で常に一致する */
+  ui_group: DeptUiGroup | null
   /** school_deviation_values の is_active な参考値（無い学科は null = 情報募集中） */
   deviation: number | null
 }
