@@ -5,6 +5,7 @@ import { displayCode, devLabel, OWN_FULL, GEN_FULL, shortSchoolName } from '../l
 import { useSchools } from '../hooks/useSchools'
 import type { useUserData } from '../hooks/useUserData'
 import { SchoolDetailSheet } from '../components/SchoolDetailSheet'
+import { FamilyShareSheet } from '../components/FamilyShareSheet'
 import { AdSlot } from '../components/AdSlot'
 import { slotsForPlacement } from '../data/ad-slots'
 import { countMyData, downloadMyData } from '../lib/export'
@@ -20,6 +21,7 @@ export function FavoritesPage({ userData }: Props) {
   const { toast } = useApp()
   const { favorites, notes, mine } = userData
   const [detail, setDetail] = useState<School | null>(null)
+  const [familyOpen, setFamilyOpen] = useState(false)
 
   const dataCount = useMemo(() => countMyData({ favorites, notes, mine }), [favorites, notes, mine])
 
@@ -52,11 +54,16 @@ export function FavoritesPage({ userData }: Props) {
       <div className="content favs-content">
         <div className="favs-toolbar">
           <span className="sort">並び替え: 志望度順</span>
-          {favList.length >= 2 && (
-            <button className="compare-link" onClick={() => navigate('/compare')}>
-              ⚖ 学校をくらべる
+          <span style={{ display: 'flex', gap: 10 }}>
+            {favList.length >= 2 && (
+              <button className="compare-link" onClick={() => navigate('/compare')}>
+                ⚖ 学校をくらべる
+              </button>
+            )}
+            <button className="compare-link" onClick={() => setFamilyOpen(true)}>
+              👨‍👩‍👧 家族で共有
             </button>
-          )}
+          </span>
         </div>
 
         {favList.length === 0 && (
@@ -113,6 +120,7 @@ export function FavoritesPage({ userData }: Props) {
       </div>
 
       {detail && <SchoolDetailSheet school={detail} onClose={() => setDetail(null)} userData={userData} />}
+      <FamilyShareSheet open={familyOpen} onClose={() => setFamilyOpen(false)} />
     </div>
   )
 }

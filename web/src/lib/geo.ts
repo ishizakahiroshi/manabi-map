@@ -1,5 +1,31 @@
 import type { HomeLocation } from '../types/school'
 
+/**
+ * fetch の一過性失敗（ネットワーク瞬断・5xx・レート制限）に 1 回だけリトライする薄いラッパー。
+ * ネットワーク例外（TypeError: Failed to fetch）と 5xx / 429 を再試行対象とし、
+ * 4xx（=リクエスト自体の問題）は無駄打ちを避けて即返す。最終的に失敗したら
+ * 例外 or 非 ok レスポンスを呼び出し側へそのまま返す（握りつぶさない）。
+ */
+async function fetchWithRetry(
+  input: string,
+  init?: RequestInit,
+  retries = 1,
+  delayMs = 600,
+): Promise<Response> {
+  let lastErr: unknown
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const res = await fetch(input, init)
+      if (res.ok || (res.status < 500 && res.status !== 429)) return res
+      lastErr = new Error('HTTP ' + res.status)
+    } catch (err) {
+      lastErr = err
+    }
+    if (attempt < retries) await new Promise((r) => setTimeout(r, delayMs))
+  }
+  throw lastErr instanceof Error ? lastErr : new Error('fetch failed')
+}
+
 /** 直線距離（Haversine・km） */
 export function haversine(a: { lat: number; lng: number }, b: { lat: number; lng: number }): number {
   const R = 6371
@@ -112,7 +138,9 @@ export async function searchNominatim(q: string): Promise<GeocodeCandidate[]> {
     'https://nominatim.openstreetmap.org/search' +
     '?format=jsonv2&limit=5&countrycodes=jp&addressdetails=1' +
     `&accept-language=ja&q=${encodeURIComponent(q)}`
-  const res = await fetch(url, { headers: { Accept: 'application/json' } })
+  // 一過性の失敗（瞬断・レート制限）に備えて 1 回だけ間を置いてリトライする。
+  // それでも失敗したら throw して呼び出し側の searchError UI に委ねる（握りつぶさない）。
+  const res = await fetchWithRetry(url, { headers: { Accept: 'application/json' } })
   if (!res.ok) throw new Error('HTTP ' + res.status)
   const data = (await res.json()) as NominatimItem[]
   return data.map((it) => {

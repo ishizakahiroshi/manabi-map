@@ -528,6 +528,46 @@ body {
 }
 .toast.show { opacity: 1; transform: translate(-50%, 0); }
 
+/* オフライン通知バナー（C5・接続断の間だけ常設表示） */
+.offline-banner {
+  position: absolute; top: 0; left: 0; right: 0;
+  background: var(--warn); color: #fff;
+  font-family: var(--body); font-weight: 700; font-size: 0.82rem;
+  text-align: center; padding: 7px 14px; z-index: 1200;
+  box-shadow: 0 2px 0 var(--line);
+}
+
+/* エラーバウンダリのフォールバック画面（C5・白画面回避） */
+.app-error {
+  position: fixed; inset: 0; background: var(--bg);
+  display: flex; align-items: center; justify-content: center;
+  padding: 24px; font-family: var(--body); color: var(--ink);
+}
+.app-error-card {
+  max-width: 360px; width: 100%; background: var(--card);
+  border: 2px solid var(--ink); border-radius: 16px;
+  box-shadow: 4px 5px 0 var(--line);
+  padding: 24px 22px; text-align: center;
+}
+.app-error-title {
+  font-family: var(--display); font-weight: 700; font-size: 1.15rem;
+  margin-bottom: 10px;
+}
+.app-error-text {
+  font-size: 0.9rem; line-height: 1.7; color: var(--ink-soft); margin: 0 0 18px;
+}
+.app-error-btn {
+  font-family: var(--display); font-weight: 700; font-size: 0.95rem;
+  background: var(--accent); color: #fff; border: 2px solid var(--ink);
+  border-radius: 999px; padding: 10px 24px; cursor: pointer;
+  box-shadow: 2px 3px 0 var(--ink);
+}
+.app-error-btn:active { transform: translate(1px, 1px); box-shadow: 1px 2px 0 var(--ink); }
+.app-error-contact {
+  font-size: 0.78rem; line-height: 1.6; color: var(--ink-soft); margin: 16px 0 0;
+}
+.app-error-contact a { color: var(--accent); }
+
 /* 未決定バッジ */
 .todo {
   display: inline-block; font-family: var(--display); font-weight: 700; font-size: 0.72rem;
