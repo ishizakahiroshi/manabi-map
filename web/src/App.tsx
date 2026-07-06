@@ -40,8 +40,8 @@ export default function App() {
             <div className="brand">Manabi Map</div>
             <button
               className="icon-btn"
-              onClick={() => (session && kind === 'line' ? navigate('/favorites') : setLoginOpen(true))}
-              aria-label={session && kind === 'line' ? 'お気に入り一覧' : 'ログイン'}
+              onClick={() => (session && kind !== 'anon' ? navigate('/favorites') : setLoginOpen(true))}
+              aria-label={session && kind !== 'anon' ? 'お気に入り一覧' : 'ログイン'}
             >
               <span className="header-fav-icon" aria-hidden="true">★</span>
             </button>

@@ -648,7 +648,7 @@ body[data-sheet-open="true"] .leaflet-bottom.leaflet-right { display: none; }
 .mine-consent input { margin-top: 3px; }
 
 /* --- ログインシート --- */
-.login-line, .login-anon {
+.login-line, .login-google, .login-anon {
   display: flex; align-items: center; gap: 12px;
   width: 100%; padding: 14px 16px; text-align: left;
   font-family: var(--display); font-weight: 800; font-size: 1.02rem;
@@ -656,12 +656,14 @@ body[data-sheet-open="true"] .leaflet-bottom.leaflet-right { display: none; }
   box-shadow: 4px 4px 0 var(--ink);
 }
 .login-line { background: #06c755; color: #fff; }
+.login-google { background: #fff; color: var(--ink); margin-top: 10px; }
 .login-anon { background: #fff; color: var(--ink); margin-top: 10px; }
-.login-line:active, .login-anon:active { transform: translate(2px, 2px); box-shadow: 2px 2px 0 var(--ink); }
-.login-line:disabled, .login-anon:disabled { opacity: 0.6; }
-.li-icon { font-size: 1.4rem; flex: 0 0 auto; }
+.login-line:active, .login-google:active, .login-anon:active { transform: translate(2px, 2px); box-shadow: 2px 2px 0 var(--ink); }
+.login-line:disabled, .login-google:disabled, .login-anon:disabled { opacity: 0.6; }
+.li-icon { font-size: 1.4rem; flex: 0 0 auto; display: inline-flex; align-items: center; }
 .li-tx { flex: 1; }
 .login-note { margin: 0 0 12px; color: var(--ink-soft); font-size: 0.92rem; }
+.login-caution { margin: 10px 0 0; color: var(--ink-soft); font-size: 0.78rem; line-height: 1.5; }
 .login-small { margin-top: 16px; color: var(--ink-soft); font-size: 0.78rem; line-height: 1.5; }
 .login-v02 {
   margin-top: 14px; padding: 10px; border: 2px solid var(--ink); border-radius: 12px;

@@ -69,7 +69,7 @@ export function Sidebar({ favCount, noteCount }: SidebarProps) {
           )}
           {kind === 'anon' && (
             <button className="sb-login" onClick={handleLoginButton}>
-              💚 LINE 連携でデータを引き継ぐ
+              🔗 LINE / Google 連携でデータを引き継ぐ
             </button>
           )}
 

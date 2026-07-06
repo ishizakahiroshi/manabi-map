@@ -1,8 +1,11 @@
 # Cloudflare Pages のレスポンスヘッダ設定
-# CSP はフォント/タイル/Supabase/Nominatim の許可リスト検証が必要なため未設定
-# （docs/local の監査報告の進言事項参照）。geolocation は現在地機能で使うため制限しない。
+# CSP は Report-Only で試験中（v0.2.0 C11）。プレビューで主要フローの違反ゼロを
+# 確認してから enforce（Content-Security-Policy）へ昇格する。
+# 地図インフラ移行（C2: Protomaps/R2 + 国土地理院 API）後は img-src / connect-src の
+# 許可先を差し替えること。geolocation は現在地機能で使うため制限しない。
 /*
   X-Frame-Options: DENY
   X-Content-Type-Options: nosniff
   Referrer-Policy: strict-origin-when-cross-origin
   Permissions-Policy: camera=(), microphone=(), payment=(), usb=()
+  Content-Security-Policy-Report-Only: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: https://tile.openstreetmap.org; connect-src 'self' https://*.supabase.co https://nominatim.openstreetmap.org; frame-ancestors 'none'
