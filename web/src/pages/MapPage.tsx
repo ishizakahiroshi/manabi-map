@@ -292,11 +292,18 @@ export function MapPage({ userData }: Props) {
       const passCourseTime = s.course_times.some((courseTime) => filters.courseTimes.has(courseTime))
       const passInt = !filters.onlyIntegrated || s.is_integrated
       // 学科: 少なくとも 1 学科がグループにマッチすれば通す。全学科の course_type が
-      // 不明（deptGroupOf=null）の校は「未分類」として常に通す（除外しない）。
+      // どのグループにも当てはまらない校（deptGroupOf=null。都立の家政・工芸・デュアル
+      // システム等の特殊学科・course_type='other'）は「未分類」として、フィルタが
+      // 既定（全選択）の時だけ通す。特定のカテゴリだけ選択された時は隠す
+      // （そうしないと「商業系」だけ選んでも 筑駒 のような無関係な学校が
+      // 素通りしてしまう）。
       const groups = s.departments
         .map((d) => deptGroupOf(d.course_type))
         .filter((g): g is (typeof DEPT_KEYS)[number] => g != null)
-      const passDept = groups.length === 0 || groups.some((g) => filters.depts.has(g))
+      const passDept =
+        groups.length === 0
+          ? filters.depts.size === DEPT_KEYS.length
+          : groups.some((g) => filters.depts.has(g))
       return passRadius && passBand && passOwn && passGen && passType && passCourseTime && passDept && passInt
     })
   }, [schools, favorites, home, filters])
