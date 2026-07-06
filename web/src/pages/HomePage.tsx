@@ -4,6 +4,7 @@ import { useApp } from '../contexts/AppContext'
 import { parsePostal, searchNominatim, type GeocodeCandidate } from '../lib/geo'
 import type { HomeLocation } from '../types/school'
 import { AdSlot } from './../components/AdSlot'
+import { slotsForPlacement } from '../data/ad-slots'
 
 const DEMO_HOMES: Record<string, HomeLocation & { fill: string }> = {
   前橋市: { label: '前橋市 大手町', lat: 36.3907, lng: 139.0604, fill: '群馬県前橋市大手町' },
@@ -225,12 +226,9 @@ export function HomePage() {
         ログイン / 新規登録
       </button>
 
-      <AdSlot
-        category="近くの塾を探す"
-        title="お子様の学習を支える塾情報"
-        description="群馬県内の学習塾・個別指導・オンライン教室"
-        cta="塾を探す"
-      />
+      {slotsForPlacement('home').map((s) => (
+        <AdSlot key={s.id} slot={s} categoryLabel="近くの塾を探す" />
+      ))}
     </div>
   )
 }
