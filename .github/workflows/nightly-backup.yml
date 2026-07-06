@@ -8,6 +8,11 @@ name: nightly-backup
 #
 # 復号鍵(age 秘密鍵)は本 workflow のどこにも存在しない。作者ローカルの
 # secure store で保管し、復元手順は docs/local/backup-restore-runbook.md を参照。
+#
+# 接続情報は URL 一本ではなく個別 Secret + PGPASSWORD 方式。理由:
+# libpq の URL parse エラー時にパスワード断片がエラー log に漏れる過去事例あり
+# (2026-07-06 セッションで実際に発生)。個別値方式なら URL parse が発生せず
+# 認証失敗時のエラーも "password authentication failed" のみで断片漏洩なし。
 
 on:
   schedule:
@@ -27,7 +32,7 @@ jobs:
       - name: Verify required secrets are configured
         run: |
           missing=""
-          for name in SUPABASE_DB_URL BACKUP_AGE_PUBLIC_KEY R2_ACCOUNT_ID R2_ACCESS_KEY_ID R2_SECRET_ACCESS_KEY R2_BUCKET; do
+          for name in SUPABASE_DB_HOST SUPABASE_DB_PORT SUPABASE_DB_USER SUPABASE_DB_NAME SUPABASE_DB_PASSWORD BACKUP_AGE_PUBLIC_KEY R2_ACCOUNT_ID R2_ACCESS_KEY_ID R2_SECRET_ACCESS_KEY R2_BUCKET; do
             value="${!name}"
             if [ -z "$value" ]; then
               missing="$missing $name"
@@ -39,7 +44,11 @@ jobs:
             exit 1
           fi
         env:
-          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          SUPABASE_DB_HOST: ${{ secrets.SUPABASE_DB_HOST }}
+          SUPABASE_DB_PORT: ${{ secrets.SUPABASE_DB_PORT }}
+          SUPABASE_DB_USER: ${{ secrets.SUPABASE_DB_USER }}
+          SUPABASE_DB_NAME: ${{ secrets.SUPABASE_DB_NAME }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
           BACKUP_AGE_PUBLIC_KEY: ${{ secrets.BACKUP_AGE_PUBLIC_KEY }}
           R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
           R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
@@ -54,9 +63,21 @@ jobs:
 
       - name: pg_dump (custom format, no owner/acl)
         env:
-          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          # PGPASSWORD 経由でパスワードを渡す。URL 形式を使わないので
+          # parse エラー由来の password 断片漏れが発生しない。
+          PGPASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+          SUPABASE_DB_HOST: ${{ secrets.SUPABASE_DB_HOST }}
+          SUPABASE_DB_PORT: ${{ secrets.SUPABASE_DB_PORT }}
+          SUPABASE_DB_USER: ${{ secrets.SUPABASE_DB_USER }}
+          SUPABASE_DB_NAME: ${{ secrets.SUPABASE_DB_NAME }}
         run: |
-          pg_dump "$SUPABASE_DB_URL" --format=custom --no-owner --no-acl -f backup.dump
+          pg_dump \
+            -h "$SUPABASE_DB_HOST" \
+            -p "$SUPABASE_DB_PORT" \
+            -U "$SUPABASE_DB_USER" \
+            -d "$SUPABASE_DB_NAME" \
+            --format=custom --no-owner --no-acl \
+            -f backup.dump
 
       - name: gzip
         run: gzip backup.dump
