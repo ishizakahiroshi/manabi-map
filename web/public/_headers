@@ -1,0 +1,8 @@
+# Cloudflare Pages のレスポンスヘッダ設定
+# CSP はフォント/タイル/Supabase/Nominatim の許可リスト検証が必要なため未設定
+# （docs/local の監査報告の進言事項参照）。geolocation は現在地機能で使うため制限しない。
+/*
+  X-Frame-Options: DENY
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: camera=(), microphone=(), payment=(), usb=()

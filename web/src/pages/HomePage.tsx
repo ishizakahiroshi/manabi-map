@@ -76,6 +76,9 @@ export function HomePage() {
     setCandidates(null)
     setSelected(null)
     setSearchError(false)
+    // リセットしないと同一クエリの再入力時に runSearch が早期 return し
+    // 「検索中…」表示のまま候補が出なくなる
+    lastQuery.current = ''
   }
 
   const useGeolocation = () => {
