@@ -35,7 +35,7 @@ function normalizeQuery(s: string): string {
     .replace(/[ぁ-ゖ]/g, (c) => String.fromCharCode(c.charCodeAt(0) + 0x60))
     .replace(/\s+/g, '')
 }
-const ALL_BANDS = [70, 60, 50, 40] as const
+const ALL_BANDS = [70, 60, 50, 40, 30] as const
 const UNRATED = -1 as const
 // 学科フィルタ 10 分類（course_type_master.ui_group / types/school.ts DeptUiGroup と一致）
 // 並びは plan_v0.2.0_taxonomy-mext.md D2「進路検討 想起順」に従う。
@@ -203,6 +203,7 @@ export function MapPage({ userData }: Props) {
         [60, t('filter.band.b60')],
         [50, t('filter.band.b50')],
         [40, t('filter.band.b40')],
+        [30, t('filter.band.b30')],
         [UNRATED, t('filter.band.unrated')],
       ] as const,
     [t],
@@ -328,6 +329,17 @@ export function MapPage({ userData }: Props) {
       else next.add(value)
       return { ...f, [key]: next }
     })
+  }
+
+  const clearFilters = () => {
+    setFilters((f) => ({
+      ...f,
+      bands: new Set([...ALL_BANDS, UNRATED as number]),
+      own: new Set(['prefectural', 'municipal', 'national', 'private', 'union']),
+      gen: new Set(['coed', 'boys', 'girls']),
+      courseTimes: new Set<CourseTime>(['fulltime', 'parttime']),
+      depts: new Set(DEPT_KEYS),
+    }))
   }
 
   const activeCount = <T,>(set: Set<T>, all: readonly (readonly [T, string])[]) =>
@@ -623,7 +635,14 @@ export function MapPage({ userData }: Props) {
             <div className="filter-sheet-foot">
               <button
                 type="button"
-                className="cta"
+                className="cta secondary filter-sheet-clear"
+                onClick={clearFilters}
+              >
+                {t('map.filtersClear')}
+              </button>
+              <button
+                type="button"
+                className="cta filter-sheet-apply"
                 onClick={() => setFilterSheetOpen(false)}
               >
                 {t('map.filtersApply')}

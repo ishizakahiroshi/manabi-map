@@ -84,6 +84,19 @@ Supabase / LINE の接続情報はリポジトリ外に保管する。`web/.env.
 
 ビルド・コミット禁止、secrets-scan 責務、plan/bugfix/pending md の作成ルール等の AI 作業共通ルールは、各利用者のグローバル AI 設定に従う（作者環境の例: `~/.claude/CLAUDE.md` および `~/.claude/guides/`）。
 
+## 利用可能な skill（作者環境）
+
+このプロジェクト向けに専用 skill を用意している（作者環境の `~/.claude/skills/` 配下）。**skill を起動できる環境なら、下記の操作は直接手作業でやらず skill 経由が原則**（手順の一貫性・記録の再現性のため）。skill が無い環境（他人の clone や別 AI CLI）では手動手順として本 CLAUDE.md 下記の「運用ルール」を読み下してください。
+
+| 用途 | skill | 起動語 |
+|---|---|---|
+| バージョンリリース全体（backup → migration → データ投入 → 検証 → プレビュー → main マージ → タグ） | `manabi-map-deploy` | 「manabi-map リリース」「v0.x.y 出して」「関東の次のリリース」 |
+| 新県データ投入（schools SQL + deviation SQL + 校パターン再分類 + course_type_master 確認） | `manabi-map-add-prefecture` | 「◯◯県 追加」「manabi-map に◯◯県入れて」「新県 データ投入」 |
+| Supabase 本番へ migration 適用（Docker 不要・psql 直叩き・backup + schema_migrations 記録） | `supabase-migrate` | 「Supabase migration 適用」「本番 DB に SQL 流して」「pg_dump backup 取って」 |
+| フリーテキスト分類列 → master + FK + trigger 化（表記ゆれ・分類漏れ対策） | `taxonomy-refactor` | 「分類を master 化」「course_type refactor」「表記ゆれ対策」 |
+
+学科分類の正典は `~/.claude/guides/reference_mext-highschool-classification.md`（MEXT 学校教育法施行規則 §81 + 学校基本調査 17 分類）。新県データ投入時は必ず参照。
+
 ## 運用ルール（このプロジェクト固有）
 
 ### ブランチ / リリースフロー（2026-07-05 制定）

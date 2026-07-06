@@ -53,7 +53,7 @@ describe('escapeHtml', () => {
 })
 
 describe('band', () => {
-  it('境界 70/60/50/40 を含めた区分け', () => {
+  it('境界 70/60/50/40/30 を含めた区分け', () => {
     expect(band(75)).toBe(70)
     expect(band(70)).toBe(70)
     expect(band(69)).toBe(60)
@@ -61,7 +61,9 @@ describe('band', () => {
     expect(band(59)).toBe(50)
     expect(band(50)).toBe(50)
     expect(band(49)).toBe(40)
-    expect(band(0)).toBe(40)
+    expect(band(40)).toBe(40)
+    expect(band(39)).toBe(30)
+    expect(band(0)).toBe(30)
   })
 })
 

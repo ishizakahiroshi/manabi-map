@@ -1,13 +1,14 @@
 {
   "name": "manabi-map-web",
   "private": true,
-  "version": "0.1.5",
+  "version": "0.2.1",
   "author": "Hiroshi Ishizaka (ishizakahiroshi) <ishizakahiroshi.dev@gmail.com>",
   "license": "AGPL-3.0-or-later",
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "pnpm gen:schools-json && vite build",
+    "build": "pnpm fetch:tags && pnpm gen:schools-json && vite build",
+    "fetch:tags": "git fetch --tags --depth=1 || true",
     "gen:schools-json": "node scripts/gen-schools-json.mjs",
     "typecheck": "tsc --noEmit -p tsconfig.app.json",
     "lint": "oxlint",
