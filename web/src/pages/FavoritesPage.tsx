@@ -7,6 +7,8 @@ import type { useUserData } from '../hooks/useUserData'
 import { SchoolDetailSheet } from '../components/SchoolDetailSheet'
 import { AdSlot } from '../components/AdSlot'
 import { slotsForPlacement } from '../data/ad-slots'
+import { countMyData, downloadMyData } from '../lib/export'
+import { useApp } from '../contexts/AppContext'
 
 interface Props {
   userData: ReturnType<typeof useUserData>
@@ -15,8 +17,20 @@ interface Props {
 export function FavoritesPage({ userData }: Props) {
   const navigate = useNavigate()
   const { schools } = useSchools()
-  const { favorites, notes } = userData
+  const { toast } = useApp()
+  const { favorites, notes, mine } = userData
   const [detail, setDetail] = useState<School | null>(null)
+
+  const dataCount = useMemo(() => countMyData({ favorites, notes, mine }), [favorites, notes, mine])
+
+  const handleExport = () => {
+    try {
+      downloadMyData(schools, { favorites, notes, mine })
+      toast('マイデータをダウンロードしました')
+    } catch {
+      toast('ダウンロードに失敗しました')
+    }
+  }
 
   const favList = useMemo(() => {
     return schools
@@ -38,6 +52,11 @@ export function FavoritesPage({ userData }: Props) {
       <div className="content favs-content">
         <div className="favs-toolbar">
           <span className="sort">並び替え: 志望度順</span>
+          {favList.length >= 2 && (
+            <button className="compare-link" onClick={() => navigate('/compare')}>
+              ⚖ 学校をくらべる
+            </button>
+          )}
         </div>
 
         {favList.length === 0 && (
@@ -80,6 +99,17 @@ export function FavoritesPage({ userData }: Props) {
         <button className="cta secondary" onClick={() => navigate('/map')}>
           ＋ もう一つの候補を追加
         </button>
+
+        <div className="mydata-export">
+          <button className="cta secondary" onClick={handleExport} disabled={dataCount === 0}>
+            ⬇ マイデータをダウンロード（JSON）
+          </button>
+          <p className="mydata-note">
+            {dataCount === 0
+              ? 'お気に入り・メモ・私の記録がまだ無いため、ダウンロードできるデータがありません'
+              : `お気に入り・メモ・私の記録（${dataCount} 校分）を 1 つの JSON ファイルに保存できます。機種変更や控えに`}
+          </p>
+        </div>
       </div>
 
       {detail && <SchoolDetailSheet school={detail} onClose={() => setDetail(null)} userData={userData} />}

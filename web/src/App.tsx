@@ -6,6 +6,7 @@ import { useUserData } from './hooks/useUserData'
 import { HomePage } from './pages/HomePage'
 import { MapPage } from './pages/MapPage'
 import { FavoritesPage } from './pages/FavoritesPage'
+import { ComparePage } from './pages/ComparePage'
 import { AuthCallbackPage } from './pages/AuthCallbackPage'
 import { LegalPage } from './pages/LegalPage'
 import { Sidebar } from './components/Sidebar'
@@ -52,6 +53,7 @@ export default function App() {
           <Route path="/" element={<HomePage />} />
           <Route path="/map" element={<MapPage userData={userData} />} />
           <Route path="/favorites" element={<FavoritesPage userData={userData} />} />
+          <Route path="/compare" element={<ComparePage userData={userData} />} />
           <Route path="/auth/callback" element={<AuthCallbackPage />} />
           <Route path="/legal/terms" element={<LegalPage doc="terms" />} />
           <Route path="/legal/privacy" element={<LegalPage doc="privacy" />} />
