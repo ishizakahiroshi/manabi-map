@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import 'leaflet.markercluster'
@@ -137,6 +137,9 @@ interface Props {
 
 export function MapPage({ userData }: Props) {
   const navigate = useNavigate()
+  // 共有 URL（/school/:id）で開かれた場合の対象校 id（通常の /map では undefined）
+  const { id: sharedSchoolId } = useParams<{ id: string }>()
+  const sharedOpenedRef = useRef(false)
   const { home, toast } = useApp()
   const { schools, loading, error } = useSchools()
   const { favorites } = userData
@@ -243,6 +246,17 @@ export function MapPage({ userData }: Props) {
     if (!mapRef) return
     mapRef.setView(center, mapRef.getZoom())
   }, [center, mapRef])
+
+  // 共有 URL で開かれたら、学校データ到着後に 1 回だけ該当校の詳細シートを開いて寄せる
+  useEffect(() => {
+    if (!sharedSchoolId || sharedOpenedRef.current || !mapRef || schools.length === 0) return
+    sharedOpenedRef.current = true
+    const school = schools.find((s) => s.id === sharedSchoolId)
+    if (school) {
+      setDetail(school)
+      mapRef.setView([school.latitude, school.longitude], 13)
+    }
+  }, [sharedSchoolId, schools, mapRef])
 
   useEffect(() => {
     document.body.dataset.sheetOpen = detail ? 'true' : 'false'
@@ -476,7 +490,17 @@ export function MapPage({ userData }: Props) {
         </div>
       </div>
 
-      {detail && <SchoolDetailSheet school={detail} onClose={() => setDetail(null)} userData={userData} />}
+      {detail && (
+        <SchoolDetailSheet
+          school={detail}
+          onClose={() => {
+            setDetail(null)
+            // 共有 URL 経由なら、シートを閉じた時点で通常の地図 URL に戻す
+            if (sharedSchoolId) navigate('/map', { replace: true })
+          }}
+          userData={userData}
+        />
+      )}
     </div>
   )
 }

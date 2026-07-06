@@ -52,6 +52,8 @@ export default function App() {
         <Routes>
           <Route path="/" element={<HomePage />} />
           <Route path="/map" element={<MapPage userData={userData} />} />
+          {/* 共有 URL（動的 OGP 対応・functions/school/[id].ts と対）: 開くと該当校の詳細シートを開いた地図画面 */}
+          <Route path="/school/:id" element={<MapPage userData={userData} />} />
           <Route path="/favorites" element={<FavoritesPage userData={userData} />} />
           <Route path="/compare" element={<ComparePage userData={userData} />} />
           <Route path="/auth/callback" element={<AuthCallbackPage />} />
