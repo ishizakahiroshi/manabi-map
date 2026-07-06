@@ -22,17 +22,12 @@ import { useApp } from '../contexts/AppContext'
 import { useAuth } from '../contexts/AuthContext'
 import type { useUserData } from '../hooks/useUserData'
 import { AdSlot } from './AdSlot'
+import { slotsForPlacement } from '../data/ad-slots'
 
 interface Props {
   school: School | null
   onClose: () => void
   userData: ReturnType<typeof useUserData>
-}
-
-/** 学校所在地から市郡名を取り出す（塾アフィリ枠の地域見出し用） */
-function regionOf(school: School): string {
-  const m = school.address.split('県')[1]?.split(/[市郡]/)[0]
-  return m ? `${m}${school.address.includes(`${m}郡`) ? '郡' : '市'}` : '地域'
 }
 
 export function SchoolDetailSheet({ school, onClose, userData }: Props) {
@@ -338,12 +333,14 @@ export function SchoolDetailSheet({ school, onClose, userData }: Props) {
           {saving ? '保存中…' : '保存'}
         </button>
 
-        <AdSlot
-          category="この学校の近くの塾"
-          title={`${regionOf(school)} の学習塾を探す`}
-          description="学校の所在地に基づく塾情報（志望校対策）"
-          cta="塾を探す"
-        />
+        {slotsForPlacement('school-detail', school.prefecture).map((s) => (
+          <AdSlot
+            key={s.id}
+            slot={s}
+            categoryLabel="この学校の近くの塾"
+            context={{ schoolId: school.id, prefecture: school.prefecture }}
+          />
+        ))}
       </div>
     </div>
   )
