@@ -1,22 +1,21 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import Markdown from 'react-markdown'
+import { useI18n } from '../contexts/I18nContext'
 
 interface Props {
   doc: 'terms' | 'privacy' | 'third-party'
 }
 
-const TITLES: Record<Props['doc'], string> = {
-  terms: '利用規約',
-  privacy: 'プライバシーポリシー',
-  'third-party': 'サードパーティライセンス',
-}
-
 /** /legal/*。本文は web/public/legal/*.md を表示する */
 export function LegalPage({ doc }: Props) {
   const navigate = useNavigate()
+  const { t } = useI18n()
   const [body, setBody] = useState<string | null>(null)
   const [error, setError] = useState(false)
+
+  const title =
+    doc === 'terms' ? t('nav.terms') : doc === 'privacy' ? t('nav.privacy') : t('nav.thirdParty')
 
   useEffect(() => {
     setBody(null)
@@ -33,16 +32,16 @@ export function LegalPage({ doc }: Props) {
   return (
     <div className="screen">
       <div className="header">
-        <button className="icon-btn" onClick={() => navigate(-1)} aria-label="戻る">
+        <button className="icon-btn" onClick={() => navigate(-1)} aria-label={t('common.back')}>
           ←
         </button>
-        <div className="brand">{TITLES[doc]}</div>
+        <div className="brand">{title}</div>
       </div>
-      <div className="content legal-content">
-        {error && <div className="error-banner">文書の読み込みに失敗しました。時間をおいて再読み込みしてください。</div>}
-        {body == null && !error && <p>読み込み中…</p>}
+      <main id="main-content" className="content legal-content" tabIndex={-1}>
+        {error && <div className="error-banner" role="alert">{t('legal.loadFail')}</div>}
+        {body == null && !error && <p>{t('common.loading')}</p>}
         {body != null && <Markdown>{body}</Markdown>}
-      </div>
+      </main>
     </div>
   )
 }

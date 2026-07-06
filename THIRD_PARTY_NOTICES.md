@@ -18,6 +18,30 @@ pnpm licenses list
 - Copyright and license: https://www.openstreetmap.org/copyright
 - Tile usage policy: https://operations.osmfoundation.org/policies/tiles/
 
+### Protomaps vector tiles (used when self-hosted tiles are enabled)
+
+- Protomaps public basemap in PMTiles format, derived from OpenStreetMap data.
+- Project: https://protomaps.com/
+- Required attribution: `Protomaps © OpenStreetMap contributors`
+- Source data license: Open Database License (ODbL)
+
+## Geocoding (Address Search)
+
+Resolving an address / station / place name to a map center point uses one of the
+following providers (selectable via `VITE_GEOCODER`):
+
+### GSI Address Search API (default)
+
+- Provider: Geospatial Information Authority of Japan (国土地理院), https://www.gsi.go.jp/
+- Terms: GSI content usage terms (Public Data License 1.0 / PDL1.0),
+  https://www.gsi.go.jp/kikakuchousei/kikakuchousei40182.html
+- Required attribution: `住所検索: 国土地理院` (Address search: GSI Japan)
+
+### OpenStreetMap Nominatim (fallback provider)
+
+- Attribution: `© OpenStreetMap contributors`, https://www.openstreetmap.org/copyright
+- Usage policy: https://operations.osmfoundation.org/policies/nominatim/
+
 ## Runtime Dependencies
 
 | Package | License | Project |

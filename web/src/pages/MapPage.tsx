@@ -1,12 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import 'leaflet.markercluster'
 import 'leaflet.markercluster/dist/MarkerCluster.css'
 import 'leaflet.markercluster/dist/MarkerCluster.Default.css'
-import type { CourseTime, School } from '../types/school'
-import { band, topDev, displayCode, devLabel, shortSchoolName, escapeHtml } from '../lib/format'
+import type { CourseTime, DeptUiGroup, School } from '../types/school'
+import { band, topDev, shortSchoolName, escapeHtml } from '../lib/format'
+import { useI18n } from '../contexts/I18nContext'
+import { useFormat } from '../hooks/useFormat'
 import {
   haversine,
   shortLabel,
@@ -16,7 +18,7 @@ import {
   estimateTransitMinutes,
 } from '../lib/geo'
 import type { HomeLocation } from '../types/school'
-import { OSM_ATTRIBUTION_HTML } from '../lib/attribution'
+import { OSM_ATTRIBUTION_HTML, PROTOMAPS_ATTRIBUTION_HTML } from '../lib/attribution'
 import { useApp } from '../contexts/AppContext'
 import { useSchools } from '../hooks/useSchools'
 import type { useUserData } from '../hooks/useUserData'
@@ -26,68 +28,110 @@ import { slotsForPlacement } from '../data/ad-slots'
 
 const RADIUS_MIN = 5
 const RADIUS_MAX = 80
+
+function normalizeQuery(s: string): string {
+  return s
+    .toLowerCase()
+    .replace(/[ぁ-ゖ]/g, (c) => String.fromCharCode(c.charCodeAt(0) + 0x60))
+    .replace(/\s+/g, '')
+}
 const ALL_BANDS = [70, 60, 50, 40] as const
 const UNRATED = -1 as const
-const BAND_CHIPS = [
-  [70, '70+'],
-  [60, '60台'],
-  [50, '50台'],
-  [40, '40台'],
-  [UNRATED, '未測定'],
+// 学科フィルタ 10 分類（course_type_master.ui_group / types/school.ts DeptUiGroup と一致）
+// 並びは plan_v0.2.0_taxonomy-mext.md D2「進路検討 想起順」に従う。
+// 上段（普通科系 4 chip）と下段（専門学科 6 chip = 専門 5 + その他）は
+// UI で薄い区切りを入れる（D3）。
+const DEPT_KEYS_ACADEMIC = [
+  'general',
+  'comprehensive',
+  'sciences_langs',
+  'arts_sports',
 ] as const
-const OWN_CHIPS = [
-  ['prefectural', '県立'], ['municipal', '市立'], ['national', '国立'],
-  ['private', '私立'], ['union', '組合立'],
+const DEPT_KEYS_SPECIALIZED = [
+  'industrial',
+  'informatics',
+  'commercial',
+  'agriculture_marine',
+  'home_welfare_nursing',
+  'other',
 ] as const
-const TYPE_CHIPS = [['high_school', '高校'], ['kosen', '高専(5年制)']] as const
-const GEN_CHIPS = [['coed', '共学'], ['boys', '男子'], ['girls', '女子']] as const
-const COURSE_TIME_CHIPS = [['fulltime', '全日'], ['parttime', '定時'], ['correspondence', '通信']] as const
-const DEPT_CHIPS = [
-  ['general', '普通科系'],
-  ['comprehensive', '総合学科'],
-  ['commercial', '商業系'],
-  ['industrial', '工業系'],
-  ['agricultural', '農業系'],
-  ['welfare', '福祉・看護'],
-] as const
+const DEPT_KEYS = [...DEPT_KEYS_ACADEMIC, ...DEPT_KEYS_SPECIALIZED] as const
 
-function deptGroupOf(courseType: string | null): (typeof DEPT_CHIPS)[number][0] | null {
-  if (!courseType) return null
-  const c = courseType
-  if (c === 'comprehensive') return 'comprehensive'
-  // 普通科系: 普通・理数・国際・IB・スポーツ・芸術・中高一貫
-  if (
-    c === 'general' ||
-    c.startsWith('science') ||
-    c === 'international' ||
-    c === 'chuko_ikkan' ||
-    c === 'ib_diploma' ||
-    c === 'sports' ||
-    c === 'arts'
-  )
-    return 'general'
-  // 商業系: commercial* / accounting / information_processing
-  if (c.startsWith('commercial') || c === 'accounting' || c === 'information_processing') return 'commercial'
-  // 工業系: industrial* / kosen* / civil / environmental_engineering / environmental_technology
-  if (
-    c.startsWith('industrial') ||
-    c.startsWith('kosen') ||
-    c === 'civil' ||
-    c === 'environmental_engineering' ||
-    c === 'environmental_technology'
-  )
-    return 'industrial'
-  // 農業系: agricultur* / natural_environment
-  if (c.startsWith('agricultur') || c === 'natural_environment') return 'agricultural'
-  // 福祉・看護（家庭系含む）: health_nursing / human_service / welfare / culinary
-  if (c === 'health_nursing' || c === 'human_service' || c === 'welfare' || c === 'culinary') return 'welfare'
-  return null
+/**
+ * 地図タイルソース。env `VITE_TILE_SOURCE`（'osm' | 'protomaps'）で切替。
+ * **既定は 'osm'**（現行動作維持・R2 / PMTiles 生成不要）。'protomaps' の明示と
+ * `VITE_PMTILES_URL` の設定が両方そろった時のみ Protomaps ベクタタイルへ切替える。
+ */
+const TILE_SOURCE: 'osm' | 'protomaps' =
+  (import.meta.env.VITE_TILE_SOURCE as string | undefined) === 'protomaps' ? 'protomaps' : 'osm'
+const PMTILES_URL = import.meta.env.VITE_PMTILES_URL as string | undefined
+
+/** OSM 標準ラスタタイルを map に載せる（既定・フォールバック共通経路） */
+function addOsmTileLayer(map: L.Map): void {
+  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 18,
+    attribution: OSM_ATTRIBUTION_HTML,
+  }).addTo(map)
 }
 
-function schoolIcon(s: School, isFav: boolean, home: HomeLocation | null): L.DivIcon {
+/**
+ * ベース地図レイヤを map に載せる。既定は OSM ラスタ。
+ * VITE_TILE_SOURCE=protomaps と VITE_PMTILES_URL の両設定時のみ protomaps-leaflet を
+ * **動的 import** して PMTiles ベクタレイヤを載せる（既定 osm 経路では protomaps-leaflet を
+ * 一切ロードしない = 未インストールでも現行動作に影響しない）。読み込み失敗時は OSM へ退避。
+ * @returns アンマウント時に呼ぶ cancel 関数（非同期ロード完了後の addTo を無効化する）
+ */
+function attachBaseTileLayer(map: L.Map): () => void {
+  if (TILE_SOURCE !== 'protomaps' || !PMTILES_URL) {
+    addOsmTileLayer(map)
+    return () => {}
+  }
+  let cancelled = false
+  // 非リテラル指定子で動的 import（protomaps-leaflet 未導入時の型解決エラーを避ける。
+  // このパッケージは protomaps タイル選択時のみ必要で、既定 osm 経路では読まれない）。
+  const spec = 'protomaps-leaflet'
+  import(/* @vite-ignore */ spec)
+    .then((protomapsL: { leafletLayer: (opts: Record<string, unknown>) => L.Layer }) => {
+      if (cancelled) return
+      protomapsL
+        .leafletLayer({
+          url: PMTILES_URL,
+          flavor: 'light',
+          lang: 'ja',
+          attribution: PROTOMAPS_ATTRIBUTION_HTML,
+        })
+        .addTo(map)
+    })
+    .catch(() => {
+      // protomaps-leaflet 未インストール or PMTiles 取得失敗時は OSM へ退避（地図を白紙にしない）
+      if (!cancelled) addOsmTileLayer(map)
+    })
+  return () => {
+    cancelled = true
+  }
+}
+
+// 学科の UI 6 分類は course_type_master.ui_group を DB 側 trigger で
+// school_departments.ui_group に非正規化してあるので、フロントでは
+// department.ui_group をそのまま読むだけでよい（旧 deptGroupOf() は撤去）。
+
+function schoolIcon(
+  s: School,
+  isFav: boolean,
+  home: HomeLocation | null,
+  code: string,
+  dev: string,
+  kosenBadge: string,
+  integratedBadge: string,
+): L.DivIcon {
   const top = topDev(s)
   const b = top != null ? band(top) : null
-  const badge = s.type === 'kosen' ? ' <small>[高専]</small>' : s.is_integrated ? ' <small>[一貫]</small>' : ''
+  const badge =
+    s.type === 'kosen'
+      ? ` <small>${escapeHtml(kosenBadge.trim())}</small>`
+      : s.is_integrated
+        ? ` <small>${escapeHtml(integratedBadge.trim())}</small>`
+        : ''
   const commute = home
     ? (() => {
         const d = haversine(home, { lat: s.latitude, lng: s.longitude })
@@ -101,7 +145,7 @@ function schoolIcon(s: School, isFav: boolean, home: HomeLocation | null): L.Div
     html: `<div class="pin ${isFav ? 'fav' : ''}" ${b != null ? `data-band="${b}"` : ''}>
       <div class="label">
         <div class="label-name">${escapeHtml(shortSchoolName(s.name))}</div>
-        <div class="label-dev">${displayCode(s)}<span class="dev-value">${devLabel(s)}</span>${badge}</div>
+        <div class="label-dev">${escapeHtml(code)}<span class="dev-value">${escapeHtml(dev)}</span>${badge}</div>
         ${commute}
       </div>
       <div class="dot"></div>
@@ -109,12 +153,12 @@ function schoolIcon(s: School, isFav: boolean, home: HomeLocation | null): L.Div
   })
 }
 
-function homeIcon(): L.DivIcon {
+function homeIcon(homeLabel: string): L.DivIcon {
   return L.divIcon({
     className: '',
     iconSize: [80, 44],
     iconAnchor: [40, 44],
-    html: `<div class="pin home"><div class="label">自宅 ⌂</div><div class="dot">⌂</div></div>`,
+    html: `<div class="pin home"><div class="label">${escapeHtml(homeLabel)} ⌂</div><div class="dot">⌂</div></div>`,
   })
 }
 
@@ -137,7 +181,11 @@ interface Props {
 
 export function MapPage({ userData }: Props) {
   const navigate = useNavigate()
+  const { id: sharedSchoolId } = useParams<{ id: string }>()
+  const sharedOpenedRef = useRef(false)
   const { home, toast } = useApp()
+  const { t } = useI18n()
+  const fmt = useFormat()
   const { schools, loading, error } = useSchools()
   const { favorites } = userData
   const mapNodeRef = useRef<HTMLDivElement | null>(null)
@@ -145,23 +193,92 @@ export function MapPage({ userData }: Props) {
   const clusterLayerRef = useRef<L.MarkerClusterGroup | null>(null)
   const [mapRef, setMapRef] = useState<L.Map | null>(null)
   const [sheetExpanded, setSheetExpanded] = useState(false)
+  const [schoolListOpen, setSchoolListOpen] = useState(false)
   const [detail, setDetail] = useState<School | null>(null)
+
+  const BAND_CHIPS = useMemo(
+    () =>
+      [
+        [70, t('filter.band.b70')],
+        [60, t('filter.band.b60')],
+        [50, t('filter.band.b50')],
+        [40, t('filter.band.b40')],
+        [UNRATED, t('filter.band.unrated')],
+      ] as const,
+    [t],
+  )
+  const OWN_CHIPS = useMemo(
+    () =>
+      [
+        ['prefectural', t('filter.own.prefectural')],
+        ['municipal', t('filter.own.municipal')],
+        ['national', t('filter.own.national')],
+        ['private', t('filter.own.private')],
+        ['union', t('filter.own.union')],
+      ] as const,
+    [t],
+  )
+  const TYPE_CHIPS = useMemo(
+    () =>
+      [
+        ['high_school', t('filter.type.high_school')],
+        ['kosen', t('filter.type.kosen')],
+      ] as const,
+    [t],
+  )
+  const GEN_CHIPS = useMemo(
+    () =>
+      [
+        ['coed', t('filter.gen.coed')],
+        ['boys', t('filter.gen.boys')],
+        ['girls', t('filter.gen.girls')],
+      ] as const,
+    [t],
+  )
+  const COURSE_TIME_CHIPS = useMemo(
+    () =>
+      [
+        ['fulltime', t('filter.course.fulltime')],
+        ['parttime', t('filter.course.parttime')],
+        ['correspondence', t('filter.course.correspondence')],
+      ] as const,
+    [t],
+  )
+  const DEPT_CHIPS = useMemo(
+    () => DEPT_KEYS.map((k) => [k, t(`filter.dept.${k}`)] as const),
+    [t],
+  )
+  const DEPT_CHIPS_ACADEMIC = useMemo(
+    () => DEPT_KEYS_ACADEMIC.map((k) => [k, t(`filter.dept.${k}`)] as const),
+    [t],
+  )
+  const DEPT_CHIPS_SPECIALIZED = useMemo(
+    () => DEPT_KEYS_SPECIALIZED.map((k) => [k, t(`filter.dept.${k}`)] as const),
+    [t],
+  )
+
   const [filters, setFilters] = useState<Filters>({
     radius: 50,
     bands: new Set([...ALL_BANDS, UNRATED as number]),
-    own: new Set(OWN_CHIPS.map(([k]) => k)),
-    gen: new Set(GEN_CHIPS.map(([k]) => k)),
-    types: new Set(TYPE_CHIPS.map(([k]) => k)),
+    own: new Set(['prefectural', 'municipal', 'national', 'private', 'union']),
+    gen: new Set(['coed', 'boys', 'girls']),
+    types: new Set(['high_school', 'kosen']),
     courseTimes: new Set<CourseTime>(['fulltime', 'parttime']),
-    depts: new Set(DEPT_CHIPS.map(([k]) => k)),
+    depts: new Set(DEPT_KEYS),
     onlyIntegrated: false,
   })
   const [popover, setPopover] = useState<PopoverKey>(null)
+  const [searchOpen, setSearchOpen] = useState(false)
+  const [query, setQuery] = useState('')
+  const searchInputRef = useRef<HTMLInputElement | null>(null)
+  const [filterSheetOpen, setFilterSheetOpen] = useState(false)
 
   const center = useMemo<[number, number]>(
     () => (home ? [home.lat, home.lng] : [36.3907, 139.0604]),
     [home],
   )
+
+  const normalizedQuery = useMemo(() => normalizeQuery(query.trim()), [query])
 
   const visibleSchools = useMemo(() => {
     return schools.filter((s) => {
@@ -170,6 +287,15 @@ export function MapPage({ userData }: Props) {
       const dist = home ? haversine(home, { lat: s.latitude, lng: s.longitude }) : 0
       // 志望校は半径フィルタを無視して常時表示（§7.6.3）
       const passRadius = isFav || !home || dist <= filters.radius
+      // フリーワード（学校名 / かな / 学科名 / 都道府県 / 市区町村 / 住所）
+      let passQuery = true
+      if (normalizedQuery.length >= 1) {
+        const deptNames = s.departments.map((d) => d.name).join(' ')
+        const hay = normalizeQuery(
+          `${s.name} ${s.name_kana ?? ''} ${deptNames} ${s.prefecture} ${s.city ?? ''} ${s.address}`,
+        )
+        passQuery = hay.includes(normalizedQuery)
+      }
       // 偏差値未測定校は sentinel UNRATED として明示的にフィルタ制御可能
       const passBand = top == null ? filters.bands.has(UNRATED) : filters.bands.has(band(top))
       const passOwn = filters.own.has(s.ownership)
@@ -177,15 +303,18 @@ export function MapPage({ userData }: Props) {
       const passType = filters.types.has(s.type)
       const passCourseTime = s.course_times.some((courseTime) => filters.courseTimes.has(courseTime))
       const passInt = !filters.onlyIntegrated || s.is_integrated
-      // 学科: 少なくとも 1 学科がグループにマッチすれば通す。全学科の course_type が
-      // 不明（deptGroupOf=null）の校は「未分類」として常に通す（除外しない）。
-      const groups = s.departments
-        .map((d) => deptGroupOf(d.course_type))
-        .filter((g): g is (typeof DEPT_CHIPS)[number][0] => g != null)
-      const passDept = groups.length === 0 || groups.some((g) => filters.depts.has(g))
-      return passRadius && passBand && passOwn && passGen && passType && passCourseTime && passDept && passInt
+      // 学科: 少なくとも 1 学科がグループ（course_type_master.ui_group）にマッチすれば通す。
+      // ui_group が null（master に未登録の code）や、そもそも学科が 1 件も無い校は
+      // 「その他」chip 相当として扱う。10 chip 全選択の既定状態では全学校が通り、
+      // 特定 chip を絞ると未分類・学科なしも 'その他' chip 経由で明示制御できる。
+      const groups: DeptUiGroup[] =
+        s.departments.length > 0
+          ? s.departments.map((d) => d.ui_group ?? 'other')
+          : ['other']
+      const passDept = groups.some((g) => filters.depts.has(g))
+      return passRadius && passBand && passOwn && passGen && passType && passCourseTime && passDept && passInt && passQuery
     })
-  }, [schools, favorites, home, filters])
+  }, [schools, favorites, home, filters, normalizedQuery])
 
   const favSchools = useMemo(
     () => schools.filter((s) => favorites[s.id]),
@@ -202,17 +331,31 @@ export function MapPage({ userData }: Props) {
   }
 
   const activeCount = <T,>(set: Set<T>, all: readonly (readonly [T, string])[]) =>
-    set.size === all.length ? '全' : String(set.size)
+    set.size === all.length ? t('map.filterAll') : String(set.size)
+
+  const FILTER_CATEGORIES = useMemo(
+    () =>
+      [
+        ['own', t('map.filterCategory.own'), OWN_CHIPS, filters.own],
+        ['bands', t('map.filterCategory.bands'), BAND_CHIPS, filters.bands],
+        ['gen', t('map.filterCategory.gen'), GEN_CHIPS, filters.gen],
+        ['courseTimes', t('map.filterCategory.courseTimes'), COURSE_TIME_CHIPS, filters.courseTimes],
+        ['depts', t('map.filterCategory.depts'), DEPT_CHIPS, filters.depts],
+      ] as const,
+    [t, OWN_CHIPS, BAND_CHIPS, GEN_CHIPS, COURSE_TIME_CHIPS, DEPT_CHIPS, filters],
+  )
+
+  const activeFilterCount = FILTER_CATEGORIES.reduce(
+    (n, [, , list, set]) => (set.size < list.length ? n + 1 : n),
+    0,
+  )
 
   useEffect(() => {
     if (!mapNodeRef.current) return
 
     const map = L.map(mapNodeRef.current, { zoomControl: false }).setView([36.3907, 139.0604], 10)
     map.attributionControl.setPrefix(false)
-    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      maxZoom: 18,
-      attribution: OSM_ATTRIBUTION_HTML,
-    }).addTo(map)
+    const cancelBaseLayer = attachBaseTileLayer(map)
 
     markerLayerRef.current = L.layerGroup().addTo(map)
     clusterLayerRef.current = L.markerClusterGroup({
@@ -232,6 +375,7 @@ export function MapPage({ userData }: Props) {
     setMapRef(map)
 
     return () => {
+      cancelBaseLayer()
       markerLayerRef.current = null
       clusterLayerRef.current = null
       setMapRef(null)
@@ -243,6 +387,17 @@ export function MapPage({ userData }: Props) {
     if (!mapRef) return
     mapRef.setView(center, mapRef.getZoom())
   }, [center, mapRef])
+
+  // 共有 URL で開かれたら、学校データ到着後に 1 回だけ該当校の詳細シートを開いて寄せる
+  useEffect(() => {
+    if (!sharedSchoolId || sharedOpenedRef.current || !mapRef || schools.length === 0) return
+    sharedOpenedRef.current = true
+    const school = schools.find((s) => s.id === sharedSchoolId)
+    if (school) {
+      setDetail(school)
+      mapRef.setView([school.latitude, school.longitude], 13)
+    }
+  }, [sharedSchoolId, schools, mapRef])
 
   useEffect(() => {
     document.body.dataset.sheetOpen = detail ? 'true' : 'false'
@@ -259,67 +414,142 @@ export function MapPage({ userData }: Props) {
     homeLayer.clearLayers()
     cluster.clearLayers()
     if (home) {
-      L.marker([home.lat, home.lng], { icon: homeIcon() }).addTo(homeLayer)
+      L.marker([home.lat, home.lng], { icon: homeIcon(t('map.recenter')) }).addTo(homeLayer)
     }
+    const kosenBadge = t('labels.kosenBadge')
+    const integratedBadge = t('labels.integratedBadge')
     const schoolMarkers = visibleSchools.map((s) =>
-      L.marker([s.latitude, s.longitude], { icon: schoolIcon(s, !!favorites[s.id], home) })
-        .on('click', () => setDetail(s)),
+      L.marker([s.latitude, s.longitude], {
+        icon: schoolIcon(
+          s,
+          !!favorites[s.id],
+          home,
+          fmt.displayCode(s),
+          fmt.devLabel(s),
+          kosenBadge,
+          integratedBadge,
+        ),
+      }).on('click', () => setDetail(s)),
     )
     cluster.addLayers(schoolMarkers)
-  }, [favorites, home, visibleSchools])
+  }, [favorites, home, visibleSchools, fmt, t])
+
+  const sortedVisible = useMemo(
+    () => [...visibleSchools].sort((a, b) => shortSchoolName(a.name).localeCompare(shortSchoolName(b.name), 'ja')),
+    [visibleSchools],
+  )
 
   return (
     <div className="screen map-screen">
       <div className="header">
-        <button className="icon-btn" onClick={() => navigate('/')} aria-label="トップに戻る">
+        <button className="icon-btn" onClick={() => navigate('/')} aria-label={t('map.backHome')}>
           ←
         </button>
-        <div className="brand">{home ? shortLabel(home.label) + '周辺' : '地図'}</div>
-        <button className="icon-btn" onClick={() => navigate('/favorites')} aria-label="お気に入り一覧">
+        <div className="brand">
+          {home ? t('map.nearby', { label: shortLabel(home.label) }) : t('map.title')}
+        </div>
+        <button className="icon-btn" onClick={() => navigate('/favorites')} aria-label={t('header.favList')}>
           ★
         </button>
       </div>
 
-      <div className="map-canvas">
-        <div ref={mapNodeRef} className="leaflet-map" />
+      <div className="map-canvas" aria-hidden={schoolListOpen}>
+        <div
+          ref={mapNodeRef}
+          className="leaflet-map"
+          role="application"
+          aria-label={t('map.title')}
+          tabIndex={0}
+        />
       </div>
 
       <div className="float-bar">
-        <div className="radius-slider" aria-label="表示半径">
-          <span className="rs-label">半径</span>
+        <div className={`map-search ${searchOpen ? 'open' : ''}`}>
+          <button
+            type="button"
+            className={`chip search-btn ${query ? 'on' : ''}`}
+            aria-label={searchOpen ? t('map.searchClose') : t('map.searchOpen')}
+            aria-expanded={searchOpen}
+            onClick={() => {
+              setSearchOpen((v) => {
+                const next = !v
+                if (next) setTimeout(() => searchInputRef.current?.focus(), 0)
+                return next
+              })
+            }}
+          >
+            🔍
+          </button>
+          {searchOpen && (
+            <>
+              <input
+                ref={searchInputRef}
+                type="search"
+                className="map-search-input"
+                value={query}
+                placeholder={t('map.searchPlaceholder')}
+                aria-label={t('map.searchPlaceholder')}
+                onChange={(e) => setQuery(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Escape') {
+                    setQuery('')
+                    setSearchOpen(false)
+                  }
+                }}
+              />
+              {query && (
+                <button
+                  type="button"
+                  className="map-search-clear"
+                  aria-label={t('map.searchClear')}
+                  onClick={() => {
+                    setQuery('')
+                    searchInputRef.current?.focus()
+                  }}
+                >
+                  ×
+                </button>
+              )}
+            </>
+          )}
+        </div>
+        <div className="radius-slider" aria-label={t('map.radiusAria')}>
+          <span className="rs-label">{t('map.radius')}</span>
           <input
             type="range"
             min={RADIUS_MIN}
             max={RADIUS_MAX}
             step={5}
             value={filters.radius}
+            aria-valuemin={RADIUS_MIN}
+            aria-valuemax={RADIUS_MAX}
+            aria-valuenow={filters.radius}
+            aria-valuetext={`${filters.radius}km`}
             onChange={(e) => setFilters((f) => ({ ...f, radius: Number(e.target.value) }))}
-            onMouseUp={() => toast(`半径 ${filters.radius}km`)}
-            onTouchEnd={() => toast(`半径 ${filters.radius}km`)}
+            onMouseUp={() => toast(t('home.radiusToast', { km: filters.radius }))}
+            onTouchEnd={() => toast(t('home.radiusToast', { km: filters.radius }))}
           />
           <span className="rs-value">{filters.radius}km</span>
         </div>
-        {(
-          [
-            ['own', '種別', OWN_CHIPS, filters.own],
-            ['bands', '偏差値', BAND_CHIPS, filters.bands],
-            ['gen', '性別', GEN_CHIPS, filters.gen],
-            ['courseTimes', '課程', COURSE_TIME_CHIPS, filters.courseTimes],
-            ['depts', '学科', DEPT_CHIPS, filters.depts],
-          ] as const
-        ).map(([key, label, list, set]) => (
-          <div className="dropdown" key={key}>
+        {FILTER_CATEGORIES.map(([key, label, list, set]) => (
+          <div className="dropdown desktop-only" key={key}>
             <button
+              type="button"
               className={`chip drop ${popover === key ? 'open' : ''}`}
+              aria-expanded={popover === key}
+              aria-haspopup="listbox"
               onClick={() => setPopover((p) => (p === key ? null : (key as PopoverKey)))}
             >
               {label} ({activeCount(set as Set<unknown>, list as unknown as readonly (readonly [unknown, string])[])}) ▾
             </button>
             {popover === key && (
-              <div className="popover">
+              <div className="popover" role="listbox" aria-label={label}>
                 {(list as readonly (readonly [unknown, string])[]).map(([k, l]) => (
                   <button
+                    type="button"
                     key={String(k)}
+                    role="option"
+                    aria-selected={(set as Set<unknown>).has(k)}
                     className={`chip ${(set as Set<unknown>).has(k) ? 'on' : ''}`}
                     onClick={() => toggleSet(key as 'own', k as never)}
                   >
@@ -330,53 +560,170 @@ export function MapPage({ userData }: Props) {
             )}
           </div>
         ))}
+        <button
+          type="button"
+          className="chip drop mobile-only filters-btn"
+          aria-label={filterSheetOpen ? t('map.filtersClose') : t('map.filtersOpen')}
+          aria-expanded={filterSheetOpen}
+          onClick={() => setFilterSheetOpen(true)}
+        >
+          {t('map.filters')}
+          {activeFilterCount > 0 && <span className="filters-badge"> ({activeFilterCount})</span>}
+          {' '}▾
+        </button>
       </div>
-      {popover && <div className="popover-scrim" onClick={() => setPopover(null)} />}
+      {popover && (
+        <div className="popover-scrim" onClick={() => setPopover(null)} aria-hidden="true" />
+      )}
+
+      {filterSheetOpen && (
+        <>
+          <div
+            className="filter-sheet-scrim"
+            onClick={() => setFilterSheetOpen(false)}
+            aria-hidden="true"
+          />
+          <div className="filter-sheet" role="dialog" aria-label={t('map.filters')}>
+            <div className="filter-sheet-head">
+              <div className="filter-sheet-title">{t('map.filters')}</div>
+              <button
+                type="button"
+                className="icon-btn"
+                onClick={() => setFilterSheetOpen(false)}
+                aria-label={t('map.filtersClose')}
+              >
+                ×
+              </button>
+            </div>
+            <div className="filter-sheet-body">
+              {FILTER_CATEGORIES.map(([key, label, list, set]) => (
+                <section className="filter-sheet-section" key={key}>
+                  <h3 className="filter-sheet-section-title">
+                    {label}
+                    <span className="filter-sheet-section-count">
+                      ({activeCount(set as Set<unknown>, list as unknown as readonly (readonly [unknown, string])[])})
+                    </span>
+                  </h3>
+                  <div className="filter-sheet-chips">
+                    {(list as readonly (readonly [unknown, string])[]).map(([k, l]) => (
+                      <button
+                        type="button"
+                        key={String(k)}
+                        aria-pressed={(set as Set<unknown>).has(k)}
+                        className={`chip ${(set as Set<unknown>).has(k) ? 'on' : ''}`}
+                        onClick={() => toggleSet(key as 'own', k as never)}
+                      >
+                        {l}
+                      </button>
+                    ))}
+                  </div>
+                </section>
+              ))}
+            </div>
+            <div className="filter-sheet-foot">
+              <button
+                type="button"
+                className="cta"
+                onClick={() => setFilterSheetOpen(false)}
+              >
+                {t('map.filtersApply')}
+              </button>
+            </div>
+          </div>
+        </>
+      )}
 
       <div className="map-controls">
-        <button onClick={() => mapRef?.setZoom(mapRef.getZoom() + 1)} aria-label="ズームイン">
+        <button type="button" onClick={() => mapRef?.setZoom(mapRef.getZoom() + 1)} aria-label={t('map.zoomIn')}>
           ＋
         </button>
-        <button onClick={() => mapRef?.setZoom(mapRef.getZoom() - 1)} aria-label="ズームアウト">
+        <button type="button" onClick={() => mapRef?.setZoom(mapRef.getZoom() - 1)} aria-label={t('map.zoomOut')}>
           −
         </button>
         <button
+          type="button"
           onClick={() => home && mapRef?.setView([home.lat, home.lng], 10)}
-          title="自宅に戻す"
-          aria-label="自宅に戻す"
+          title={t('map.recenter')}
+          aria-label={t('map.recenter')}
         >
           ⌂
         </button>
+        <button
+          type="button"
+          className={schoolListOpen ? 'on' : ''}
+          onClick={() => setSchoolListOpen((v) => !v)}
+          aria-expanded={schoolListOpen}
+          aria-controls="school-list-panel"
+          aria-label={t('map.schoolList')}
+        >
+          ☰
+        </button>
       </div>
 
+      {schoolListOpen && (
+        <section
+          id="school-list-panel"
+          className="school-list-panel"
+          role="region"
+          aria-label={t('map.schoolListTitle', { count: sortedVisible.length })}
+        >
+          <div className="school-list-head">
+            <strong>{t('map.schoolListTitle', { count: sortedVisible.length })}</strong>
+            <button type="button" className="link-btn" onClick={() => setSchoolListOpen(false)}>
+              {t('map.schoolListClose')}
+            </button>
+          </div>
+          <p className="school-list-hint">{t('map.schoolListHint')}</p>
+          <ul className="school-list">
+            {sortedVisible.map((s) => (
+              <li key={s.id}>
+                <button type="button" className="school-list-item" onClick={() => setDetail(s)}>
+                  <span className="school-list-name">{shortSchoolName(s.name)}</span>
+                  <span className="school-list-meta">
+                    {fmt.displayCode(s)}：{fmt.devLabel(s)}
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
       {(loading || error) && (
-        <div className="float-bar" style={{ top: 108 }}>
-          {loading && <span className="chip">学校データを読み込み中…</span>}
+        <div className="float-bar" style={{ top: 108 }} role="status">
+          {loading && <span className="chip">{t('map.loadingSchools')}</span>}
           {error && <span className="chip" style={{ color: 'var(--bad)' }}>{error}</span>}
         </div>
       )}
 
       <div className={`sheet ${sheetExpanded ? 'expanded' : ''}`}>
-        <button className="handle" onClick={() => setSheetExpanded((v) => !v)} aria-label="シートを開閉" />
+        <button
+          type="button"
+          className="handle"
+          onClick={() => setSheetExpanded((v) => !v)}
+          aria-expanded={sheetExpanded}
+          aria-label={t('map.toggleSheet')}
+        />
         <div className="head">
           <span className="grow">
-            <span style={{ color: 'var(--fav-yellow)' }}>★</span> お気に入り {favSchools.length}件
+            <span style={{ color: 'var(--fav-yellow)' }} aria-hidden="true">★</span>{' '}
+            {t('map.favCount', { count: favSchools.length })}
           </span>
-          <button className="link-btn" onClick={() => navigate('/favorites')}>
-            一覧 ›
+          <button type="button" className="link-btn" onClick={() => navigate('/favorites')}>
+            {t('map.listLink')}
           </button>
         </div>
-        <div className="body">
+        <main id="main-content" className="body" tabIndex={-1}>
           <div className="fav-mini">
             {favSchools.length === 0 ? (
-              <div className="fav-mini-empty">ピンをタップして志望校を追加してください</div>
+              <div className="fav-mini-empty">{t('map.favEmpty')}</div>
             ) : (
               favSchools.map((s) => (
-                <button className="row" key={s.id} onClick={() => setDetail(s)}>
-                  <span className="star">★</span>
+                <button type="button" className="row" key={s.id} onClick={() => setDetail(s)}>
+                  <span className="star" aria-hidden="true">★</span>
                   <span className="name">{shortSchoolName(s.name)}</span>
                   <span className="badge">
-                    {displayCode(s)}：{devLabel(s)}
+                    {fmt.displayCode(s)}：{fmt.devLabel(s)}
                   </span>
                 </button>
               ))
@@ -384,7 +731,7 @@ export function MapPage({ userData }: Props) {
           </div>
 
           <div className="filter-group">
-            <div className="label">運営</div>
+            <div className="label">{t('map.filterOwn')}</div>
             <div className="chips">
               {OWN_CHIPS.map(([k, label]) => (
                 <button
@@ -399,7 +746,7 @@ export function MapPage({ userData }: Props) {
           </div>
 
           <div className="filter-group">
-            <div className="label">学校種別</div>
+            <div className="label">{t('map.filterType')}</div>
             <div className="chips">
               {TYPE_CHIPS.map(([k, label]) => (
                 <button
@@ -414,7 +761,7 @@ export function MapPage({ userData }: Props) {
           </div>
 
           <div className="filter-group">
-            <div className="label">課程</div>
+            <div className="label">{t('map.filterCourse')}</div>
             <div className="chips">
               {COURSE_TIME_CHIPS.map(([k, label]) => (
                 <button
@@ -429,7 +776,7 @@ export function MapPage({ userData }: Props) {
           </div>
 
           <div className="filter-group">
-            <div className="label">性別</div>
+            <div className="label">{t('map.filterGender')}</div>
             <div className="chips">
               {GEN_CHIPS.map(([k, label]) => (
                 <button
@@ -444,9 +791,23 @@ export function MapPage({ userData }: Props) {
           </div>
 
           <div className="filter-group">
-            <div className="label">学科</div>
+            <div className="label">{t('map.filterDept')}</div>
             <div className="chips">
-              {DEPT_CHIPS.map(([k, label]) => (
+              {DEPT_CHIPS_ACADEMIC.map(([k, label]) => (
+                <button
+                  key={k}
+                  className={`chip ${filters.depts.has(k) ? 'on' : ''}`}
+                  onClick={() => toggleSet('depts', k as never)}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            <div className="chips-divider">
+              <span>{t('map.deptSpecialized')}</span>
+            </div>
+            <div className="chips">
+              {DEPT_CHIPS_SPECIALIZED.map(([k, label]) => (
                 <button
                   key={k}
                   className={`chip ${filters.depts.has(k) ? 'on' : ''}`}
@@ -459,24 +820,36 @@ export function MapPage({ userData }: Props) {
           </div>
 
           <div className="filter-group">
-            <div className="label">その他</div>
+            <div className="label">{t('map.filterOther')}</div>
             <div className="chips">
               <button
+                type="button"
                 className={`chip ${filters.onlyIntegrated ? 'on' : ''}`}
+                aria-pressed={filters.onlyIntegrated}
                 onClick={() => setFilters((f) => ({ ...f, onlyIntegrated: !f.onlyIntegrated }))}
               >
-                中高一貫のみ
+                {t('map.integratedOnly')}
               </button>
             </div>
           </div>
 
           {slotsForPlacement('map').map((s) => (
-            <AdSlot key={s.id} slot={s} categoryLabel="受験対策" className="mt-2" />
+            <AdSlot key={s.id} slot={s} categoryLabel={t('map.adCategory')} className="mt-2" />
           ))}
-        </div>
+        </main>
       </div>
 
-      {detail && <SchoolDetailSheet school={detail} onClose={() => setDetail(null)} userData={userData} />}
+      {detail && (
+        <SchoolDetailSheet
+          school={detail}
+          onClose={() => {
+            setDetail(null)
+            // 共有 URL 経由なら、シートを閉じた時点で通常の地図 URL に戻す
+            if (sharedSchoolId) navigate('/map', { replace: true })
+          }}
+          userData={userData}
+        />
+      )}
     </div>
   )
 }

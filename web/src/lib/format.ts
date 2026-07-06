@@ -86,8 +86,38 @@ export function devLabel(s: School): string {
   return t === b ? `${t}` : `${b}〜${t}`
 }
 
+/**
+ * 設立主体の短縮表記（1 文字）。
+ * prefectural + 東京都 → '都'、北海道 → '道'、大阪府/京都府 → '府'、他 → '県'
+ * それ以外は OWN_LABEL 準拠（市/国/私/組）。
+ */
+export function ownershipShort(s: School): string {
+  if (s.ownership === 'prefectural') {
+    if (s.prefecture === '東京都') return '都'
+    if (s.prefecture === '北海道') return '道'
+    if (s.prefecture === '大阪府' || s.prefecture === '京都府') return '府'
+    return '県'
+  }
+  return OWN_LABEL[s.ownership] ?? ''
+}
+
+/**
+ * 設立主体のフル表記（2 文字）。
+ * prefectural + 東京都 → '都立'、北海道 → '道立'、大阪府/京都府 → '府立'、他 → '県立'
+ * それ以外は OWN_FULL 準拠（市立/国立/私立/組合立）。
+ */
+export function ownershipFull(s: School): string {
+  if (s.ownership === 'prefectural') {
+    if (s.prefecture === '東京都') return '都立'
+    if (s.prefecture === '北海道') return '道立'
+    if (s.prefecture === '大阪府' || s.prefecture === '京都府') return '府立'
+    return '県立'
+  }
+  return OWN_FULL[s.ownership] ?? ''
+}
+
 export function displayCode(s: School): string {
-  return (OWN_LABEL[s.ownership] ?? '') + (GEN_LABEL[s.gender_type] ?? '')
+  return ownershipShort(s) + (GEN_LABEL[s.gender_type] ?? '')
 }
 
 export function courseTimeLabel(s: School): string {
@@ -117,3 +147,6 @@ export function displayName(s: School): string {
   const recruiting = s.is_recruiting ? '' : '[募集停止] '
   return `${recruiting}${s.name}（${displayCode(s)}：${devLabel(s)}）${extraBadge(s)}`
 }
+
+/** テスト用: displayName の関数を、指定 ownership/prefecture の School で組む fixture */
+

@@ -1,5 +1,31 @@
 import type { HomeLocation } from '../types/school'
 
+/**
+ * fetch の一過性失敗（ネットワーク瞬断・5xx・レート制限）に 1 回だけリトライする薄いラッパー。
+ * ネットワーク例外（TypeError: Failed to fetch）と 5xx / 429 を再試行対象とし、
+ * 4xx（=リクエスト自体の問題）は無駄打ちを避けて即返す。最終的に失敗したら
+ * 例外 or 非 ok レスポンスを呼び出し側へそのまま返す（握りつぶさない）。
+ */
+async function fetchWithRetry(
+  input: string,
+  init?: RequestInit,
+  retries = 1,
+  delayMs = 600,
+): Promise<Response> {
+  let lastErr: unknown
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const res = await fetch(input, init)
+      if (res.ok || (res.status < 500 && res.status !== 429)) return res
+      lastErr = new Error('HTTP ' + res.status)
+    } catch (err) {
+      lastErr = err
+    }
+    if (attempt < retries) await new Promise((r) => setTimeout(r, delayMs))
+  }
+  throw lastErr instanceof Error ? lastErr : new Error('fetch failed')
+}
+
 /** 直線距離（Haversine・km） */
 export function haversine(a: { lat: number; lng: number }, b: { lat: number; lng: number }): number {
   const R = 6371
@@ -112,7 +138,9 @@ export async function searchNominatim(q: string): Promise<GeocodeCandidate[]> {
     'https://nominatim.openstreetmap.org/search' +
     '?format=jsonv2&limit=5&countrycodes=jp&addressdetails=1' +
     `&accept-language=ja&q=${encodeURIComponent(q)}`
-  const res = await fetch(url, { headers: { Accept: 'application/json' } })
+  // 一過性の失敗（瞬断・レート制限）に備えて 1 回だけ間を置いてリトライする。
+  // それでも失敗したら throw して呼び出し側の searchError UI に委ねる（握りつぶさない）。
+  const res = await fetchWithRetry(url, { headers: { Accept: 'application/json' } })
   if (!res.ok) throw new Error('HTTP ' + res.status)
   const data = (await res.json()) as NominatimItem[]
   return data.map((it) => {
@@ -126,6 +154,72 @@ export async function searchNominatim(q: string): Promise<GeocodeCandidate[]> {
       lng: parseFloat(it.lon),
     }
   })
+}
+
+/**
+ * 国土地理院 住所検索 API のレスポンス要素（素の Feature 配列で返る）。
+ * coordinates は **[lng, lat] 順**（GeoJSON 準拠）である点に注意。
+ * 分類情報（category/type）は無く、駅・地名には properties.dataSource が付く。
+ */
+interface GsiItem {
+  geometry?: { coordinates?: [number, number]; type?: string }
+  type?: string
+  properties?: { addressCode?: string; title?: string; dataSource?: string }
+}
+
+/**
+ * 国土地理院 AddressSearch フリー検索（住所・地名）。
+ * 無料・無登録・API キー不要。国土地理院コンテンツ利用規約（PDL1.0）に基づき
+ * 商用可・出典表記必須（attribution.ts の GSI クレジットで表示）。
+ * 呼び出し側で 400ms デバウンスすること。
+ *
+ * 注意: **駅名・商業施設名は引けない**（AddressSearch は住所 index のみ。
+ * 「東京駅」等の駅クエリは 東京→東 のような部分マッチで無関係な地名が返るため、
+ * geocodeSearch() 側で "駅|Station" を含むクエリは Nominatim へ振り分ける）。
+ */
+export async function searchGsi(q: string): Promise<GeocodeCandidate[]> {
+  const url =
+    'https://msearch.gsi.go.jp/address-search/AddressSearch?q=' + encodeURIComponent(q)
+  // Nominatim と同様、一過性の失敗（瞬断・レート制限）に 1 回だけリトライする。
+  const res = await fetchWithRetry(url, { headers: { Accept: 'application/json' } })
+  if (!res.ok) throw new Error('HTTP ' + res.status)
+  const data = (await res.json()) as GsiItem[]
+  if (!Array.isArray(data)) return []
+  return data
+    .filter((it) => Array.isArray(it.geometry?.coordinates))
+    .slice(0, 5)
+    .map((it) => {
+      // GSI は [lng, lat] 順。lat/lng へ取り違えなく展開する。
+      const [lng, lat] = it.geometry!.coordinates as [number, number]
+      const title = it.properties?.title ?? ''
+      const isStation = !!it.properties?.dataSource
+      return {
+        label: title || q,
+        sub: isStation ? '駅・地点' : '住所・地点',
+        icon: isStation ? '🚉' : '📍',
+        lat,
+        lng,
+      }
+    })
+}
+
+/**
+ * 使用中のジオコーダ provider。env `VITE_GEOCODER`（'gsi' | 'nominatim'）で切替。
+ * **既定は 'gsi'**（国土地理院。Nominatim の autocomplete 禁止 policy 回避・日本住所精度）。
+ * 'nominatim' を明示した時のみ従来の OSM Nominatim へ切り戻す。
+ */
+export const ACTIVE_GEOCODER: 'gsi' | 'nominatim' =
+  (import.meta.env.VITE_GEOCODER as string | undefined) === 'nominatim' ? 'nominatim' : 'gsi'
+
+/**
+ * provider 抽象。呼び出し側は provider を意識せずこれを使う。
+ * GSI 既定でも 駅名・"Station" を含むクエリだけは Nominatim へ振り分ける
+ * （GSI AddressSearch は駅を引けず、東京駅→北海道東区のような誤マッチを返すため）。
+ */
+export async function geocodeSearch(q: string): Promise<GeocodeCandidate[]> {
+  if (ACTIVE_GEOCODER === 'nominatim') return searchNominatim(q)
+  if (/駅|Station/i.test(q)) return searchNominatim(q)
+  return searchGsi(q)
 }
 
 export function shortLabel(s: string): string {

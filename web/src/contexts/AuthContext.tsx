@@ -3,7 +3,7 @@ import { createContext, useContext, useEffect, useState, type ReactNode } from '
 import type { Session } from '@supabase/supabase-js'
 import { supabase, LINE_PROVIDER } from '../lib/supabase'
 
-export type UserKind = 'line' | 'anon' | null
+export type UserKind = 'line' | 'google' | 'anon' | null
 
 interface AuthState {
   session: Session | null
@@ -12,8 +12,11 @@ interface AuthState {
   displayName: string
   signInAnonymous: () => Promise<void>
   signInLINE: () => Promise<void>
+  signInGoogle: () => Promise<void>
   /** Anonymous → LINE アップグレード（データ引き継ぎ） */
   linkLINE: () => Promise<void>
+  /** Anonymous → Google アップグレード（データ引き継ぎ） */
+  linkGoogle: () => Promise<void>
   signOut: () => Promise<void>
 }
 
@@ -21,14 +24,18 @@ const AuthContext = createContext<AuthState | null>(null)
 
 function kindOf(session: Session | null): UserKind {
   if (!session) return null
-  return session.user.is_anonymous ? 'anon' : 'line'
+  if (session.user.is_anonymous) return 'anon'
+  // app_metadata.provider は Google なら 'google'、LINE（Custom OIDC）なら custom identifier。
+  const provider = (session.user.app_metadata as Record<string, unknown>).provider
+  return provider === 'google' ? 'google' : 'line'
 }
 
 function nameOf(session: Session | null): string {
   if (!session) return 'ゲスト'
   if (session.user.is_anonymous) return 'ゲスト（匿名）'
   const meta = session.user.user_metadata as Record<string, unknown>
-  return (meta.name as string) || (meta.full_name as string) || 'LINE ユーザー'
+  const fallback = kindOf(session) === 'google' ? 'Google ユーザー' : 'LINE ユーザー'
+  return (meta.name as string) || (meta.full_name as string) || fallback
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -68,9 +75,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (error) throw error
   }
 
+  const signInGoogle = async () => {
+    const { error } = await supabase.auth.signInWithOAuth({
+      // Supabase 標準の Google provider。LINE とは別アカウント扱い（自動統合しない）。
+      provider: 'google',
+      options: { redirectTo: `${location.origin}/auth/callback` },
+    })
+    if (error) throw error
+  }
+
   const linkLINE = async () => {
     const { error } = await supabase.auth.linkIdentity({
       provider: LINE_PROVIDER as 'google',
+      options: { redirectTo: `${location.origin}/auth/callback` },
+    })
+    if (error) throw error
+  }
+
+  const linkGoogle = async () => {
+    const { error } = await supabase.auth.linkIdentity({
+      provider: 'google',
       options: { redirectTo: `${location.origin}/auth/callback` },
     })
     if (error) throw error
@@ -90,7 +114,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         displayName: nameOf(session),
         signInAnonymous,
         signInLINE,
+        signInGoogle,
         linkLINE,
+        linkGoogle,
         signOut,
       }}
     >

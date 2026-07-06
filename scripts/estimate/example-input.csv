@@ -1,0 +1,5 @@
+pref,year,school_name,department_name,min_score,exam_mean,exam_sd,applicants,capacity,baseline_dev,source_url,note
+sampleken,2026,サンプル県立第一高等学校,普通科,412,310,62,,,,https://www.pref.sampleken.example.jp/nyushi/r8-jisshi.pdf,合成データ（段階①の例）
+sampleken,2026,サンプル県立中央工業高等学校,機械科,,,,96,80,,https://www.pref.sampleken.example.jp/nyushi/r8-jisshi.pdf,合成データ（段階②・倍率1.2倍の例）
+sampleken,2026,サンプル県立みなみ高等学校,普通科,,,,70,80,,https://www.pref.sampleken.example.jp/nyushi/r8-jisshi.pdf,合成データ（段階②・定員充足の例）
+sampleken,2026,サンプル学園高等学校,普通科,,,,,,,,合成データ（段階③・情報募集中の例）
