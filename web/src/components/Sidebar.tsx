@@ -1,6 +1,10 @@
+import { useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useApp } from '../contexts/AppContext'
 import { useAuth } from '../contexts/AuthContext'
+import { useI18n } from '../contexts/I18nContext'
+import { useFocusTrap } from '../hooks/useFocusTrap'
+import { useEscapeKey } from '../hooks/useEscapeKey'
 
 const REPO_URL = 'https://github.com/ishizakahiroshi/manabi-map'
 const ISSUE_URL = `${REPO_URL}/issues/new?labels=data-correction&title=%E5%AD%A6%E6%A0%A1%E6%83%85%E5%A0%B1%E3%81%AE%E4%BF%AE%E6%AD%A3%E6%8F%90%E6%A1%88`
@@ -14,7 +18,12 @@ interface SidebarProps {
 export function Sidebar({ favCount, noteCount }: SidebarProps) {
   const { sidebarOpen, setSidebarOpen, setLoginOpen, toast } = useApp()
   const { session, kind, displayName, signOut } = useAuth()
+  const { t, locale, setLocale } = useI18n()
   const navigate = useNavigate()
+  const asideRef = useRef<HTMLElement>(null)
+
+  useFocusTrap(asideRef, sidebarOpen)
+  useEscapeKey(() => setSidebarOpen(false), sidebarOpen)
 
   const close = () => setSidebarOpen(false)
   const go = (path: string) => {
@@ -30,9 +39,9 @@ export function Sidebar({ favCount, noteCount }: SidebarProps) {
   const handleSignOut = async () => {
     try {
       await signOut()
-      toast('ログアウトしました')
+      toast(t('nav.logoutDone'))
     } catch {
-      toast('ログアウトに失敗しました')
+      toast(t('nav.logoutFail'))
     }
     close()
   }
@@ -42,127 +51,148 @@ export function Sidebar({ favCount, noteCount }: SidebarProps) {
       <button
         className={`sb-backdrop ${sidebarOpen ? 'on' : ''}`}
         onClick={close}
-        aria-label="メニューを閉じる"
+        aria-label={t('nav.closeMenu')}
         tabIndex={sidebarOpen ? 0 : -1}
+        aria-hidden={!sidebarOpen}
       />
-      <aside className={`sidebar ${sidebarOpen ? 'on' : ''}`} aria-hidden={!sidebarOpen}>
+      <aside
+        ref={asideRef}
+        className={`sidebar ${sidebarOpen ? 'on' : ''}`}
+        aria-hidden={!sidebarOpen}
+        role="dialog"
+        aria-modal="true"
+        aria-label={t('common.menu')}
+      >
         <div className="sb-head">
-          <button className="icon-btn" onClick={close} aria-label="閉じる">
+          <button className="icon-btn" onClick={close} aria-label={t('common.close')}>
             ×
           </button>
           <div className="brand">Manabi Map</div>
         </div>
         <div className="sb-body">
           <div className="sb-user">
-            <div className="sb-avatar">👤</div>
+            <div className="sb-avatar" aria-hidden="true">👤</div>
             <div className="sb-user-info">
               <div className="sb-name">{displayName}</div>
               <div className="sb-stat">
-                志望校 {favCount} 件 / 通学メモ {noteCount} 件
+                {t('nav.favStat', { fav: favCount, note: noteCount })}
               </div>
             </div>
           </div>
           {!session && (
             <button className="sb-login" onClick={handleLoginButton}>
-              ログイン / 新規登録
+              {t('nav.login')}
             </button>
           )}
           {kind === 'anon' && (
             <button className="sb-login" onClick={handleLoginButton}>
-              🔗 LINE / Google 連携でデータを引き継ぐ
+              🔗 {t('nav.linkData')}
             </button>
           )}
 
           <div className="sb-section">
             <button className="sb-item" onClick={() => go('/map')}>
-              <span className="ic">🗺</span>
-              <span className="tx">地図</span>
-              <span className="arrow">›</span>
+              <span className="ic" aria-hidden="true">🗺</span>
+              <span className="tx">{t('nav.map')}</span>
+              <span className="arrow" aria-hidden="true">›</span>
             </button>
             <button className="sb-item" onClick={() => go('/favorites')}>
-              <span className="ic">★</span>
-              <span className="tx">お気に入り</span>
+              <span className="ic" aria-hidden="true">★</span>
+              <span className="tx">{t('nav.favorites')}</span>
               <span className="badge">{favCount}</span>
             </button>
             <button className="sb-item" onClick={() => go('/')}>
-              <span className="ic">🏠</span>
-              <span className="tx">自宅の設定</span>
-              <span className="arrow">›</span>
+              <span className="ic" aria-hidden="true">🏠</span>
+              <span className="tx">{t('nav.homeSettings')}</span>
+              <span className="arrow" aria-hidden="true">›</span>
             </button>
           </div>
 
           <div className="sb-section">
-            <div className="sb-label">OSS 参加</div>
+            <div className="sb-label">{t('nav.oss')}</div>
             <a className="sb-item" href={ISSUE_URL} target="_blank" rel="noreferrer" onClick={close}>
-              <span className="ic">✏️</span>
-              <span className="tx">学校情報の修正提案</span>
-              <span className="arrow">›</span>
+              <span className="ic" aria-hidden="true">✏️</span>
+              <span className="tx">{t('nav.suggestEdit')}</span>
+              <span className="arrow" aria-hidden="true">›</span>
             </a>
             <a className="sb-item" href={REPO_URL} target="_blank" rel="noreferrer" onClick={close}>
-              <span className="ic">🌐</span>
-              <span className="tx">GitHub でデータを編集</span>
-              <span className="arrow">›</span>
+              <span className="ic" aria-hidden="true">🌐</span>
+              <span className="tx">{t('nav.editOnGithub')}</span>
+              <span className="arrow" aria-hidden="true">›</span>
             </a>
             <button
               className="sb-item"
               onClick={() => {
                 close()
-                toast('学校詳細シートの「私の記録」から提供できます')
+                toast(t('nav.provideDeviationHint'))
               }}
             >
-              <span className="ic">📊</span>
-              <span className="tx">偏差値情報を提供する</span>
-              <span className="arrow">›</span>
+              <span className="ic" aria-hidden="true">📊</span>
+              <span className="tx">{t('nav.provideDeviation')}</span>
+              <span className="arrow" aria-hidden="true">›</span>
             </button>
           </div>
 
           <div className="sb-section">
-            <div className="sb-label">サービス情報</div>
+            <div className="sb-label">{t('nav.serviceInfo')}</div>
             <a className="sb-item" href={REPO_URL} target="_blank" rel="noreferrer" onClick={close}>
-              <span className="ic">ℹ️</span>
-              <span className="tx">このサービスについて</span>
-              <span className="arrow">›</span>
+              <span className="ic" aria-hidden="true">ℹ️</span>
+              <span className="tx">{t('nav.about')}</span>
+              <span className="arrow" aria-hidden="true">›</span>
             </a>
             <a className="sb-item" href={`${REPO_URL}#readme`} target="_blank" rel="noreferrer" onClick={close}>
-              <span className="ic">❓</span>
-              <span className="tx">使い方 / ヘルプ</span>
-              <span className="arrow">›</span>
+              <span className="ic" aria-hidden="true">❓</span>
+              <span className="tx">{t('nav.help')}</span>
+              <span className="arrow" aria-hidden="true">›</span>
             </a>
             <a className="sb-item" href={FEEDBACK_URL} target="_blank" rel="noreferrer" onClick={close}>
-              <span className="ic">💬</span>
-              <span className="tx">フィードバックを送る</span>
-              <span className="arrow">›</span>
+              <span className="ic" aria-hidden="true">💬</span>
+              <span className="tx">{t('nav.feedback')}</span>
+              <span className="arrow" aria-hidden="true">›</span>
             </a>
-            <button
-              className="sb-item"
-              onClick={() => {
-                go('/legal/third-party')
-              }}
-            >
-              <span className="ic">⚖️</span>
-              <span className="tx">ライセンス</span>
-              <span className="arrow">›</span>
+            <button className="sb-item" onClick={() => go('/legal/third-party')}>
+              <span className="ic" aria-hidden="true">⚖️</span>
+              <span className="tx">{t('nav.license')}</span>
+              <span className="arrow" aria-hidden="true">›</span>
             </button>
           </div>
 
           <div className="sb-section">
-            <div className="sb-label">設定・その他</div>
+            <div className="sb-label">{t('nav.settings')}</div>
+            <div className="lang-switch" role="group" aria-label={t('common.language')}>
+              <button
+                type="button"
+                className={`chip ${locale === 'ja' ? 'on' : ''}`}
+                aria-pressed={locale === 'ja'}
+                onClick={() => setLocale('ja')}
+              >
+                {t('common.japanese')}
+              </button>
+              <button
+                type="button"
+                className={`chip ${locale === 'en' ? 'on' : ''}`}
+                aria-pressed={locale === 'en'}
+                onClick={() => setLocale('en')}
+              >
+                {t('common.english')}
+              </button>
+            </div>
             <button
               className="sb-item"
               onClick={() => {
                 close()
-                toast('ブラウザのメニューから「ホーム画面に追加」を選んでください')
+                toast(t('nav.addToHomeHint'))
               }}
             >
-              <span className="ic">📱</span>
-              <span className="tx">ホーム画面に追加</span>
-              <span className="arrow">›</span>
+              <span className="ic" aria-hidden="true">📱</span>
+              <span className="tx">{t('nav.addToHome')}</span>
+              <span className="arrow" aria-hidden="true">›</span>
             </button>
             {session && (
               <button className="sb-item" onClick={() => void handleSignOut()}>
-                <span className="ic">🚪</span>
-                <span className="tx">ログアウト</span>
-                <span className="arrow">›</span>
+                <span className="ic" aria-hidden="true">🚪</span>
+                <span className="tx">{t('nav.logout')}</span>
+                <span className="arrow" aria-hidden="true">›</span>
               </button>
             )}
           </div>
@@ -172,11 +202,11 @@ export function Sidebar({ favCount, noteCount }: SidebarProps) {
             <div className="sb-oss">🌱 Open Source · AGPL-3.0</div>
             <div style={{ marginTop: 4 }}>
               <a href="/legal/privacy" onClick={(e) => { e.preventDefault(); go('/legal/privacy') }}>
-                プライバシー
+                {t('nav.privacy')}
               </a>
               ・
               <a href="/legal/terms" onClick={(e) => { e.preventDefault(); go('/legal/terms') }}>
-                利用規約
+                {t('nav.terms')}
               </a>
             </div>
           </div>

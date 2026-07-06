@@ -1,15 +1,5 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { School } from '../types/school'
-import {
-  displayName,
-  OWN_FULL,
-  GEN_FULL,
-  TYPE_FULL,
-  CAMPUS_TYPE_FULL,
-  courseTimeLabel,
-  enrollmentLabel,
-  genderRatioLabel,
-} from '../lib/format'
 import {
   haversine,
   estimateWalkMinutes,
@@ -20,6 +10,10 @@ import {
 } from '../lib/geo'
 import { useApp } from '../contexts/AppContext'
 import { useAuth } from '../contexts/AuthContext'
+import { useI18n } from '../contexts/I18nContext'
+import { useFormat } from '../hooks/useFormat'
+import { useFocusTrap } from '../hooks/useFocusTrap'
+import { useEscapeKey } from '../hooks/useEscapeKey'
 import type { useUserData } from '../hooks/useUserData'
 import { trackEvent } from '../lib/analytics'
 import { AdSlot } from './AdSlot'
@@ -34,6 +28,9 @@ interface Props {
 export function SchoolDetailSheet({ school, onClose, userData }: Props) {
   const { home, toast, setLoginOpen } = useApp()
   const { session } = useAuth()
+  const { t } = useI18n()
+  const fmt = useFormat()
+  const sheetRef = useRef<HTMLDivElement>(null)
   const { favorites, notes, mine, toggleFavorite, setPriority, saveNote, saveMineValue, saveMineNote, saveMineConsent } = userData
 
   const [memo, setMemo] = useState('')
@@ -43,6 +40,10 @@ export function SchoolDetailSheet({ school, onClose, userData }: Props) {
   const [saving, setSaving] = useState(false)
 
   const schoolId = school?.id ?? null
+  const open = school != null
+
+  useFocusTrap(sheetRef, open)
+  useEscapeKey(onClose, open)
 
   useEffect(() => {
     if (!schoolId) return
@@ -67,7 +68,7 @@ export function SchoolDetailSheet({ school, onClose, userData }: Props) {
   const mineRec = mine[school.id]
   const dist = home ? haversine(home, { lat: school.latitude, lng: school.longitude }) : null
   const routeUrl = home ? googleMapsRoute(home, school) : null
-  const genderRatio = genderRatioLabel(school)
+  const genderRatio = fmt.genderRatioLabel(school)
   // DB 由来 URL は http(s) のみ許可（javascript: 等のスキームを href に通さない多層防御）
   const officialUrl =
     school.official_url && /^https?:\/\//i.test(school.official_url) ? school.official_url : null
@@ -82,9 +83,9 @@ export function SchoolDetailSheet({ school, onClose, userData }: Props) {
     if (requireLogin()) return
     try {
       const added = await toggleFavorite(school.id)
-      toast(added ? '志望校に追加しました' : 'お気に入りから外しました')
+      toast(added ? t('detail.favAdded') : t('detail.favRemoved'))
     } catch {
-      toast('保存に失敗しました。通信環境を確認してください')
+      toast(t('detail.saveFail'))
     }
   }
 
@@ -93,7 +94,7 @@ export function SchoolDetailSheet({ school, onClose, userData }: Props) {
     try {
       await setPriority(school.id, n)
     } catch {
-      toast('保存に失敗しました。通信環境を確認してください')
+      toast(t('detail.saveFail'))
     }
   }
 
@@ -103,9 +104,9 @@ export function SchoolDetailSheet({ school, onClose, userData }: Props) {
     try {
       await saveNote(school.id, memo, commuteNote)
       if (mineNote !== (mineRec?.note ?? '')) await saveMineNote(school.id, mineNote)
-      toast('保存しました')
+      toast(t('detail.saveDone'))
     } catch {
-      toast('保存に失敗しました。通信環境を確認してください')
+      toast(t('detail.saveFail'))
     } finally {
       setSaving(false)
     }
@@ -121,7 +122,7 @@ export function SchoolDetailSheet({ school, onClose, userData }: Props) {
     try {
       await saveMineValue(school.id, departmentId, v)
     } catch {
-      toast('保存に失敗しました')
+      toast(t('detail.saveFailShort'))
     }
   }
 
@@ -139,50 +140,56 @@ export function SchoolDetailSheet({ school, onClose, userData }: Props) {
     if (requireLogin()) return
     try {
       await saveMineConsent(school.id, checked)
-      if (checked) toast('統計提供に同意しました')
+      if (checked) toast(t('detail.consentDone'))
     } catch {
-      toast('保存に失敗しました')
+      toast(t('detail.saveFailShort'))
     }
   }
 
   return (
-    <div className="sheet full" aria-modal="true" role="dialog" aria-label={school.name}>
-      <button className="handle" onClick={onClose} aria-label="閉じる" />
+    <div
+      ref={sheetRef}
+      className="sheet full"
+      role="dialog"
+      aria-modal="true"
+      aria-label={school.name}
+    >
+      <button className="handle" onClick={onClose} aria-label={t('common.close')} />
       <div className="head">
         <span className="grow">
-          <h3 className="detail-title">{displayName(school)}</h3>
+          <h3 className="detail-title">{fmt.displayName(school)}</h3>
         </span>
-        <button className="sheet-close" onClick={onClose} aria-label="閉じる">
+        <button className="sheet-close" onClick={onClose} aria-label={t('common.close')}>
           ×
         </button>
       </div>
       <div className="body">
         <p className="detail-meta">
-          {[OWN_FULL[school.ownership], GEN_FULL[school.gender_type], TYPE_FULL[school.type]].join(' / ')} —{' '}
+          {[fmt.ownFull(school.ownership), fmt.genFull(school.gender_type), fmt.typeFull(school.type)].join(' / ')} —{' '}
           {school.address}
         </p>
 
         <div className="info-grid">
           <div>
-            <span>課程</span>
-            <b>{courseTimeLabel(school)}</b>
+            <span>{t('detail.course')}</span>
+            <b>{fmt.courseTimeLabel(school)}</b>
           </div>
           <div>
-            <span>規模</span>
-            <b>{enrollmentLabel(school)}</b>
+            <span>{t('detail.scale')}</span>
+            <b>{fmt.enrollmentLabel(school)}</b>
           </div>
           {genderRatio && (
             <div>
-              <span>男女比</span>
+              <span>{t('detail.genderRatio')}</span>
               <b>{genderRatio}</b>
             </div>
           )}
           {school.campus_type !== 'main' && (
             <div>
-              <span>キャンパス</span>
+              <span>{t('detail.campus')}</span>
               <b>
-                {CAMPUS_TYPE_FULL[school.campus_type] ?? '情報募集中'}
-                {school.main_school_name ? ` / 本校: ${school.main_school_name}` : ''}
+                {fmt.campusFull(school.campus_type) || t('common.infoPending')}
+                {school.main_school_name ? ` / ${t('labels.mainSchool', { name: school.main_school_name })}` : ''}
               </b>
             </div>
           )}
@@ -190,16 +197,16 @@ export function SchoolDetailSheet({ school, onClose, userData }: Props) {
 
         <div className="detail-actions">
           <button className={`fav-toggle ${fav ? 'on' : ''}`} onClick={() => void handleFav()}>
-            <span className="s">★</span> {fav ? '志望校です' : '気になる'}
+            <span className="s">★</span> {fav ? t('detail.favorited') : t('detail.interested')}
           </button>
-          <span className="pri-label">志望度</span>
-          <div className="stars" role="radiogroup" aria-label="志望度">
+          <span className="pri-label">{t('detail.priority')}</span>
+          <div className="stars" role="radiogroup" aria-label={t('detail.priority')}>
             {[1, 2, 3, 4, 5].map((n) => (
               <button
                 key={n}
                 className={(fav?.priority ?? 0) >= n ? 'on' : ''}
                 onClick={() => void handlePri(n)}
-                aria-label={`志望度 ${n}`}
+                aria-label={t('detail.priorityN', { n })}
               >
                 ★
               </button>
@@ -210,22 +217,22 @@ export function SchoolDetailSheet({ school, onClose, userData }: Props) {
         <div className="ext-links">
           {officialUrl ? (
             <a href={officialUrl} target="_blank" rel="noreferrer">
-              🌐 公式サイト
+              🌐 {t('detail.official')}
             </a>
           ) : (
-            <a href="#none" onClick={(e) => { e.preventDefault(); toast('公式サイト情報は準備中です') }}>
-              🌐 公式サイト
+            <a href="#none" onClick={(e) => { e.preventDefault(); toast(t('detail.officialSoon')) }}>
+              🌐 {t('detail.official')}
             </a>
           )}
           {routeUrl && (
             <a href={routeUrl} target="_blank" rel="noreferrer">
-              🗺 Google Maps
+              🗺 {t('detail.googleMaps')}
             </a>
           )}
         </div>
 
         <div className="depts">
-          <h4>🎓 学科別 参考偏差値</h4>
+          <h4>🎓 {t('detail.deptDeviation')}</h4>
           <div>
             {school.departments.map((d) => {
               const mv = mineRec?.depts[d.id]
@@ -235,14 +242,14 @@ export function SchoolDetailSheet({ school, onClose, userData }: Props) {
                   <span className="dep-dev">
                     {d.deviation != null ? (
                       <>
-                        参考値 <b>{d.deviation}</b>
+                        {t('detail.refValue')} <b>{d.deviation}</b>
                       </>
                     ) : (
-                      <>情報募集中</>
+                      <>{t('common.infoPending')}</>
                     )}
                     {mv != null && (
                       <span className="mine-val">
-                        / 私の記録 <b>{mv}</b>
+                        / {t('detail.myRecord')} <b>{mv}</b>
                       </span>
                     )}
                   </span>
@@ -251,45 +258,47 @@ export function SchoolDetailSheet({ school, onClose, userData }: Props) {
             })}
           </div>
           <p className="note">
-            出典: <b>Manabi Map 独自推計</b>（公的資料に基づく）
+            {t('detail.sourceNote')}
             <br />
-            ※ あくまで目安です。正確な情報は学校公式・県教委資料で確認してください。
+            {t('detail.disclaimer')}
             <br />
             <a
               href="https://github.com/ishizakahiroshi/manabi-map/issues/new?labels=data-correction"
               target="_blank"
               rel="noreferrer"
             >
-              この値についての情報提供・訂正要請 →
+              {t('detail.correction')}
             </a>
           </p>
         </div>
 
         <div className="mine-block">
-          <h4>📊 私の記録（あなただけに見える）</h4>
+          <h4>📊 {t('detail.myBlockTitle')}</h4>
           <p className="sub">
-            塾で聞いた値・模試の判定など、家庭の情報をここに残せます。
+            {t('detail.myBlockSub')}
             <br />
-            Manabi Map の参考値とは別に本人だけに表示されます。
+            {t('detail.myBlockSub2')}
           </p>
           <div>
             {school.departments.map((d) => (
               <div className="mine-row" key={d.id}>
                 <span className="n">{d.name}</span>
-                <span className="ref">参考値 {d.deviation ?? '−'}</span>
+                <span className="ref">
+                  {t('detail.refValue')} {d.deviation ?? t('common.dash')}
+                </span>
                 <input
                   className="val"
                   type="number"
                   min={20}
                   max={80}
-                  placeholder="—"
+                  placeholder={t('common.dash')}
                   value={mineDeptDraft[d.id] ?? ''}
                   onChange={(e) => setMineDeptDraft((prev) => ({ ...prev, [d.id]: e.target.value }))}
                   onBlur={() => handleMineBlur(d.id)}
-                  aria-label={`${d.name} の私の記録`}
+                  aria-label={t('detail.myRecordAria', { name: d.name })}
                 />
                 {mineRec?.depts[d.id] != null && (
-                  <button className="clr" title="クリア" onClick={() => handleMineClear(d.id)}>
+                  <button className="clr" title={t('common.clear')} onClick={() => handleMineClear(d.id)}>
                     ×
                   </button>
                 )}
@@ -298,10 +307,10 @@ export function SchoolDetailSheet({ school, onClose, userData }: Props) {
           </div>
           <textarea
             className="mine-note"
-            placeholder="例: 塾で55と聞いた / 模試A判定 55-58"
+            placeholder={t('detail.myNotePlaceholder')}
             value={mineNote}
             onChange={(e) => setMineNote(e.target.value)}
-            aria-label="私の記録メモ"
+            aria-label={t('detail.myNoteAria')}
           />
           <label className="mine-consent">
             <input
@@ -309,36 +318,38 @@ export function SchoolDetailSheet({ school, onClose, userData }: Props) {
               checked={mineRec?.visibility === 'submit_to_manabi'}
               onChange={(e) => void handleConsent(e.target.checked)}
             />
-            <span>
-              この値を <b>Manabi Map 参考値の改善</b>に匿名で提供する（統計集計のみ・個別データは公開されません）
-            </span>
+            <span>{t('detail.consent')}</span>
           </label>
         </div>
 
         {home && dist != null && (
           <div className="commute">
-            <h4>🏠 通学（自宅から）</h4>
+            <h4>🏠 {t('detail.commute')}</h4>
             <div className="row">
-              <span>直線距離</span>
+              <span>{t('detail.straightDist')}</span>
               <b>{dist.toFixed(1)} km</b>
             </div>
             <div className="row">
-              <span>概算通学時間</span>
+              <span>{t('detail.commuteEst')}</span>
               <b>
-                🚶 約{estimateWalkMinutes(dist)}分 ／ 🚲 約{estimateBikeMinutes(dist)}分 ／
-                🚗 約{estimateCarMinutes(dist)}分 ／ 🚃 約{estimateTransitMinutes(dist)}分
-                <span className="todo"> 推定</span>
+                {t('detail.commuteEstVal', {
+                  walk: estimateWalkMinutes(dist),
+                  bike: estimateBikeMinutes(dist),
+                  car: estimateCarMinutes(dist),
+                  transit: estimateTransitMinutes(dist),
+                })}
+                <span className="todo"> {t('common.estimate')}</span>
               </b>
             </div>
             {routeUrl && (
               <a className="btn" href={routeUrl} target="_blank" rel="noreferrer">
-                自宅→この学校 経路を見る
+                {t('detail.route')}
               </a>
             )}
-            <label htmlFor="commute-note">通学メモ</label>
+            <label htmlFor="commute-note">{t('detail.commuteNote')}</label>
             <textarea
               id="commute-note"
-              placeholder="例: 冬の吾妻線が心配 / 部活後の帰りは 19 時"
+              placeholder={t('detail.commutePlaceholder')}
               value={commuteNote}
               onChange={(e) => setCommuteNote(e.target.value)}
             />
@@ -346,24 +357,24 @@ export function SchoolDetailSheet({ school, onClose, userData }: Props) {
         )}
 
         <div className="memo-section">
-          <h4>📝 メモ</h4>
+          <h4>📝 {t('detail.memo')}</h4>
           <textarea
-            placeholder="例: 説明会日程 / 文化祭で見たいこと / 吹奏楽部を調べる"
+            placeholder={t('detail.memoPlaceholder')}
             value={memo}
             onChange={(e) => setMemo(e.target.value)}
-            aria-label="学校メモ"
+            aria-label={t('detail.memoAria')}
           />
         </div>
 
         <button className="save-btn" onClick={() => void handleSave()} disabled={saving}>
-          {saving ? '保存中…' : '保存'}
+          {saving ? t('common.saving') : t('common.save')}
         </button>
 
         {slotsForPlacement('school-detail', school.prefecture).map((s) => (
           <AdSlot
             key={s.id}
             slot={s}
-            categoryLabel="この学校の近くの塾"
+            categoryLabel={t('detail.adCategory')}
             context={{ schoolId: school.id, prefecture: school.prefecture }}
           />
         ))}

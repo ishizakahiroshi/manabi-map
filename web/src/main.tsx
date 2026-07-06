@@ -5,18 +5,21 @@ import './index.css'
 import App from './App'
 import { AuthProvider } from './contexts/AuthContext'
 import { AppProvider } from './contexts/AppContext'
+import { I18nProvider } from './contexts/I18nContext'
 import { ErrorBoundary } from './components/ErrorBoundary'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <ErrorBoundary>
-      <BrowserRouter>
-        <AuthProvider>
-          <AppProvider>
-            <App />
-          </AppProvider>
-        </AuthProvider>
-      </BrowserRouter>
-    </ErrorBoundary>
+    <I18nProvider>
+      <ErrorBoundary>
+        <BrowserRouter>
+          <AuthProvider>
+            <AppProvider>
+              <App />
+            </AppProvider>
+          </AuthProvider>
+        </BrowserRouter>
+      </ErrorBoundary>
+    </I18nProvider>
   </StrictMode>,
 )

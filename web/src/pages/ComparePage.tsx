@@ -1,16 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import type { School } from '../types/school'
-import {
-  shortSchoolName,
-  displayCode,
-  devLabel,
-  OWN_FULL,
-  GEN_FULL,
-  COURSE_TIME_FULL,
-} from '../lib/format'
+import { shortSchoolName } from '../lib/format'
 import { haversine, estimateBikeMinutes, estimateCarMinutes, estimateTransitMinutes } from '../lib/geo'
 import { useApp } from '../contexts/AppContext'
+import { useI18n } from '../contexts/I18nContext'
+import { useFormat } from '../hooks/useFormat'
 import { useSchools } from '../hooks/useSchools'
 import type { useUserData } from '../hooks/useUserData'
 import { trackEvent } from '../lib/analytics'
@@ -33,6 +28,8 @@ export function ComparePage({ userData }: Props) {
   const { schools } = useSchools()
   const { favorites, notes } = userData
   const { home } = useApp()
+  const { t } = useI18n()
+  const fmt = useFormat()
   const [detail, setDetail] = useState<School | null>(null)
 
   const favList = useMemo(() => {
@@ -70,30 +67,30 @@ export function ComparePage({ userData }: Props) {
   return (
     <div className="screen">
       <div className="header">
-        <button className="icon-btn" onClick={() => navigate('/favorites')} aria-label="お気に入りに戻る">
+        <button className="icon-btn" onClick={() => navigate('/favorites')} aria-label={t('compare.backFav')}>
           ←
         </button>
-        <div className="brand">学校をくらべる</div>
-        <button className="icon-btn" onClick={() => navigate('/')} aria-label="トップへ">
+        <div className="brand">{t('compare.title')}</div>
+        <button className="icon-btn" onClick={() => navigate('/')} aria-label={t('common.home')}>
           🏠
         </button>
       </div>
 
-      <div className="content compare-content">
+      <main id="main-content" className="content compare-content" tabIndex={-1}>
         {favList.length < 2 ? (
           <div className="favs-empty">
-            くらべるには、お気に入りが 2 校以上必要です
+            {t('compare.needTwo')}
             <br />
-            <small>地図画面のピンから ★ で追加できます</small>
+            <small>{t('compare.needTwoHint')}</small>
             <button className="cta secondary" onClick={() => navigate('/map')}>
-              地図で学校をさがす
+              {t('compare.findOnMap')}
             </button>
           </div>
         ) : (
           <>
             <div className="compare-picker">
               <div className="cp-label">
-                くらべたい学校を選んでください（2〜{MAX_COMPARE} 校） — {selected.length} 校選択中
+                {t('compare.picker', { max: MAX_COMPARE, count: selected.length })}
               </div>
               <div className="cp-chips">
                 {favList.map((s) => {
@@ -117,13 +114,11 @@ export function ComparePage({ userData }: Props) {
 
             {compareList.length < 2 ? (
               <div className="compare-hint">
-                {compareList.length === 0
-                  ? '上から 2 校以上えらぶと、ここに比較表が出ます'
-                  : 'あと 1 校えらぶと比較できます'}
+                {compareList.length === 0 ? t('compare.hintNone') : t('compare.hintOne')}
               </div>
             ) : (
               <>
-                <div className="compare-swipe-hint">← 横にスワイプして見くらべ →</div>
+                <div className="compare-swipe-hint">{t('compare.swipeHint')}</div>
                 <div className="compare-strip" data-count={compareList.length}>
                   {compareList.map((s) => {
                     const pri = favorites[s.id]?.priority ?? 0
@@ -138,51 +133,54 @@ export function ComparePage({ userData }: Props) {
                         <div className="cc-head">
                           <h3>{shortSchoolName(s.name)}</h3>
                           <div className="cc-sub">
-                            {displayCode(s)} ・ {OWN_FULL[s.ownership]} / {GEN_FULL[s.gender_type]} ・{' '}
+                            {fmt.displayCode(s)} ・ {fmt.ownFull(s.ownership)} / {fmt.genFull(s.gender_type)} ・{' '}
                             <span className="cc-stars">{'★'.repeat(pri) || '☆'}</span>
                           </div>
                         </div>
 
                         <div className="cc-row">
-                          <span className="cc-label">課程</span>
+                          <span className="cc-label">{t('compare.course')}</span>
                           <div className="cc-chips">
                             {s.course_times.length ? (
                               s.course_times.map((c) => (
                                 <span className="cc-chip" key={c}>
-                                  {COURSE_TIME_FULL[c] ?? c}
+                                  {fmt.courseFull(c)}
                                 </span>
                               ))
                             ) : (
-                              <span className="cc-soft">情報募集中</span>
+                              <span className="cc-soft">{t('common.infoPending')}</span>
                             )}
                           </div>
                         </div>
 
                         <div className="cc-row">
-                          <span className="cc-label">参考偏差値</span>
+                          <span className="cc-label">{t('compare.deviation')}</span>
                           <div>
-                            <b className="cc-dev">{devLabel(s)}</b>
-                            <small className="cc-soft"> Manabi Map 独自推計・目安</small>
+                            <b className="cc-dev">{fmt.devLabel(s)}</b>
+                            <small className="cc-soft">{t('compare.deviationNote')}</small>
                           </div>
                         </div>
 
                         <div className="cc-row">
-                          <span className="cc-label">自宅から</span>
+                          <span className="cc-label">{t('compare.fromHome')}</span>
                           {dist != null ? (
                             <div>
-                              直線 <b>{dist.toFixed(1)} km</b>
+                              {t('compare.straight')} <b>{dist.toFixed(1)} km</b>
                               <div className="cc-soft">
-                                🚲 約{estimateBikeMinutes(dist)}分 ／ 🚗 約{estimateCarMinutes(dist)}分 ／ 🚃 約
-                                {estimateTransitMinutes(dist)}分（推定）
+                                {t('compare.fromHomeEst', {
+                                  bike: estimateBikeMinutes(dist),
+                                  car: estimateCarMinutes(dist),
+                                  transit: estimateTransitMinutes(dist),
+                                })}
                               </div>
                             </div>
                           ) : (
-                            <span className="cc-soft">自宅未設定（トップで住所検索すると出ます）</span>
+                            <span className="cc-soft">{t('compare.homeUnset')}</span>
                           )}
                         </div>
 
                         <div className="cc-row">
-                          <span className="cc-label">メモ</span>
+                          <span className="cc-label">{t('compare.memo')}</span>
                           {memoLines.length ? (
                             <div className="cc-memo">
                               {memoLines.map((l, i) => (
@@ -190,12 +188,12 @@ export function ComparePage({ userData }: Props) {
                               ))}
                             </div>
                           ) : (
-                            <span className="cc-soft">（メモ未入力）</span>
+                            <span className="cc-soft">{t('common.noMemo')}</span>
                           )}
                         </div>
 
                         <button className="cc-detail" onClick={() => setDetail(s)}>
-                          くわしく見る ›
+                          {t('compare.detail')}
                         </button>
                       </article>
                     )
@@ -205,7 +203,7 @@ export function ComparePage({ userData }: Props) {
             )}
           </>
         )}
-      </div>
+      </main>
 
       {detail && <SchoolDetailSheet school={detail} onClose={() => setDetail(null)} userData={userData} />}
     </div>

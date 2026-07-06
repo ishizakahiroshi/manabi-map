@@ -2,6 +2,7 @@ import { useMemo } from 'react'
 import { Routes, Route, useNavigate, useLocation } from 'react-router-dom'
 import { useApp } from './contexts/AppContext'
 import { useAuth } from './contexts/AuthContext'
+import { useI18n } from './contexts/I18nContext'
 import { useUserData } from './hooks/useUserData'
 import { HomePage } from './pages/HomePage'
 import { MapPage } from './pages/MapPage'
@@ -20,6 +21,7 @@ export default function App() {
   const location = useLocation()
   const { setSidebarOpen, setLoginOpen } = useApp()
   const { session, kind } = useAuth()
+  const { t } = useI18n()
   const userData = useUserData()
 
   const favCount = Object.keys(userData.favorites).length
@@ -33,10 +35,13 @@ export default function App() {
   return (
     <div className="stage">
       <div className="phone">
-        {/* トップページのみ共通ヘッダー（地図・一覧は各画面が自前ヘッダーを持つ） */}
+        <a className="skip-link" href="#main-content">
+          {t('common.skipToContent')}
+        </a>
+
         {isHome && (
           <div className="header">
-            <button className="icon-btn" onClick={() => setSidebarOpen(true)} aria-label="メニュー">
+            <button className="icon-btn" onClick={() => setSidebarOpen(true)} aria-label={t('common.menu')}>
               ≡
             </button>
             <img className="brand-icon" src="/brand-mark.svg" alt="" aria-hidden="true" />
@@ -44,7 +49,7 @@ export default function App() {
             <button
               className="icon-btn"
               onClick={() => (session && kind !== 'anon' ? navigate('/favorites') : setLoginOpen(true))}
-              aria-label={session && kind !== 'anon' ? 'お気に入り一覧' : 'ログイン'}
+              aria-label={session && kind !== 'anon' ? t('header.favList') : t('header.loginBtn')}
             >
               <span className="header-fav-icon" aria-hidden="true">★</span>
             </button>
@@ -54,7 +59,6 @@ export default function App() {
         <Routes>
           <Route path="/" element={<HomePage />} />
           <Route path="/map" element={<MapPage userData={userData} />} />
-          {/* 共有 URL（動的 OGP 対応・functions/school/[id].ts と対）: 開くと該当校の詳細シートを開いた地図画面 */}
           <Route path="/school/:id" element={<MapPage userData={userData} />} />
           <Route path="/favorites" element={<FavoritesPage userData={userData} />} />
           <Route path="/compare" element={<ComparePage userData={userData} />} />

@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import type { School } from '../types/school'
-import { displayCode, devLabel, OWN_FULL, GEN_FULL, shortSchoolName } from '../lib/format'
+import { shortSchoolName } from '../lib/format'
 import { useSchools } from '../hooks/useSchools'
 import type { useUserData } from '../hooks/useUserData'
 import { SchoolDetailSheet } from '../components/SchoolDetailSheet'
@@ -10,6 +10,8 @@ import { AdSlot } from '../components/AdSlot'
 import { slotsForPlacement } from '../data/ad-slots'
 import { countMyData, downloadMyData } from '../lib/export'
 import { useApp } from '../contexts/AppContext'
+import { useI18n } from '../contexts/I18nContext'
+import { useFormat } from '../hooks/useFormat'
 
 interface Props {
   userData: ReturnType<typeof useUserData>
@@ -19,6 +21,8 @@ export function FavoritesPage({ userData }: Props) {
   const navigate = useNavigate()
   const { schools } = useSchools()
   const { toast } = useApp()
+  const { t } = useI18n()
+  const fmt = useFormat()
   const { favorites, notes, mine } = userData
   const [detail, setDetail] = useState<School | null>(null)
   const [familyOpen, setFamilyOpen] = useState(false)
@@ -28,9 +32,9 @@ export function FavoritesPage({ userData }: Props) {
   const handleExport = () => {
     try {
       downloadMyData(schools, { favorites, notes, mine })
-      toast('マイデータをダウンロードしました')
+      toast(t('favorites.exportDone'))
     } catch {
-      toast('ダウンロードに失敗しました')
+      toast(t('favorites.exportFail'))
     }
   }
 
@@ -43,56 +47,56 @@ export function FavoritesPage({ userData }: Props) {
   return (
     <div className="screen">
       <div className="header">
-        <button className="icon-btn" onClick={() => navigate('/map')} aria-label="地図に戻る">
+        <button className="icon-btn" onClick={() => navigate('/map')} aria-label={t('favorites.backMap')}>
           ←
         </button>
-        <div className="brand">お気に入り高校</div>
-        <button className="icon-btn" onClick={() => navigate('/')} aria-label="トップへ">
+        <div className="brand">{t('nav.favoritesTitle')}</div>
+        <button className="icon-btn" onClick={() => navigate('/')} aria-label={t('common.home')}>
           🏠
         </button>
       </div>
-      <div className="content favs-content">
+      <main id="main-content" className="content favs-content" tabIndex={-1}>
         <div className="favs-toolbar">
-          <span className="sort">並び替え: 志望度順</span>
+          <span className="sort">{t('favorites.sort')}</span>
           <span style={{ display: 'flex', gap: 10 }}>
             {favList.length >= 2 && (
               <button className="compare-link" onClick={() => navigate('/compare')}>
-                ⚖ 学校をくらべる
+                ⚖ {t('favorites.compare')}
               </button>
             )}
             <button className="compare-link" onClick={() => setFamilyOpen(true)}>
-              👨‍👩‍👧 家族で共有
+              👨‍👩‍👧 {t('favorites.familyShare')}
             </button>
           </span>
         </div>
 
         {favList.length === 0 && (
           <div className="favs-empty">
-            まだ志望校が登録されていません
+            {t('favorites.empty')}
             <br />
-            <small>地図画面のピンから ★ で追加できます</small>
+            <small>{t('favorites.emptyHint')}</small>
           </div>
         )}
 
         {favList.map((s, i) => {
           const pri = favorites[s.id]?.priority ?? 0
           const stars = '★'.repeat(pri) + '☆'.repeat(Math.max(0, 5 - pri))
-          const memo = (notes[s.id]?.note ?? '').split('\n')[0] || '（メモ未入力）'
+          const memo = (notes[s.id]?.note ?? '').split('\n')[0] || t('common.noMemo')
           return (
             <button className="fav-card" key={s.id} onClick={() => setDetail(s)}>
-              <span className="rank">{i + 1}位</span>
-              <span className="stars-inline">{stars}</span>
+              <span className="rank">{t('favorites.rank', { n: i + 1 })}</span>
+              <span className="stars-inline" aria-hidden="true">{stars}</span>
               <h3>
-                {shortSchoolName(s.name)}（{displayCode(s)}：{devLabel(s)}）
+                {shortSchoolName(s.name)}（{fmt.displayCode(s)}：{fmt.devLabel(s)}）
               </h3>
               <div className="meta">
-                {OWN_FULL[s.ownership]} / {GEN_FULL[s.gender_type]} /{' '}
-                {s.departments.map((d) => d.name).join('・') || '学科情報なし'}
+                {fmt.ownFull(s.ownership)} / {fmt.genFull(s.gender_type)} /{' '}
+                {s.departments.map((d) => d.name).join('・') || t('favorites.noDept')}
               </div>
               <div className="memo">{memo}</div>
               <div className="footer">
                 <span>{s.address}</span>
-                <span>詳細 ›</span>
+                <span>{t('favorites.detail')}</span>
               </div>
             </button>
           )
@@ -100,24 +104,22 @@ export function FavoritesPage({ userData }: Props) {
 
         {favList.length >= 3 &&
           slotsForPlacement('favorites').map((s) => (
-            <AdSlot key={s.id} slot={s} categoryLabel="志望校対策" />
+            <AdSlot key={s.id} slot={s} categoryLabel={t('favorites.adCategory')} />
           ))}
 
         <button className="cta secondary" onClick={() => navigate('/map')}>
-          ＋ もう一つの候補を追加
+          {t('favorites.addMore')}
         </button>
 
         <div className="mydata-export">
           <button className="cta secondary" onClick={handleExport} disabled={dataCount === 0}>
-            ⬇ マイデータをダウンロード（JSON）
+            ⬇ {t('favorites.export')}
           </button>
           <p className="mydata-note">
-            {dataCount === 0
-              ? 'お気に入り・メモ・私の記録がまだ無いため、ダウンロードできるデータがありません'
-              : `お気に入り・メモ・私の記録（${dataCount} 校分）を 1 つの JSON ファイルに保存できます。機種変更や控えに`}
+            {dataCount === 0 ? t('favorites.exportNoteEmpty') : t('favorites.exportNote', { count: dataCount })}
           </p>
         </div>
-      </div>
+      </main>
 
       {detail && <SchoolDetailSheet school={detail} onClose={() => setDetail(null)} userData={userData} />}
       <FamilyShareSheet open={familyOpen} onClose={() => setFamilyOpen(false)} />
