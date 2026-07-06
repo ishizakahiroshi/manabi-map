@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="robots" content="noindex" />
+  <title>Manabi Map メンテナンス中</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  <style>
+    :root {
+      --orange: #ff7a3d;
+      --orange-soft: #fff3ec;
+      --ink: #2b2320;
+      --ink-sub: #6b5f58;
+      --line: #f0e4dc;
+      --bg: #fffaf7;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: "Hiragino Kaku Gothic ProN", "Hiragino Sans", "Yu Gothic UI",
+        "Noto Sans JP", system-ui, -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--ink);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px 16px;
+      line-height: 1.7;
+    }
+    .card {
+      width: 100%;
+      max-width: 560px;
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 40px 32px;
+      text-align: center;
+    }
+    .mark {
+      width: 56px;
+      height: 56px;
+      margin: 0 auto 20px;
+      display: block;
+    }
+    h1 {
+      font-size: 1.3rem;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      margin-bottom: 6px;
+    }
+    .brand {
+      color: var(--orange);
+      font-weight: 700;
+      font-size: 0.85rem;
+      letter-spacing: 0.08em;
+      margin-bottom: 24px;
+    }
+    p.lead {
+      font-size: 0.95rem;
+      color: var(--ink-sub);
+      margin-bottom: 24px;
+    }
+    .schedule {
+      background: var(--orange-soft);
+      border: 1px solid #ffd9c4;
+      border-radius: 12px;
+      padding: 16px 20px;
+      margin-bottom: 24px;
+    }
+    .schedule .label {
+      font-size: 0.78rem;
+      font-weight: 700;
+      color: var(--orange);
+      letter-spacing: 0.06em;
+      margin-bottom: 4px;
+    }
+    .schedule .time {
+      font-size: 1.05rem;
+      font-weight: 700;
+    }
+    .schedule .note {
+      font-size: 0.78rem;
+      color: var(--ink-sub);
+      margin-top: 4px;
+    }
+    .contact {
+      font-size: 0.85rem;
+      color: var(--ink-sub);
+      margin-bottom: 20px;
+    }
+    .contact a {
+      color: var(--orange);
+      font-weight: 600;
+      text-decoration: none;
+    }
+    .contact a:hover { text-decoration: underline; }
+    .links {
+      border-top: 1px solid var(--line);
+      padding-top: 16px;
+      font-size: 0.8rem;
+    }
+    .links a {
+      color: var(--ink-sub);
+      text-decoration: none;
+      margin: 0 10px;
+    }
+    .links a:hover { color: var(--orange); }
+    @media (max-width: 420px) {
+      .card { padding: 32px 20px; }
+      h1 { font-size: 1.15rem; }
+    }
+  </style>
+</head>
+<body>
+  <main class="card">
+    <svg class="mark" viewBox="0 0 64 64" aria-hidden="true">
+      <circle cx="32" cy="32" r="30" fill="#fff3ec" />
+      <path d="M32 14c-8.3 0-15 6.5-15 14.6 0 10.2 12.6 20 14.1 21.1a1.4 1.4 0 0 0 1.8 0C34.4 48.6 47 38.8 47 28.6 47 20.5 40.3 14 32 14z" fill="#ff7a3d" />
+      <circle cx="32" cy="28.5" r="5.5" fill="#fff" />
+    </svg>
+    <h1>ただいまメンテナンス中です</h1>
+    <div class="brand">MANABI MAP</div>
+    <p class="lead">
+      Manabi Map は現在、システムメンテナンスのため一時的にご利用いただけません。<br />
+      ご不便をおかけして申し訳ありません。
+    </p>
+    <div class="schedule">
+      <div class="label">復旧予定</div>
+      <!-- 作業ごとにここを書き換える(未定なら「調整中」のままにする) -->
+      <div class="time">調整中</div>
+      <div class="note">復旧時刻は前後する場合があります</div>
+    </div>
+    <p class="contact">
+      お問い合わせ:
+      <a href="mailto:hello@manabi-map.app">hello@manabi-map.app</a>
+    </p>
+    <nav class="links">
+      <a href="/legal/terms">利用規約</a>
+      <a href="/legal/privacy">プライバシーポリシー</a>
+    </nav>
+  </main>
+</body>
+</html>
