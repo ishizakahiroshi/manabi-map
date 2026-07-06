@@ -45,6 +45,10 @@ export function useUserData(): UserData {
         supabase.from('user_school_deviations').select('school_id, department_id, value, note, visibility'),
       ])
       if (cancelled) return
+      // 取得失敗を空データと誤認させない（空扱いのまま toggle すると DB と乖離する）
+      if (favRes.error || noteRes.error || mineRes.error) {
+        console.error('user data load failed:', (favRes.error ?? noteRes.error ?? mineRes.error)?.message)
+      }
       const favs: Record<string, Favorite> = {}
       for (const f of favRes.data ?? []) {
         favs[f.school_id] = { school_id: f.school_id, priority: f.priority ?? 0, status: f.status ?? 'interested' }
@@ -64,9 +68,9 @@ export function useUserData(): UserData {
         if (m.visibility === 'submit_to_manabi') cur.visibility = 'submit_to_manabi'
         ms[m.school_id] = cur
       }
-      setFavorites(favs)
-      setNotes(ns)
-      setMine(ms)
+      if (!favRes.error) setFavorites(favs)
+      if (!noteRes.error) setNotes(ns)
+      if (!mineRes.error) setMine(ms)
       setLoading(false)
     })()
     return () => {
@@ -78,7 +82,8 @@ export function useUserData(): UserData {
   const toggleFavorite = useCallback(
     async (schoolId: string): Promise<boolean> => {
       if (!userId) throw new Error('not signed in')
-      if (favorites[schoolId]) {
+      const prev = favorites[schoolId]
+      if (prev) {
         setFavorites((cur) => {
           const next = { ...cur }
           delete next[schoolId]
@@ -89,7 +94,11 @@ export function useUserData(): UserData {
           .delete()
           .eq('user_id', userId)
           .eq('school_id', schoolId)
-        if (error) throw error
+        if (error) {
+          // DB 失敗時は楽観更新を巻き戻す（UI と DB の乖離防止）
+          setFavorites((cur) => ({ ...cur, [schoolId]: prev }))
+          throw error
+        }
         return false
       }
       const fav: Favorite = { school_id: schoolId, priority: 3, status: 'interested' }
@@ -100,7 +109,14 @@ export function useUserData(): UserData {
         priority: fav.priority,
         status: fav.status,
       })
-      if (error) throw error
+      if (error) {
+        setFavorites((cur) => {
+          const next = { ...cur }
+          delete next[schoolId]
+          return next
+        })
+        throw error
+      }
       return true
     },
     [userId, favorites],
@@ -118,7 +134,15 @@ export function useUserData(): UserData {
         { user_id: userId, school_id: schoolId, priority, status: existing?.status ?? 'interested' },
         { onConflict: 'user_id,school_id' },
       )
-      if (error) throw error
+      if (error) {
+        setFavorites((cur) => {
+          const next = { ...cur }
+          if (existing) next[schoolId] = existing
+          else delete next[schoolId]
+          return next
+        })
+        throw error
+      }
     },
     [userId, favorites],
   )
@@ -126,6 +150,7 @@ export function useUserData(): UserData {
   const saveNote = useCallback(
     async (schoolId: string, note: string, commuteNote: string) => {
       if (!userId) throw new Error('not signed in')
+      const prev = notes[schoolId]
       setNotes((cur) => ({ ...cur, [schoolId]: { school_id: schoolId, note, commute_note: commuteNote } }))
       const { error } = await supabase.from('user_school_notes').upsert(
         {
@@ -137,9 +162,17 @@ export function useUserData(): UserData {
         },
         { onConflict: 'user_id,school_id' },
       )
-      if (error) throw error
+      if (error) {
+        setNotes((cur) => {
+          const next = { ...cur }
+          if (prev) next[schoolId] = prev
+          else delete next[schoolId]
+          return next
+        })
+        throw error
+      }
     },
-    [userId],
+    [userId, notes],
   )
 
   /**
@@ -149,18 +182,30 @@ export function useUserData(): UserData {
   const saveMineValue = useCallback(
     async (schoolId: string, departmentId: string, value: number | null) => {
       if (!userId) throw new Error('not signed in')
-      const cur = mine[schoolId] ?? EMPTY_MINE
+      const prev = mine[schoolId]
+      const cur = prev ?? EMPTY_MINE
       const nextDepts = { ...cur.depts }
       if (value == null) delete nextDepts[departmentId]
       else nextDepts[departmentId] = value
       setMine((m) => ({ ...m, [schoolId]: { ...cur, depts: nextDepts } }))
+      const rollback = () =>
+        setMine((m) => {
+          const next = { ...m }
+          if (prev) next[schoolId] = prev
+          else delete next[schoolId]
+          return next
+        })
       if (value == null) {
-        await supabase
+        const { error } = await supabase
           .from('user_school_deviations')
           .delete()
           .eq('user_id', userId)
           .eq('school_id', schoolId)
           .eq('department_id', departmentId)
+        if (error) {
+          rollback()
+          throw error
+        }
       } else {
         const { error } = await supabase.from('user_school_deviations').upsert(
           {
@@ -173,7 +218,10 @@ export function useUserData(): UserData {
           },
           { onConflict: 'user_id,school_id,department_id' },
         )
-        if (error) throw error
+        if (error) {
+          rollback()
+          throw error
+        }
       }
     },
     [userId, mine],
@@ -182,31 +230,47 @@ export function useUserData(): UserData {
   const saveMineNote = useCallback(
     async (schoolId: string, note: string) => {
       if (!userId) throw new Error('not signed in')
-      const cur = mine[schoolId] ?? EMPTY_MINE
+      const prev = mine[schoolId]
+      const cur = prev ?? EMPTY_MINE
       setMine((m) => ({ ...m, [schoolId]: { ...cur, note } }))
-      const { data } = await supabase
-        .from('user_school_deviations')
-        .select('id')
-        .eq('user_id', userId)
-        .eq('school_id', schoolId)
-        .is('department_id', null)
-        .maybeSingle()
-      if (data) {
-        await supabase
-          .from('user_school_deviations')
-          .update({ note, updated_at: new Date().toISOString() })
-          .eq('id', data.id)
-      } else {
-        // 学校単位の note は department_id=null の行に持つ。value は not null 制約のため
-        // 0 を「値なし」のセンチネルとして格納する（表示側は department_id 付き行しか値として扱わない）
-        await supabase.from('user_school_deviations').insert({
-          user_id: userId,
-          school_id: schoolId,
-          department_id: null,
-          value: 0,
-          note,
-          visibility: cur.visibility,
+      const rollback = () =>
+        setMine((m) => {
+          const next = { ...m }
+          if (prev) next[schoolId] = prev
+          else delete next[schoolId]
+          return next
         })
+      try {
+        const { data, error: selErr } = await supabase
+          .from('user_school_deviations')
+          .select('id')
+          .eq('user_id', userId)
+          .eq('school_id', schoolId)
+          .is('department_id', null)
+          .maybeSingle()
+        if (selErr) throw selErr
+        if (data) {
+          const { error } = await supabase
+            .from('user_school_deviations')
+            .update({ note, updated_at: new Date().toISOString() })
+            .eq('id', data.id)
+          if (error) throw error
+        } else {
+          // 学校単位の note は department_id=null の行に持つ。value は not null 制約のため
+          // 0 を「値なし」のセンチネルとして格納する（表示側は department_id 付き行しか値として扱わない）
+          const { error } = await supabase.from('user_school_deviations').insert({
+            user_id: userId,
+            school_id: schoolId,
+            department_id: null,
+            value: 0,
+            note,
+            visibility: cur.visibility,
+          })
+          if (error) throw error
+        }
+      } catch (err) {
+        rollback()
+        throw err
       }
     },
     [userId, mine],
@@ -216,13 +280,41 @@ export function useUserData(): UserData {
     async (schoolId: string, submit: boolean) => {
       if (!userId) throw new Error('not signed in')
       const visibility = submit ? 'submit_to_manabi' : 'private'
-      const cur = mine[schoolId] ?? EMPTY_MINE
+      const prev = mine[schoolId]
+      const cur = prev ?? EMPTY_MINE
       setMine((m) => ({ ...m, [schoolId]: { ...cur, visibility } }))
-      await supabase
-        .from('user_school_deviations')
-        .update({ visibility, updated_at: new Date().toISOString() })
-        .eq('user_id', userId)
-        .eq('school_id', schoolId)
+      const rollback = () =>
+        setMine((m) => {
+          const next = { ...m }
+          if (prev) next[schoolId] = prev
+          else delete next[schoolId]
+          return next
+        })
+      try {
+        const { data, error } = await supabase
+          .from('user_school_deviations')
+          .update({ visibility, updated_at: new Date().toISOString() })
+          .eq('user_id', userId)
+          .eq('school_id', schoolId)
+          .select('id')
+        if (error) throw error
+        if ((data ?? []).length === 0) {
+          // 行が 1 つも無い状態で同意だけ切り替えた場合は、note と同じ
+          // department_id=null のセンチネル行を作って同意状態を永続化する
+          const { error: insErr } = await supabase.from('user_school_deviations').insert({
+            user_id: userId,
+            school_id: schoolId,
+            department_id: null,
+            value: 0,
+            note: cur.note,
+            visibility,
+          })
+          if (insErr) throw insErr
+        }
+      } catch (err) {
+        rollback()
+        throw err
+      }
     },
     [userId, mine],
   )

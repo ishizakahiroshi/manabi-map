@@ -55,19 +55,26 @@ export function AppProvider({ children }: { children: ReactNode }) {
    * upsert の onConflict が使えず、select → update / insert で分岐する。
    */
   const persistHome = useCallback(async (h: HomeLocation, userId: string) => {
-    const { data } = await supabase
+    // fire-and-forget 設計のため UI には出さないが、静かなデータ欠落を追えるよう失敗は記録する
+    // （住所値は PII のためログに出さない）
+    const { data, error: selErr } = await supabase
       .from('home_locations')
       .select('id')
       .eq('user_id', userId)
       .eq('is_primary', true)
       .maybeSingle()
+    if (selErr) {
+      console.error('home_locations select failed:', selErr.message)
+      return
+    }
     if (data) {
-      await supabase
+      const { error } = await supabase
         .from('home_locations')
         .update({ address: h.label, latitude: h.lat, longitude: h.lng, updated_at: new Date().toISOString() })
         .eq('id', data.id)
+      if (error) console.error('home_locations update failed:', error.message)
     } else {
-      await supabase.from('home_locations').insert({
+      const { error } = await supabase.from('home_locations').insert({
         user_id: userId,
         label: '自宅',
         address: h.label,
@@ -75,6 +82,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         longitude: h.lng,
         is_primary: true,
       })
+      if (error) console.error('home_locations insert failed:', error.message)
     }
   }, [])
 
@@ -94,11 +102,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (!session || migratedFor.current === session.user.id) return
     migratedFor.current = session.user.id
     void (async () => {
-      const { data } = await supabase
+      const { data, error: selErr } = await supabase
         .from('home_locations')
         .select('address, latitude, longitude')
         .eq('is_primary', true)
         .maybeSingle()
+      if (selErr) {
+        console.error('home_locations load failed:', selErr.message)
+        return
+      }
       if (data) {
         const h = { label: data.address, lat: Number(data.latitude), lng: Number(data.longitude) }
         setHomeState(h)
@@ -106,7 +118,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       } else {
         const local = loadLocalHome()
         if (local) {
-          await supabase.from('home_locations').insert({
+          const { error } = await supabase.from('home_locations').insert({
             user_id: session.user.id,
             label: '自宅',
             address: local.label,
@@ -114,6 +126,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
             longitude: local.lng,
             is_primary: true,
           })
+          if (error) console.error('home_locations migrate failed:', error.message)
         }
       }
     })()

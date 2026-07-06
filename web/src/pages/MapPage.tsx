@@ -6,7 +6,7 @@ import 'leaflet.markercluster'
 import 'leaflet.markercluster/dist/MarkerCluster.css'
 import 'leaflet.markercluster/dist/MarkerCluster.Default.css'
 import type { CourseTime, School } from '../types/school'
-import { band, topDev, displayCode, devLabel, shortSchoolName } from '../lib/format'
+import { band, topDev, displayCode, devLabel, shortSchoolName, escapeHtml } from '../lib/format'
 import {
   haversine,
   shortLabel,
@@ -100,7 +100,7 @@ function schoolIcon(s: School, isFav: boolean, home: HomeLocation | null): L.Div
     iconAnchor: [100, home ? 70 : 56],
     html: `<div class="pin ${isFav ? 'fav' : ''}" ${b != null ? `data-band="${b}"` : ''}>
       <div class="label">
-        <div class="label-name">${shortSchoolName(s.name)}</div>
+        <div class="label-name">${escapeHtml(shortSchoolName(s.name))}</div>
         <div class="label-dev">${displayCode(s)}<span class="dev-value">${devLabel(s)}</span>${badge}</div>
         ${commute}
       </div>

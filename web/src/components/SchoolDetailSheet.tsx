@@ -38,6 +38,7 @@ export function SchoolDetailSheet({ school, onClose, userData }: Props) {
   const [memo, setMemo] = useState('')
   const [commuteNote, setCommuteNote] = useState('')
   const [mineNote, setMineNote] = useState('')
+  const [mineDeptDraft, setMineDeptDraft] = useState<Record<string, string>>({})
   const [saving, setSaving] = useState(false)
 
   const schoolId = school?.id ?? null
@@ -48,6 +49,11 @@ export function SchoolDetailSheet({ school, onClose, userData }: Props) {
     setMemo(n?.note ?? '')
     setCommuteNote(n?.commute_note ?? '')
     setMineNote(mine[schoolId]?.note ?? '')
+    // 学科別ドラフトは mineRec から string へ再同期（school 切替時のみ）
+    const src = mine[schoolId]?.depts ?? {}
+    const next: Record<string, string> = {}
+    for (const [k, v] of Object.entries(src)) next[k] = v == null ? '' : String(v)
+    setMineDeptDraft(next)
     // school 切替時のみ同期（notes/mine の参照更新でユーザー入力を上書きしない）
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [schoolId])
@@ -59,6 +65,9 @@ export function SchoolDetailSheet({ school, onClose, userData }: Props) {
   const dist = home ? haversine(home, { lat: school.latitude, lng: school.longitude }) : null
   const routeUrl = home ? googleMapsRoute(home, school) : null
   const genderRatio = genderRatioLabel(school)
+  // DB 由来 URL は http(s) のみ許可（javascript: 等のスキームを href に通さない多層防御）
+  const officialUrl =
+    school.official_url && /^https?:\/\//i.test(school.official_url) ? school.official_url : null
 
   const requireLogin = (): boolean => {
     if (session) return false
@@ -103,11 +112,24 @@ export function SchoolDetailSheet({ school, onClose, userData }: Props) {
     if (requireLogin()) return
     const v = raw === '' ? null : parseInt(raw, 10)
     if (v != null && (Number.isNaN(v) || v < 20 || v > 80)) return
+    // 既存値と同じなら DB 書込しない（無駄書込防止）
+    const current = mineRec?.depts[departmentId] ?? null
+    if (v === current) return
     try {
       await saveMineValue(school.id, departmentId, v)
     } catch {
       toast('保存に失敗しました')
     }
+  }
+
+  const handleMineBlur = (departmentId: string) => {
+    const raw = mineDeptDraft[departmentId] ?? ''
+    void handleMineValue(departmentId, raw)
+  }
+
+  const handleMineClear = (departmentId: string) => {
+    setMineDeptDraft((prev) => ({ ...prev, [departmentId]: '' }))
+    void handleMineValue(departmentId, '')
   }
 
   const handleConsent = async (checked: boolean) => {
@@ -183,8 +205,8 @@ export function SchoolDetailSheet({ school, onClose, userData }: Props) {
         </div>
 
         <div className="ext-links">
-          {school.official_url ? (
-            <a href={school.official_url} target="_blank" rel="noreferrer">
+          {officialUrl ? (
+            <a href={officialUrl} target="_blank" rel="noreferrer">
               🌐 公式サイト
             </a>
           ) : (
@@ -258,12 +280,13 @@ export function SchoolDetailSheet({ school, onClose, userData }: Props) {
                   min={20}
                   max={80}
                   placeholder="—"
-                  value={mineRec?.depts[d.id] ?? ''}
-                  onChange={(e) => void handleMineValue(d.id, e.target.value)}
+                  value={mineDeptDraft[d.id] ?? ''}
+                  onChange={(e) => setMineDeptDraft((prev) => ({ ...prev, [d.id]: e.target.value }))}
+                  onBlur={() => handleMineBlur(d.id)}
                   aria-label={`${d.name} の私の記録`}
                 />
                 {mineRec?.depts[d.id] != null && (
-                  <button className="clr" title="クリア" onClick={() => void handleMineValue(d.id, '')}>
+                  <button className="clr" title="クリア" onClick={() => handleMineClear(d.id)}>
                     ×
                   </button>
                 )}
