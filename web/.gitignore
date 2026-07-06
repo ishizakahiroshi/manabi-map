@@ -10,7 +10,12 @@ lerna-debug.log*
 node_modules
 dist
 dist-ssr
+public/schools.json
 *.local
+
+# Supabase CLI local state（project ref 等の機微情報を含む）
+supabase/.temp/
+supabase/.branches/
 
 # Editor directories and files
 .vscode/*

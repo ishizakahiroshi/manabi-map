@@ -93,6 +93,21 @@ Supabase / LINE の接続情報はリポジトリ外に保管する。`web/.env.
 - リリース手順: develop で修正 → プレビューで確認 → main へマージ（= 本番デプロイ）→ 節目で `manual_release-vX.Y.Z_日付.md` を作成し `git tag vX.Y.Z` を打つ（タグは記録用アンカー・デプロイには無影響）
 - 参照: `docs/local/archive/v0.1.1/manual_release-v0.1.0_2026-07-05.md`（初回リリースの記録・定常手順）
 
+### Supabase DB 変更の適用方針
+
+- DB 変更は **Supabase SQL Editor への手貼りを標準にしない**。原則として `web/supabase/migrations/` 配下に migration SQL を置き、`supabase db push` で適用できる形にする
+- `web/supabase/migrations/` に置くのは schema 変更・RLS・関数など、公開 repo に載せてよい DB 構造変更を基本とする。学校データの大量 `insert` / `update` は GitHub 上で丸見えになるため、公開する意思がある場合だけ migration 化する
+- 学校データ投入 SQL は原則 `docs/local/`（gitignored）に置き、適用は人間が `psql` などで実行する。作業分担用は `docs/local/seed-parts/*.sql`、適用用にまとめる場合も `docs/local/*.sql` を使う
+- migration は人間が内容確認してから適用する。AI は SQL ファイル作成・検証までは行ってよいが、ユーザー指示なしに本番 Supabase へ `db push` / `psql` 実行しない
+- ローカル/個人環境の接続情報、DB パスワード、Supabase access token、project ref は公開ファイルに書かない。必要なら `CLAUDE.local.md` や gitignored なローカルメモに置く
+- 適用前チェック: `pnpm typecheck` / `pnpm lint`、migration SQL の `begin;` / `commit;`、新規テーブル有無、商用偏差値サイト由来データが混じっていないことを確認する
+- 標準コマンド例（project link 済みの場合）:
+
+```
+cd web
+pnpm dlx supabase db push
+```
+
 ### データ・PII の扱い
 
 - ユーザーの検索地点は「自宅住所」ではなく「中心地点」として扱う（企画書 §16.5）。お気に入り・メモ・個人偏差値記録は RLS で本人限定
