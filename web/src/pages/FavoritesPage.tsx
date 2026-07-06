@@ -6,6 +6,7 @@ import { useSchools } from '../hooks/useSchools'
 import type { useUserData } from '../hooks/useUserData'
 import { SchoolDetailSheet } from '../components/SchoolDetailSheet'
 import { AdSlot } from '../components/AdSlot'
+import { slotsForPlacement } from '../data/ad-slots'
 
 interface Props {
   userData: ReturnType<typeof useUserData>
@@ -71,14 +72,10 @@ export function FavoritesPage({ userData }: Props) {
           )
         })}
 
-        {favList.length >= 3 && (
-          <AdSlot
-            category="志望校対策"
-            title="通信教育・模試情報"
-            description="志望校対策の通信教育・模試の比較情報"
-            cta="見る"
-          />
-        )}
+        {favList.length >= 3 &&
+          slotsForPlacement('favorites').map((s) => (
+            <AdSlot key={s.id} slot={s} categoryLabel="志望校対策" />
+          ))}
 
         <button className="cta secondary" onClick={() => navigate('/map')}>
           ＋ もう一つの候補を追加
