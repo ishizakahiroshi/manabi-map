@@ -16,7 +16,7 @@ import {
   estimateTransitMinutes,
 } from '../lib/geo'
 import type { HomeLocation } from '../types/school'
-import { OSM_ATTRIBUTION_HTML } from '../lib/attribution'
+import { OSM_ATTRIBUTION_HTML, PROTOMAPS_ATTRIBUTION_HTML } from '../lib/attribution'
 import { useApp } from '../contexts/AppContext'
 import { useSchools } from '../hooks/useSchools'
 import type { useUserData } from '../hooks/useUserData'
@@ -50,6 +50,60 @@ const DEPT_CHIPS = [
   ['agricultural', '農業系'],
   ['welfare', '福祉・看護'],
 ] as const
+
+/**
+ * 地図タイルソース。env `VITE_TILE_SOURCE`（'osm' | 'protomaps'）で切替。
+ * **既定は 'osm'**（現行動作維持・R2 / PMTiles 生成不要）。'protomaps' の明示と
+ * `VITE_PMTILES_URL` の設定が両方そろった時のみ Protomaps ベクタタイルへ切替える。
+ */
+const TILE_SOURCE: 'osm' | 'protomaps' =
+  (import.meta.env.VITE_TILE_SOURCE as string | undefined) === 'protomaps' ? 'protomaps' : 'osm'
+const PMTILES_URL = import.meta.env.VITE_PMTILES_URL as string | undefined
+
+/** OSM 標準ラスタタイルを map に載せる（既定・フォールバック共通経路） */
+function addOsmTileLayer(map: L.Map): void {
+  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 18,
+    attribution: OSM_ATTRIBUTION_HTML,
+  }).addTo(map)
+}
+
+/**
+ * ベース地図レイヤを map に載せる。既定は OSM ラスタ。
+ * VITE_TILE_SOURCE=protomaps と VITE_PMTILES_URL の両設定時のみ protomaps-leaflet を
+ * **動的 import** して PMTiles ベクタレイヤを載せる（既定 osm 経路では protomaps-leaflet を
+ * 一切ロードしない = 未インストールでも現行動作に影響しない）。読み込み失敗時は OSM へ退避。
+ * @returns アンマウント時に呼ぶ cancel 関数（非同期ロード完了後の addTo を無効化する）
+ */
+function attachBaseTileLayer(map: L.Map): () => void {
+  if (TILE_SOURCE !== 'protomaps' || !PMTILES_URL) {
+    addOsmTileLayer(map)
+    return () => {}
+  }
+  let cancelled = false
+  // 非リテラル指定子で動的 import（protomaps-leaflet 未導入時の型解決エラーを避ける。
+  // このパッケージは protomaps タイル選択時のみ必要で、既定 osm 経路では読まれない）。
+  const spec = 'protomaps-leaflet'
+  import(/* @vite-ignore */ spec)
+    .then((protomapsL: { leafletLayer: (opts: Record<string, unknown>) => L.Layer }) => {
+      if (cancelled) return
+      protomapsL
+        .leafletLayer({
+          url: PMTILES_URL,
+          flavor: 'light',
+          lang: 'ja',
+          attribution: PROTOMAPS_ATTRIBUTION_HTML,
+        })
+        .addTo(map)
+    })
+    .catch(() => {
+      // protomaps-leaflet 未インストール or PMTiles 取得失敗時は OSM へ退避（地図を白紙にしない）
+      if (!cancelled) addOsmTileLayer(map)
+    })
+  return () => {
+    cancelled = true
+  }
+}
 
 function deptGroupOf(courseType: string | null): (typeof DEPT_CHIPS)[number][0] | null {
   if (!courseType) return null
@@ -212,10 +266,7 @@ export function MapPage({ userData }: Props) {
 
     const map = L.map(mapNodeRef.current, { zoomControl: false }).setView([36.3907, 139.0604], 10)
     map.attributionControl.setPrefix(false)
-    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      maxZoom: 18,
-      attribution: OSM_ATTRIBUTION_HTML,
-    }).addTo(map)
+    const cancelBaseLayer = attachBaseTileLayer(map)
 
     markerLayerRef.current = L.layerGroup().addTo(map)
     clusterLayerRef.current = L.markerClusterGroup({
@@ -235,6 +286,7 @@ export function MapPage({ userData }: Props) {
     setMapRef(map)
 
     return () => {
+      cancelBaseLayer()
       markerLayerRef.current = null
       clusterLayerRef.current = null
       setMapRef(null)

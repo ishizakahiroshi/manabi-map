@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useApp } from '../contexts/AppContext'
-import { parsePostal, searchNominatim, type GeocodeCandidate } from '../lib/geo'
+import { parsePostal, geocodeSearch, ACTIVE_GEOCODER, type GeocodeCandidate } from '../lib/geo'
 import { trackEvent } from '../lib/analytics'
 import type { HomeLocation } from '../types/school'
 import { AdSlot } from './../components/AdSlot'
@@ -52,7 +52,7 @@ export function HomePage() {
     lastQuery.current = query
     setSearching(true)
     try {
-      const items = await searchNominatim(query)
+      const items = await geocodeSearch(query)
       setCandidates(items)
       setSearchError(false)
       if (items.length > 0 && !hasPostal) {
@@ -67,7 +67,7 @@ export function HomePage() {
   }
 
   const pick = (c: GeocodeCandidate) => {
-    setSelected({ label: c.label, lat: c.lat, lng: c.lng, source: 'nominatim' })
+    setSelected({ label: c.label, lat: c.lat, lng: c.lng, source: ACTIVE_GEOCODER })
     setHint({ text: `✓ ${c.label} を地図の中心にします`, tone: 'ok' })
   }
 

@@ -156,6 +156,68 @@ export async function searchNominatim(q: string): Promise<GeocodeCandidate[]> {
   })
 }
 
+/**
+ * 国土地理院 住所検索 API のレスポンス要素（素の Feature 配列で返る）。
+ * coordinates は **[lng, lat] 順**（GeoJSON 準拠）である点に注意。
+ * 分類情報（category/type）は無く、駅・地名には properties.dataSource が付く。
+ */
+interface GsiItem {
+  geometry?: { coordinates?: [number, number]; type?: string }
+  type?: string
+  properties?: { addressCode?: string; title?: string; dataSource?: string }
+}
+
+/**
+ * 国土地理院 AddressSearch フリー検索（住所 / 駅名 / 地名）。
+ * 無料・無登録・API キー不要。国土地理院コンテンツ利用規約（PDL1.0）に基づき
+ * 商用可・出典表記必須（attribution.ts の GSI クレジットで表示）。
+ * 呼び出し側で 400ms デバウンスすること（現行と同じ頻度で運用する）。
+ *
+ * 注意: 商業施設名（イオンモール等）は引けない（駅名は可）。0 件時に
+ * Nominatim へ自動フォールバックはしない（TOS 遵守・明示切替のみ）。
+ */
+export async function searchGsi(q: string): Promise<GeocodeCandidate[]> {
+  const url =
+    'https://msearch.gsi.go.jp/address-search/AddressSearch?q=' + encodeURIComponent(q)
+  // Nominatim と同様、一過性の失敗（瞬断・レート制限）に 1 回だけリトライする。
+  const res = await fetchWithRetry(url, { headers: { Accept: 'application/json' } })
+  if (!res.ok) throw new Error('HTTP ' + res.status)
+  const data = (await res.json()) as GsiItem[]
+  if (!Array.isArray(data)) return []
+  return data
+    .filter((it) => Array.isArray(it.geometry?.coordinates))
+    .slice(0, 5)
+    .map((it) => {
+      // GSI は [lng, lat] 順。lat/lng へ取り違えなく展開する。
+      const [lng, lat] = it.geometry!.coordinates as [number, number]
+      const title = it.properties?.title ?? ''
+      const isStation = !!it.properties?.dataSource
+      return {
+        label: title || q,
+        sub: isStation ? '駅・地点' : '住所・地点',
+        icon: isStation ? '🚉' : '📍',
+        lat,
+        lng,
+      }
+    })
+}
+
+/**
+ * 使用中のジオコーダ provider。env `VITE_GEOCODER`（'gsi' | 'nominatim'）で切替。
+ * **既定は 'gsi'**（国土地理院。Nominatim の autocomplete 禁止 policy 回避・日本住所精度）。
+ * 'nominatim' を明示した時のみ従来の OSM Nominatim へ切り戻す。
+ */
+export const ACTIVE_GEOCODER: 'gsi' | 'nominatim' =
+  (import.meta.env.VITE_GEOCODER as string | undefined) === 'nominatim' ? 'nominatim' : 'gsi'
+
+/**
+ * provider 抽象。呼び出し側は provider を意識せずこれを使う。
+ * GSI が 0 件でも Nominatim へは自動で流さない（TOS 遵守・明示切替のみ）。
+ */
+export async function geocodeSearch(q: string): Promise<GeocodeCandidate[]> {
+  return ACTIVE_GEOCODER === 'nominatim' ? searchNominatim(q) : searchGsi(q)
+}
+
 export function shortLabel(s: string): string {
   return (s || '').split(',').slice(0, 2).join(',').replace(/群馬県/, '') || s
 }
