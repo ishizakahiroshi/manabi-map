@@ -17,6 +17,30 @@ Manabi Map は、以下のオープンソースソフトウェアおよび地図
 - 著作権・ライセンス: https://www.openstreetmap.org/copyright
 - タイル利用ポリシー: https://operations.osmfoundation.org/policies/tiles/
 
+### Protomaps ベクタタイル（設定により使用）
+
+地図タイルを自前配信する構成では、Protomaps の公開 basemap（PMTiles 形式）を利用します。元データは OpenStreetMap であり、ODbL の出典表記（© OpenStreetMap contributors）は引き続き必須です。
+
+- Protomaps: https://protomaps.com/
+- 表示: Protomaps © OpenStreetMap contributors
+- 元データライセンス: Open Database License (ODbL)
+
+## 住所検索（ジオコーディング）
+
+住所・駅名・地名から地図の中心地点を求める処理に、以下のいずれかを利用します（設定により切替）。
+
+### 国土地理院 住所検索 API（既定）
+
+- 出典: 国土地理院（https://www.gsi.go.jp/）
+- 利用規約: 国土地理院コンテンツ利用規約（公共データ利用規約 PDL1.0） https://www.gsi.go.jp/kikakuchousei/kikakuchousei40182.html
+- 表示: 住所検索: 国土地理院
+
+### OpenStreetMap Nominatim（切替時）
+
+- 出典: © OpenStreetMap contributors（https://www.openstreetmap.org/copyright）
+- 利用ポリシー: https://operations.osmfoundation.org/policies/nominatim/
+- 表示: 住所検索: OpenStreetMap / Nominatim
+
 ## 主な実行時依存
 
 | パッケージ | ライセンス | URL |

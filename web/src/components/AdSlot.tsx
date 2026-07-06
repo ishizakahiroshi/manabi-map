@@ -1,5 +1,6 @@
 import type { AdSlotItem } from '../data/ad-slots'
 import { AD_CAMPAIGN_V014, withUtm } from '../lib/utm'
+import { trackEvent } from '../lib/analytics'
 
 interface AdSlotProps {
   slot: AdSlotItem
@@ -45,6 +46,14 @@ export function AdSlot({ slot, context, categoryLabel, className }: AdSlotProps)
         target="_blank"
         rel="noopener noreferrer sponsored nofollow"
         title="広告リンク（新しいタブで開きます）"
+        onClick={() =>
+          trackEvent('ad_click', {
+            ad_slot: slot.id,
+            placement: slot.placement,
+            school_id: context?.schoolId,
+            prefecture: context?.prefecture,
+          })
+        }
       >
         {slot.ctaText} →
       </a>

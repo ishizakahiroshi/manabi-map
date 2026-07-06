@@ -8,9 +8,9 @@
 
 [![License: AGPL-3.0-or-later](https://img.shields.io/badge/license-AGPL--3.0--or--later-blue.svg)](LICENSE)
 [![Data License: CC BY-SA 4.0](https://img.shields.io/badge/data-CC%20BY--SA%204.0-lightgrey.svg)](https://creativecommons.org/licenses/by-sa/4.0/)
-![Version: v0.1](https://img.shields.io/badge/version-v0.1%20群馬版-orange.svg)
+![Version: v0.2](https://img.shields.io/badge/version-v0.2%20関東版-orange.svg)
 
-**公開中 → https://manabi-map.app** （群馬県版・無料）
+**公開中 → https://manabi-map.app** （群馬県版・v0.2.0 関東展開はリリース準備中）
 
 ## 動作環境
 
