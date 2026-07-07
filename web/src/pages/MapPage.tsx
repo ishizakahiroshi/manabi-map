@@ -457,16 +457,10 @@ export function MapPage({ userData }: Props) {
 
   return (
     <div className="screen map-screen">
-      <div className="header">
-        <button className="icon-btn" onClick={() => navigate('/')} aria-label={t('map.backHome')}>
-          ←
-        </button>
+      <div className="header compact">
         <div className="brand">
           {home ? t('map.nearby', { label: shortLabel(home.label) }) : t('map.title')}
         </div>
-        <button className="icon-btn" onClick={() => navigate('/favorites')} aria-label={t('header.favList')}>
-          ★
-        </button>
       </div>
 
       <div className="map-canvas" aria-hidden={schoolListOpen}>

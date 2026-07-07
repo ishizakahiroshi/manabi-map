@@ -12,10 +12,12 @@ import { ComparePage } from './pages/ComparePage'
 import { AuthCallbackPage } from './pages/AuthCallbackPage'
 import { FamilyJoinPage } from './pages/FamilyJoinPage'
 import { LegalPage } from './pages/LegalPage'
+import { MyPage } from './pages/MyPage'
 import { Sidebar } from './components/Sidebar'
 import { LoginSheet } from './components/LoginSheet'
 import { Toast } from './components/Toast'
 import { OfflineBanner } from './components/OfflineBanner'
+import { BottomTabBar } from './components/BottomTabBar'
 
 export default function App() {
   const navigate = useNavigate()
@@ -32,6 +34,11 @@ export default function App() {
   )
 
   const isHome = location.pathname === '/'
+  const showBottomTabs = !(
+    location.pathname === '/auth/callback' ||
+    location.pathname === '/family/join' ||
+    location.pathname.startsWith('/legal/')
+  )
 
   return (
     <div className="stage">
@@ -64,6 +71,7 @@ export default function App() {
           <Route path="/school/:id" element={<MapPage userData={userData} />} />
           <Route path="/favorites" element={<FavoritesPage userData={userData} />} />
           <Route path="/compare" element={<ComparePage userData={userData} />} />
+          <Route path="/mypage" element={<MyPage userData={userData} favCount={favCount} noteCount={noteCount} />} />
           <Route path="/auth/callback" element={<AuthCallbackPage />} />
           <Route path="/family/join" element={<FamilyJoinPage />} />
           <Route path="/legal/terms" element={<LegalPage doc="terms" />} />
@@ -71,6 +79,7 @@ export default function App() {
           <Route path="/legal/third-party" element={<LegalPage doc="third-party" />} />
         </Routes>
 
+        {showBottomTabs && <BottomTabBar />}
         <Sidebar favCount={favCount} noteCount={noteCount} />
         <LoginSheet />
         <OfflineBanner />
