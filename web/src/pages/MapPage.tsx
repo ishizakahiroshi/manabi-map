@@ -18,6 +18,7 @@ import {
   estimateTransitMinutes,
 } from '../lib/geo'
 import type { HomeLocation } from '../types/school'
+import { ACTIVE_REGION } from '../lib/region'
 import { OSM_ATTRIBUTION_HTML, PROTOMAPS_ATTRIBUTION_HTML } from '../lib/attribution'
 import { useApp } from '../contexts/AppContext'
 import { useSchools } from '../hooks/useSchools'
@@ -25,9 +26,6 @@ import type { useUserData } from '../hooks/useUserData'
 import { SchoolDetailSheet } from '../components/SchoolDetailSheet'
 import { AdSlot } from '../components/AdSlot'
 import { slotsForPlacement } from '../data/ad-slots'
-
-const RADIUS_MIN = 5
-const RADIUS_MAX = 80
 
 function normalizeQuery(s: string): string {
   return s
@@ -163,7 +161,6 @@ function homeIcon(homeLabel: string): L.DivIcon {
 }
 
 interface Filters {
-  radius: number
   bands: Set<number>
   own: Set<string>
   gen: Set<string>
@@ -183,7 +180,7 @@ export function MapPage({ userData }: Props) {
   const navigate = useNavigate()
   const { id: sharedSchoolId } = useParams<{ id: string }>()
   const sharedOpenedRef = useRef(false)
-  const { home, toast } = useApp()
+  const { home } = useApp()
   const { t } = useI18n()
   const fmt = useFormat()
   const { schools, loading, error } = useSchools()
@@ -192,6 +189,7 @@ export function MapPage({ userData }: Props) {
   const markerLayerRef = useRef<L.LayerGroup | null>(null)
   const clusterLayerRef = useRef<L.MarkerClusterGroup | null>(null)
   const [mapRef, setMapRef] = useState<L.Map | null>(null)
+  const [mapBounds, setMapBounds] = useState<L.LatLngBounds | null>(null)
   const [sheetExpanded, setSheetExpanded] = useState(false)
   const [schoolListOpen, setSchoolListOpen] = useState(false)
   const [detail, setDetail] = useState<School | null>(null)
@@ -259,7 +257,6 @@ export function MapPage({ userData }: Props) {
   )
 
   const [filters, setFilters] = useState<Filters>({
-    radius: 50,
     bands: new Set([...ALL_BANDS, UNRATED as number]),
     own: new Set(['prefectural', 'municipal', 'national', 'private', 'union']),
     gen: new Set(['coed', 'boys', 'girls']),
@@ -275,7 +272,7 @@ export function MapPage({ userData }: Props) {
   const [filterSheetOpen, setFilterSheetOpen] = useState(false)
 
   const center = useMemo<[number, number]>(
-    () => (home ? [home.lat, home.lng] : [36.3907, 139.0604]),
+    () => (home ? [home.lat, home.lng] : [ACTIVE_REGION.mapCenter.lat, ACTIVE_REGION.mapCenter.lng]),
     [home],
   )
 
@@ -285,9 +282,8 @@ export function MapPage({ userData }: Props) {
     return schools.filter((s) => {
       const isFav = !!favorites[s.id]
       const top = topDev(s)
-      const dist = home ? haversine(home, { lat: s.latitude, lng: s.longitude }) : 0
-      // 志望校は半径フィルタを無視して常時表示（§7.6.3）
-      const passRadius = isFav || !home || dist <= filters.radius
+      // 志望校は表示範囲フィルタを無視して常時表示（§7.6.3）
+      const passBounds = isFav || !mapBounds || mapBounds.contains([s.latitude, s.longitude])
       // フリーワード（学校名 / かな / 学科名 / 都道府県 / 市区町村 / 住所）
       let passQuery = true
       if (normalizedQuery.length >= 1) {
@@ -313,9 +309,9 @@ export function MapPage({ userData }: Props) {
           ? s.departments.map((d) => d.ui_group ?? 'other')
           : ['other']
       const passDept = groups.some((g) => filters.depts.has(g))
-      return passRadius && passBand && passOwn && passGen && passType && passCourseTime && passDept && passInt && passQuery
+      return passBounds && passBand && passOwn && passGen && passType && passCourseTime && passDept && passInt && passQuery
     })
-  }, [schools, favorites, home, filters, normalizedQuery])
+  }, [schools, favorites, mapBounds, filters, normalizedQuery])
 
   const favSchools = useMemo(
     () => schools.filter((s) => favorites[s.id]),
@@ -365,7 +361,10 @@ export function MapPage({ userData }: Props) {
   useEffect(() => {
     if (!mapNodeRef.current) return
 
-    const map = L.map(mapNodeRef.current, { zoomControl: false }).setView([36.3907, 139.0604], 10)
+    const map = L.map(mapNodeRef.current, { zoomControl: false }).setView(
+      [ACTIVE_REGION.mapCenter.lat, ACTIVE_REGION.mapCenter.lng],
+      ACTIVE_REGION.mapZoom,
+    )
     map.attributionControl.setPrefix(false)
     const cancelBaseLayer = attachBaseTileLayer(map)
 
@@ -385,12 +384,17 @@ export function MapPage({ userData }: Props) {
       },
     }).addTo(map)
     setMapRef(map)
+    setMapBounds(map.getBounds())
+    const onMoveEnd = () => setMapBounds(map.getBounds())
+    map.on('moveend', onMoveEnd)
 
     return () => {
+      map.off('moveend', onMoveEnd)
       cancelBaseLayer()
       markerLayerRef.current = null
       clusterLayerRef.current = null
       setMapRef(null)
+      setMapBounds(null)
       map.remove()
     }
   }, [])
@@ -524,24 +528,6 @@ export function MapPage({ userData }: Props) {
               )}
             </>
           )}
-        </div>
-        <div className="radius-slider" aria-label={t('map.radiusAria')}>
-          <span className="rs-label">{t('map.radius')}</span>
-          <input
-            type="range"
-            min={RADIUS_MIN}
-            max={RADIUS_MAX}
-            step={5}
-            value={filters.radius}
-            aria-valuemin={RADIUS_MIN}
-            aria-valuemax={RADIUS_MAX}
-            aria-valuenow={filters.radius}
-            aria-valuetext={`${filters.radius}km`}
-            onChange={(e) => setFilters((f) => ({ ...f, radius: Number(e.target.value) }))}
-            onMouseUp={() => toast(t('home.radiusToast', { km: filters.radius }))}
-            onTouchEnd={() => toast(t('home.radiusToast', { km: filters.radius }))}
-          />
-          <span className="rs-value">{filters.radius}km</span>
         </div>
         {FILTER_CATEGORIES.map(([key, label, list, set]) => (
           <div className="dropdown desktop-only" key={key}>

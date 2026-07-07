@@ -113,6 +113,24 @@ body {
 }
 .catch .accent { color: var(--accent); }
 .sub { color: var(--ink-soft); font-size: 0.95rem; margin: 0 0 20px; }
+
+/* ヒーロー: PC は見出しと QR を左右に並べる */
+.hero-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; }
+.hero-text { flex: 1; min-width: 0; }
+.hero-qr { display: none; flex: 0 0 auto; flex-direction: column; align-items: center; margin-top: 8px; }
+.hero-qr-card {
+  padding: 10px; background: var(--card);
+  border: 2px solid var(--ink); border-radius: 16px;
+  box-shadow: 4px 4px 0 var(--line); line-height: 0;
+}
+.hero-qr-caption {
+  margin: 8px 0 0; text-align: center; font-family: var(--display); font-weight: 700;
+  font-size: 0.8rem; color: var(--ink-soft); line-height: 1.3;
+}
+/* スマホ枠幅（phone が広がる幅）以上でのみ QR を出す */
+@media (min-width: 700px) {
+  .hero-qr { display: flex; }
+}
 .input {
   width: 100%; padding: 14px 14px; font-family: var(--body); font-size: 1rem;
   border: 2px solid var(--ink); border-radius: 14px; background: #fff;
@@ -317,33 +335,6 @@ body {
 .filter-sheet-foot .cta { margin: 0; max-width: none; }
 .filter-sheet-clear { flex: 0 0 38%; }
 .filter-sheet-apply { flex: 1 1 auto; }
-
-.radius-slider {
-  pointer-events: auto; flex: 0 0 auto;
-  display: flex; align-items: center; gap: 6px;
-  padding: 6px 12px;
-  border: 2px solid var(--ink); border-radius: 999px; background: rgba(255, 255, 255, 0.95);
-  box-shadow: 2px 2px 0 var(--line);
-  font-family: var(--display); font-weight: 700; font-size: 0.8rem; color: var(--ink);
-}
-.radius-slider .rs-label { flex: 0 0 auto; }
-.radius-slider .rs-value { flex: 0 0 auto; min-width: 3.2em; text-align: right; color: var(--accent); }
-.radius-slider input[type="range"] {
-  flex: 0 0 auto; width: 100px; height: 22px; appearance: none; background: transparent; cursor: pointer;
-}
-.radius-slider input[type="range"]::-webkit-slider-runnable-track {
-  height: 4px; background: var(--line); border-radius: 2px;
-}
-.radius-slider input[type="range"]::-moz-range-track {
-  height: 4px; background: var(--line); border-radius: 2px;
-}
-.radius-slider input[type="range"]::-webkit-slider-thumb {
-  appearance: none; width: 16px; height: 16px; margin-top: -6px;
-  background: var(--accent); border: 2px solid var(--ink); border-radius: 50%;
-}
-.radius-slider input[type="range"]::-moz-range-thumb {
-  width: 16px; height: 16px; background: var(--accent); border: 2px solid var(--ink); border-radius: 50%;
-}
 
 .dropdown { pointer-events: auto; position: relative; flex: 0 0 auto; }
 .dropdown .popover {
@@ -803,7 +794,15 @@ body[data-sheet-open="true"] .leaflet-bottom.leaflet-right { display: none; }
 .legal-content h2 { font-family: var(--display); font-size: 1.05rem; margin-top: 24px; }
 .legal-content h3 { font-family: var(--display); font-size: 0.98rem; margin-top: 18px; }
 .legal-content p, .legal-content li { font-size: 0.92rem; }
-.legal-content a { color: var(--accent); }
+.legal-content a { color: var(--accent); word-break: break-word; }
+.legal-content table {
+  width: 100%; margin: 8px 0 12px; border-collapse: collapse;
+  font-size: 0.88rem; display: block; overflow-x: auto;
+}
+.legal-content th, .legal-content td {
+  border: 1px solid var(--line); padding: 6px 8px; text-align: left; vertical-align: top;
+}
+.legal-content th { background: var(--card); font-family: var(--display); font-weight: 700; }
 
 /* エラーバナー */
 .error-banner {
