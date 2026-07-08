@@ -91,19 +91,9 @@ export function Sidebar({ favCount, noteCount }: SidebarProps) {
           )}
 
           <div className="sb-section">
-            <button className="sb-item" onClick={() => go('/map')}>
-              <span className="ic" aria-hidden="true">🗺</span>
-              <span className="tx">{t('nav.map')}</span>
-              <span className="arrow" aria-hidden="true">›</span>
-            </button>
-            <button className="sb-item" onClick={() => go('/favorites')}>
-              <span className="ic" aria-hidden="true">★</span>
-              <span className="tx">{t('nav.favorites')}</span>
-              <span className="badge">{favCount}</span>
-            </button>
-            <button className="sb-item" onClick={() => go('/')}>
-              <span className="ic" aria-hidden="true">🏠</span>
-              <span className="tx">{t('nav.homeSettings')}</span>
+            <button className="sb-item" onClick={() => go('/mypage')}>
+              <span className="ic" aria-hidden="true">👤</span>
+              <span className="tx">{t('mypage.title')}</span>
               <span className="arrow" aria-hidden="true">›</span>
             </button>
           </div>

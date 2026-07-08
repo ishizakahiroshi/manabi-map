@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type TouchEvent } from 'react'
 import type { School } from '../types/school'
 import {
   haversine,
@@ -16,6 +16,7 @@ import { useFocusTrap } from '../hooks/useFocusTrap'
 import { useEscapeKey } from '../hooks/useEscapeKey'
 import type { useUserData } from '../hooks/useUserData'
 import { trackEvent } from '../lib/analytics'
+import { supabase } from '../lib/supabase'
 import { AdSlot } from './AdSlot'
 import { slotsForPlacement } from '../data/ad-slots'
 
@@ -31,6 +32,8 @@ export function SchoolDetailSheet({ school, onClose, userData }: Props) {
   const { t } = useI18n()
   const fmt = useFormat()
   const sheetRef = useRef<HTMLDivElement>(null)
+  const touchStartY = useRef<number | null>(null)
+  const touchCurrentY = useRef<number | null>(null)
   const { favorites, notes, mine, toggleFavorite, setPriority, saveNote, saveMineValue, saveMineNote, saveMineConsent } = userData
 
   const [memo, setMemo] = useState('')
@@ -38,6 +41,25 @@ export function SchoolDetailSheet({ school, onClose, userData }: Props) {
   const [mineNote, setMineNote] = useState('')
   const [mineDeptDraft, setMineDeptDraft] = useState<Record<string, string>>({})
   const [saving, setSaving] = useState(false)
+  const [isAdmin, setIsAdmin] = useState(false)
+  const [adminDraft, setAdminDraft] = useState<Record<string, string>>({})
+  const [adminOverride, setAdminOverride] = useState<Record<string, number>>({})
+  const [adminReason, setAdminReason] = useState('')
+  const [adminPin, setAdminPin] = useState('')
+  const [adminSavingDept, setAdminSavingDept] = useState<string | null>(null)
+  const [adminRebuilding, setAdminRebuilding] = useState(false)
+  const [reviewRows, setReviewRows] = useState<
+    Array<{
+      department_id: string
+      department_name: string
+      official_value: number | null
+      submission_count: number
+      avg_value: number
+      median_value: number
+      min_value: number
+      max_value: number
+    }>
+  >([])
 
   const schoolId = school?.id ?? null
   const open = school != null
@@ -58,9 +80,48 @@ export function SchoolDetailSheet({ school, onClose, userData }: Props) {
     const next: Record<string, string> = {}
     for (const [k, v] of Object.entries(src)) next[k] = v == null ? '' : String(v)
     setMineDeptDraft(next)
+    const adminNext: Record<string, string> = {}
+    for (const d of school?.departments ?? []) adminNext[d.id] = d.deviation == null ? '' : String(d.deviation)
+    setAdminDraft(adminNext)
+    setAdminOverride({})
+    setAdminReason('')
+    setAdminPin('')
     // school 切替時のみ同期（notes/mine の参照更新でユーザー入力を上書きしない）
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [schoolId])
+
+  useEffect(() => {
+    if (!session) {
+      setIsAdmin(false)
+      return
+    }
+    let cancelled = false
+    void (async () => {
+      const { data, error } = await supabase.rpc('is_admin')
+      if (!cancelled) setIsAdmin(!error && data === true)
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [session])
+
+  useEffect(() => {
+    if (!isAdmin || !schoolId) {
+      setReviewRows([])
+      return
+    }
+    let cancelled = false
+    void (async () => {
+      const { data, error } = await supabase.rpc('get_deviation_review_queue', {
+        p_school_id: schoolId,
+        p_threshold: 5,
+      })
+      if (!cancelled) setReviewRows(error ? [] : (data ?? []))
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [isAdmin, schoolId])
 
   if (!school) return null
 
@@ -146,6 +207,78 @@ export function SchoolDetailSheet({ school, onClose, userData }: Props) {
     }
   }
 
+  const displayedDeviation = (departmentId: string, original: number | null): number | null =>
+    adminOverride[departmentId] ?? original
+
+  const handleAdminCorrection = async (departmentId: string) => {
+    if (requireLogin()) return
+    const raw = adminDraft[departmentId] ?? ''
+    const nextValue = parseInt(raw, 10)
+    if (Number.isNaN(nextValue) || nextValue < 20 || nextValue > 80) {
+      toast(t('detail.adminValueInvalid'))
+      return
+    }
+    if (adminReason.trim().length < 4) {
+      toast(t('detail.adminReasonRequired'))
+      return
+    }
+    if (!adminPin) {
+      toast(t('detail.adminPinRequired'))
+      return
+    }
+    setAdminSavingDept(departmentId)
+    try {
+      const { error } = await supabase.rpc('correct_school_deviation', {
+        p_department_id: departmentId,
+        p_new_value: nextValue,
+        p_reason: adminReason,
+        p_pin: adminPin,
+      })
+      if (error) throw error
+      setAdminOverride((cur) => ({ ...cur, [departmentId]: nextValue }))
+      setAdminPin('')
+      toast(t('detail.adminCorrectionDone'))
+    } catch {
+      toast(t('detail.adminCorrectionFail'))
+    } finally {
+      setAdminSavingDept(null)
+    }
+  }
+
+  const handleSnapshotRebuild = async () => {
+    if (requireLogin()) return
+    setAdminRebuilding(true)
+    try {
+      const { error } = await supabase.functions.invoke('trigger-snapshot-rebuild', { body: {} })
+      if (error) throw error
+      toast(t('detail.adminRebuildDone'))
+    } catch {
+      toast(t('detail.adminRebuildFail'))
+    } finally {
+      setAdminRebuilding(false)
+    }
+  }
+
+  const handleTouchStart = (event: TouchEvent<HTMLDivElement>) => {
+    const y = event.touches[0]?.clientY ?? null
+    touchStartY.current = y
+    touchCurrentY.current = y
+  }
+
+  const handleTouchMove = (event: TouchEvent<HTMLDivElement>) => {
+    touchCurrentY.current = event.touches[0]?.clientY ?? touchCurrentY.current
+  }
+
+  const handleTouchEnd = (event: TouchEvent<HTMLDivElement>) => {
+    const startY = touchStartY.current
+    const currentY = touchCurrentY.current
+    touchStartY.current = null
+    touchCurrentY.current = null
+    if (startY == null) return
+    const endY = event.changedTouches[0]?.clientY ?? currentY ?? startY
+    if (endY - startY > 60) onClose()
+  }
+
   return (
     <div
       ref={sheetRef}
@@ -153,15 +286,15 @@ export function SchoolDetailSheet({ school, onClose, userData }: Props) {
       role="dialog"
       aria-modal="true"
       aria-label={school.name}
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
     >
       <button className="handle" onClick={onClose} aria-label={t('common.close')} />
       <div className="head">
         <span className="grow">
           <h3 className="detail-title">{fmt.displayName(school)}</h3>
         </span>
-        <button className="sheet-close" onClick={onClose} aria-label={t('common.close')}>
-          ×
-        </button>
       </div>
       <div className="body">
         <p className="detail-meta">
@@ -196,9 +329,6 @@ export function SchoolDetailSheet({ school, onClose, userData }: Props) {
         </div>
 
         <div className="detail-actions">
-          <button className={`fav-toggle ${fav ? 'on' : ''}`} onClick={() => void handleFav()}>
-            <span className="s">★</span> {fav ? t('detail.favorited') : t('detail.interested')}
-          </button>
           <span className="pri-label">{t('detail.priority')}</span>
           <div className="stars" role="radiogroup" aria-label={t('detail.priority')}>
             {[1, 2, 3, 4, 5].map((n) => (
@@ -236,13 +366,14 @@ export function SchoolDetailSheet({ school, onClose, userData }: Props) {
           <div>
             {school.departments.map((d) => {
               const mv = mineRec?.depts[d.id]
+              const dev = displayedDeviation(d.id, d.deviation)
               return (
                 <div className="dep-row" key={d.id}>
                   <span className="dep-name">{d.name}</span>
                   <span className="dep-dev">
-                    {d.deviation != null ? (
+                    {dev != null ? (
                       <>
-                        {t('detail.refValue')} <b>{d.deviation}</b>
+                        {t('detail.refValue')} <b>{dev}</b>
                       </>
                     ) : (
                       <>{t('common.infoPending')}</>
@@ -250,6 +381,7 @@ export function SchoolDetailSheet({ school, onClose, userData }: Props) {
                     {mv != null && (
                       <span className="mine-val">
                         / {t('detail.myRecord')} <b>{mv}</b>
+                        <span className="self-label">{t('detail.mineSelfLabel')}</span>
                       </span>
                     )}
                   </span>
@@ -284,7 +416,7 @@ export function SchoolDetailSheet({ school, onClose, userData }: Props) {
               <div className="mine-row" key={d.id}>
                 <span className="n">{d.name}</span>
                 <span className="ref">
-                  {t('detail.refValue')} {d.deviation ?? t('common.dash')}
+                  {t('detail.refValue')} {displayedDeviation(d.id, d.deviation) ?? t('common.dash')}
                 </span>
                 <input
                   className="val"
@@ -321,6 +453,85 @@ export function SchoolDetailSheet({ school, onClose, userData }: Props) {
             <span>{t('detail.consent')}</span>
           </label>
         </div>
+
+        {isAdmin && (
+          <div className="admin-block">
+            <h4>{t('detail.adminTitle')}</h4>
+            <p className="sub">{t('detail.adminSub')}</p>
+            <label>
+              {t('detail.adminReason')}
+              <textarea
+                value={adminReason}
+                onChange={(e) => setAdminReason(e.target.value)}
+                placeholder={t('detail.adminReasonPlaceholder')}
+              />
+            </label>
+            <label>
+              {t('detail.adminPin')}
+              <input
+                type="password"
+                inputMode="numeric"
+                value={adminPin}
+                onChange={(e) => setAdminPin(e.target.value)}
+                autoComplete="off"
+              />
+            </label>
+            <div className="admin-dept-list">
+              {school.departments.map((d) => (
+                <div className="admin-dept-row" key={d.id}>
+                  <span>
+                    <b>{d.name}</b>
+                    <small>
+                      {t('detail.refValue')} {displayedDeviation(d.id, d.deviation) ?? t('common.dash')}
+                    </small>
+                  </span>
+                  <input
+                    type="number"
+                    min={20}
+                    max={80}
+                    value={adminDraft[d.id] ?? ''}
+                    onChange={(e) => setAdminDraft((cur) => ({ ...cur, [d.id]: e.target.value }))}
+                    aria-label={t('detail.adminValueAria', { name: d.name })}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => void handleAdminCorrection(d.id)}
+                    disabled={adminSavingDept === d.id}
+                  >
+                    {adminSavingDept === d.id ? t('common.saving') : t('detail.adminApply')}
+                  </button>
+                </div>
+              ))}
+            </div>
+            <div className="admin-review">
+              <h5>{t('detail.adminReviewTitle')}</h5>
+              {reviewRows.length > 0 ? (
+                reviewRows.map((r) => (
+                  <div className="admin-review-row" key={r.department_id}>
+                    <span>{r.department_name}</span>
+                    <b>{t('detail.adminReviewStats', {
+                      count: r.submission_count,
+                      avg: r.avg_value,
+                      median: r.median_value,
+                      min: r.min_value,
+                      max: r.max_value,
+                    })}</b>
+                  </div>
+                ))
+              ) : (
+                <p className="sub">{t('detail.adminReviewEmpty')}</p>
+              )}
+            </div>
+            <button
+              type="button"
+              className="admin-rebuild"
+              onClick={() => void handleSnapshotRebuild()}
+              disabled={adminRebuilding}
+            >
+              {adminRebuilding ? t('detail.adminRebuildRunning') : t('detail.adminRebuild')}
+            </button>
+          </div>
+        )}
 
         {home && dist != null && (
           <div className="commute">
@@ -378,6 +589,14 @@ export function SchoolDetailSheet({ school, onClose, userData }: Props) {
             context={{ schoolId: school.id, prefecture: school.prefecture }}
           />
         ))}
+      </div>
+      <div className="sheet-bottom-bar" role="navigation" aria-label={t('detail.bottomBar')}>
+        <button className={`fav-toggle ${fav ? 'on' : ''}`} onClick={() => void handleFav()}>
+          <span className="s">★</span> {fav ? t('detail.favorited') : t('detail.interested')}
+        </button>
+        <button className="sheet-close-bar" onClick={onClose} aria-label={t('detail.closeBar')}>
+          ▼ {t('common.close')}
+        </button>
       </div>
     </div>
   )
