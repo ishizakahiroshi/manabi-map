@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import Markdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 import { useI18n } from '../contexts/I18nContext'
 
 interface Props {
@@ -40,7 +41,25 @@ export function LegalPage({ doc }: Props) {
       <main id="main-content" className="content legal-content" tabIndex={-1}>
         {error && <div className="error-banner" role="alert">{t('legal.loadFail')}</div>}
         {body == null && !error && <p>{t('common.loading')}</p>}
-        {body != null && <Markdown>{body}</Markdown>}
+        {body != null && (
+          <Markdown
+            remarkPlugins={[remarkGfm]}
+            components={{
+              a: ({ href, children, ...rest }) => (
+                <a
+                  href={href}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  {...rest}
+                >
+                  {children}
+                </a>
+              ),
+            }}
+          >
+            {body}
+          </Markdown>
+        )}
       </main>
     </div>
   )

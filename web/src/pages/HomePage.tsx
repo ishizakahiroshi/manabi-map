@@ -6,6 +6,7 @@ import { parsePostal, geocodeSearch, ACTIVE_GEOCODER, type GeocodeCandidate } fr
 import { trackEvent } from '../lib/analytics'
 import type { HomeLocation } from '../types/school'
 import { AdSlot } from './../components/AdSlot'
+import { HeroQr } from '../components/HeroQr'
 import { slotsForPlacement } from '../data/ad-slots'
 
 const DEMO_HOMES: Record<string, HomeLocation & { fill: string }> = {
@@ -44,10 +45,10 @@ export function HomePage() {
     } else {
       setHint({ text: t('home.searching'), tone: 'soft' })
     }
-    timer.current = setTimeout(() => void runSearch(v.trim(), !!local), 400)
+    timer.current = setTimeout(() => void runSearch(v.trim()), 400)
   }
 
-  const runSearch = async (query: string, hasPostal: boolean) => {
+  const runSearch = async (query: string) => {
     if (query === lastQuery.current) return
     lastQuery.current = query
     setSearching(true)
@@ -55,7 +56,8 @@ export function HomePage() {
       const items = await geocodeSearch(query)
       setCandidates(items)
       setSearchError(false)
-      if (items.length > 0 && !hasPostal) {
+      // 郵便番号でも、候補（Nominatim の正確地点）が取れたら暫定の県中心から着地点を格上げする。
+      if (items.length > 0) {
         pick(items[0])
       }
     } catch {
@@ -145,17 +147,22 @@ export function HomePage() {
 
   return (
     <main id="main-content" className="content home-content" tabIndex={-1}>
-      <h1 className="catch">
-        {t('home.catch1')}
-        <br />
-        <span className="accent">{t('home.catch2')}</span>
-        {t('home.catch3')}
-      </h1>
-      <p className="sub">
-        {t('home.sub1')}
-        <br />
-        {t('home.sub2')}
-      </p>
+      <div className="hero-row">
+        <div className="hero-text">
+          <h1 className="catch">
+            {t('home.catch1')}
+            <br />
+            <span className="accent">{t('home.catch2')}</span>
+            {t('home.catch3')}
+          </h1>
+          <p className="sub">
+            {t('home.sub1')}
+            <br />
+            {t('home.sub2')}
+          </p>
+        </div>
+        <HeroQr />
+      </div>
 
       <label htmlFor="q" className="form-label">
         {t('home.searchLabel')}
