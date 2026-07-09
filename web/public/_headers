@@ -9,3 +9,11 @@
   Referrer-Policy: strict-origin-when-cross-origin
   Permissions-Policy: camera=(), microphone=(), payment=(), usb=()
   Content-Security-Policy-Report-Only: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: https://tile.openstreetmap.org; connect-src 'self' https://*.supabase.co https://nominatim.openstreetmap.org; frame-ancestors 'none'
+
+# schools データの build hash 付き URL 化（plan_schools-json-cache-strategy.md）:
+# - manifest は常に最新を取る (no-store)
+# - hash 付き JSON は内容が URL に紐づくので永久キャッシュ可
+/schools-manifest.json
+  Cache-Control: no-store
+/schools-*.json
+  Cache-Control: public, max-age=31536000, immutable
