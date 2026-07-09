@@ -298,11 +298,19 @@ export function SchoolDetailSheet({ school, onClose, userData }: Props) {
       </div>
       <div className="body">
         <p className="detail-meta">
-          {[fmt.ownFull(school), fmt.genFull(school.gender_type), fmt.typeFull(school.type)].join(' / ')} —{' '}
-          {school.address}
+          {[fmt.ownFull(school), fmt.genFull(school.gender_type), fmt.typeFull(school.type)].join(' / ')}
         </p>
 
         <div className="info-grid">
+          {school.address && (
+            <div className="wide">
+              <span>{t('detail.address')}</span>
+              <b>
+                {school.postal_code ? `〒${school.postal_code}　` : ''}
+                {school.address}
+              </b>
+            </div>
+          )}
           <div>
             <span>{t('detail.course')}</span>
             <b>{fmt.courseTimeLabel(school)}</b>

@@ -291,6 +291,7 @@ export const en: MessageTree = {
     v02: 'Email / Instagram / X login is planned. Send feedback if you need it.',
   },
   detail: {
+    address: 'Address',
     course: 'Schedule',
     scale: 'Size',
     genderRatio: 'Gender ratio',
