@@ -35,12 +35,17 @@ export function SchoolDetailSheet({ school, onClose, userData }: Props) {
   const sheetRef = useRef<HTMLDivElement>(null)
   const touchStartY = useRef<number | null>(null)
   const touchCurrentY = useRef<number | null>(null)
-  const { favorites, notes, mine, toggleFavorite, setPriority, saveNote, saveMineValue, saveMineNote, saveMineConsent } = userData
+  const {
+    favorites, notes, mine, loading: userDataLoading,
+    toggleFavorite, setPriority, saveNote, saveMineValue, saveMineNote, saveMineConsent,
+  } = userData
 
   const [memo, setMemo] = useState('')
   const [commuteNote, setCommuteNote] = useState('')
   const [mineNote, setMineNote] = useState('')
   const [mineDeptDraft, setMineDeptDraft] = useState<Record<string, string>>({})
+  /** ユーザーが手編集したフィールドはサーバ再hydrateで上書きしない（保存によるデータ消失防止） */
+  const dirtyRef = useRef({ memo: false, commute: false, mineNote: false, depts: false })
   const [saving, setSaving] = useState(false)
   const [isAdmin, setIsAdmin] = useState(false)
   const [adminDraft, setAdminDraft] = useState<Record<string, string>>({})
@@ -72,11 +77,12 @@ export function SchoolDetailSheet({ school, onClose, userData }: Props) {
     if (!schoolId) return
     // 詳細シート開封（school 切替時に 1 回）。PII は載せない（school_id / prefecture のみ）
     trackEvent('detail_open', { school_id: schoolId, prefecture: school?.prefecture })
+    dirtyRef.current = { memo: false, commute: false, mineNote: false, depts: false }
     const n = notes[schoolId]
     setMemo(n?.note ?? '')
     setCommuteNote(n?.commute_note ?? '')
     setMineNote(mine[schoolId]?.note ?? '')
-    // 学科別ドラフトは mineRec から string へ再同期（school 切替時のみ）
+    // 学科別ドラフトは mineRec から string へ再同期（school 切替時）
     const src = mine[schoolId]?.depts ?? {}
     const next: Record<string, string> = {}
     for (const [k, v] of Object.entries(src)) next[k] = v == null ? '' : String(v)
@@ -87,9 +93,26 @@ export function SchoolDetailSheet({ school, onClose, userData }: Props) {
     setAdminOverride({})
     setAdminReason('')
     setAdminPin('')
-    // school 切替時のみ同期（notes/mine の参照更新でユーザー入力を上書きしない）
+    // school 切替時のみ初期同期（以降の notes/mine 到着は下の rehydrate effect へ）
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [schoolId])
+
+  // ログイン直後や userData 遅延到着で、未編集フィールドだけサーバ値に埋める。
+  // 編集済み（dirty）は触らない。保存時の空上書きによるデータ消失を防ぐ。
+  useEffect(() => {
+    if (!schoolId || userDataLoading) return
+    const n = notes[schoolId]
+    const m = mine[schoolId]
+    if (!dirtyRef.current.memo) setMemo(n?.note ?? '')
+    if (!dirtyRef.current.commute) setCommuteNote(n?.commute_note ?? '')
+    if (!dirtyRef.current.mineNote) setMineNote(m?.note ?? '')
+    if (!dirtyRef.current.depts) {
+      const src = m?.depts ?? {}
+      const next: Record<string, string> = {}
+      for (const [k, v] of Object.entries(src)) next[k] = v == null ? '' : String(v)
+      setMineDeptDraft(next)
+    }
+  }, [schoolId, userDataLoading, notes, mine])
 
   useEffect(() => {
     if (!session) {
@@ -162,10 +185,16 @@ export function SchoolDetailSheet({ school, onClose, userData }: Props) {
 
   const handleSave = async () => {
     if (requireLogin()) return
+    // userData 未到着のうちに空欄保存すると既存メモを上書きしてしまう
+    if (userDataLoading) {
+      toast(t('common.loading'))
+      return
+    }
     setSaving(true)
     try {
       await saveNote(school.id, memo, commuteNote)
       if (mineNote !== (mineRec?.note ?? '')) await saveMineNote(school.id, mineNote)
+      dirtyRef.current = { memo: false, commute: false, mineNote: false, depts: dirtyRef.current.depts }
       toast(t('detail.saveDone'))
     } catch {
       toast(t('detail.saveFail'))
@@ -194,6 +223,7 @@ export function SchoolDetailSheet({ school, onClose, userData }: Props) {
   }
 
   const handleMineClear = (departmentId: string) => {
+    dirtyRef.current.depts = true
     setMineDeptDraft((prev) => ({ ...prev, [departmentId]: '' }))
     void handleMineValue(departmentId, '')
   }
@@ -442,7 +472,10 @@ export function SchoolDetailSheet({ school, onClose, userData }: Props) {
                   max={80}
                   placeholder={t('common.dash')}
                   value={mineDeptDraft[d.id] ?? ''}
-                  onChange={(e) => setMineDeptDraft((prev) => ({ ...prev, [d.id]: e.target.value }))}
+                  onChange={(e) => {
+                    dirtyRef.current.depts = true
+                    setMineDeptDraft((prev) => ({ ...prev, [d.id]: e.target.value }))
+                  }}
                   onBlur={() => handleMineBlur(d.id)}
                   aria-label={t('detail.myRecordAria', { name: d.name })}
                 />
@@ -458,7 +491,10 @@ export function SchoolDetailSheet({ school, onClose, userData }: Props) {
             className="mine-note"
             placeholder={t('detail.myNotePlaceholder')}
             value={mineNote}
-            onChange={(e) => setMineNote(e.target.value)}
+            onChange={(e) => {
+              dirtyRef.current.mineNote = true
+              setMineNote(e.target.value)
+            }}
             aria-label={t('detail.myNoteAria')}
           />
           <label className="mine-consent">
@@ -579,7 +615,10 @@ export function SchoolDetailSheet({ school, onClose, userData }: Props) {
               id="commute-note"
               placeholder={t('detail.commutePlaceholder')}
               value={commuteNote}
-              onChange={(e) => setCommuteNote(e.target.value)}
+              onChange={(e) => {
+                dirtyRef.current.commute = true
+                setCommuteNote(e.target.value)
+              }}
             />
           </div>
         )}
@@ -589,7 +628,10 @@ export function SchoolDetailSheet({ school, onClose, userData }: Props) {
           <textarea
             placeholder={t('detail.memoPlaceholder')}
             value={memo}
-            onChange={(e) => setMemo(e.target.value)}
+            onChange={(e) => {
+              dirtyRef.current.memo = true
+              setMemo(e.target.value)
+            }}
             aria-label={t('detail.memoAria')}
           />
         </div>
