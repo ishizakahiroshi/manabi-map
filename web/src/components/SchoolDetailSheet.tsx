@@ -17,6 +17,7 @@ import { useEscapeKey } from '../hooks/useEscapeKey'
 import type { useUserData } from '../hooks/useUserData'
 import { trackEvent } from '../lib/analytics'
 import { supabase } from '../lib/supabase'
+import { MAINTENANCE_MODE } from '../lib/maintenance'
 import { AdSlot } from './AdSlot'
 import { slotsForPlacement } from '../data/ad-slots'
 
@@ -212,6 +213,10 @@ export function SchoolDetailSheet({ school, onClose, userData }: Props) {
 
   const handleAdminCorrection = async (departmentId: string) => {
     if (requireLogin()) return
+    if (MAINTENANCE_MODE) {
+      toast(t('maintenance.toast'))
+      return
+    }
     const raw = adminDraft[departmentId] ?? ''
     const nextValue = parseInt(raw, 10)
     if (Number.isNaN(nextValue) || nextValue < 20 || nextValue > 80) {
@@ -247,6 +252,10 @@ export function SchoolDetailSheet({ school, onClose, userData }: Props) {
 
   const handleSnapshotRebuild = async () => {
     if (requireLogin()) return
+    if (MAINTENANCE_MODE) {
+      toast(t('maintenance.toast'))
+      return
+    }
     setAdminRebuilding(true)
     try {
       const { error } = await supabase.functions.invoke('trigger-snapshot-rebuild', { body: {} })
