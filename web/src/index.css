@@ -733,6 +733,17 @@ body {
   box-shadow: 0 2px 0 var(--line);
 }
 
+/* メンテナンスモード（アプリ内読み取り専用）バナー
+   VITE_MAINTENANCE_MODE=1 の時のみ表示。オレンジ基調のブランドカラーで
+   OfflineBanner（warn 赤）と区別する。offline より下に重ねる（z-index）。 */
+.maintenance-banner {
+  position: absolute; top: 0; left: 0; right: 0;
+  background: var(--accent, #ff7a3d); color: #fff;
+  font-family: var(--body); font-weight: 700; font-size: 0.82rem;
+  text-align: center; padding: 7px 14px; z-index: 1150;
+  box-shadow: 0 2px 0 var(--line);
+}
+
 /* エラーバウンダリのフォールバック画面（C5・白画面回避） */
 .app-error {
   position: fixed; inset: 0; background: var(--bg);

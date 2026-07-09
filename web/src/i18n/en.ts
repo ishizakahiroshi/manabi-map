@@ -434,6 +434,10 @@ export const en: MessageTree = {
   offline: {
     message: 'You are offline. The map and school data may not load.',
   },
+  maintenance: {
+    banner: 'Maintenance in progress. You can browse, but saving favorites, memos, and personal records is paused.',
+    toast: 'Maintenance in progress',
+  },
   error: {
     title: 'Something went wrong',
     text: 'A problem occurred while loading the screen. Try again on a stable connection.',

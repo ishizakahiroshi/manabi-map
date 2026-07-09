@@ -17,6 +17,7 @@ import { Sidebar } from './components/Sidebar'
 import { LoginSheet } from './components/LoginSheet'
 import { Toast } from './components/Toast'
 import { OfflineBanner } from './components/OfflineBanner'
+import { MaintenanceBanner } from './components/MaintenanceBanner'
 import { BottomTabBar } from './components/BottomTabBar'
 
 export default function App() {
@@ -82,6 +83,7 @@ export default function App() {
         {showBottomTabs && <BottomTabBar />}
         <Sidebar favCount={favCount} noteCount={noteCount} />
         <LoginSheet />
+        <MaintenanceBanner />
         <OfflineBanner />
         <Toast />
       </div>
