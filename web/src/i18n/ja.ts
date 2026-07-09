@@ -277,7 +277,7 @@ export const ja: MessageTree = {
     note: '志望校の保存・家族への共有には LINE または Google ログインが必要です。',
     noteAnon: 'まず試したいだけなら「とりあえず試す」で始められます。',
     lineLink: 'LINE 連携でデータを引き継ぐ',
-    lineContinue: 'LINE で続ける',
+    lineContinue: 'LINE でログイン',
     googleLink: 'Google 連携でデータを引き継ぐ',
     googleLogin: 'Google でログイン',
     caution: '2 回目以降は前回と同じ方法でログインしてください（方法が違うと別のデータになります）。',
@@ -289,6 +289,14 @@ export const ja: MessageTree = {
     footer: 'ログインするとお気に入り・メモ・自宅住所が家族デバイスで共有できます。',
     footerAnon: '匿名で始めた場合も、あとから LINE / Google 連携でデータを引き継げます。',
     v02: 'メール / Instagram / X ログインは 今後対応予定。要望があれば「フィードバックを送る」から教えてください。',
+  },
+  authCallback: {
+    processing: 'ログイン処理中です…',
+    backToTop: 'トップに戻る',
+    identityAlreadyExists:
+      'このアカウントは既に別のユーザーで登録されています。\n一度ログアウトしてから、トップの「ログイン」→「LINE で続ける」で直接ログインしてください。',
+    timeout: 'ログイン処理がタイムアウトしました。通信環境を確認してもう一度お試しください。',
+    generic: 'ログイン処理に失敗しました（{detail}）。時間をおいてもう一度お試しください。',
   },
   detail: {
     address: '所在地',
