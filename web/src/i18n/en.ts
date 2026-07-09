@@ -277,7 +277,7 @@ export const en: MessageTree = {
     note: 'LINE or Google login is required to save favorites and share with family.',
     noteAnon: 'Or tap “Try as guest” to explore first.',
     lineLink: 'Link LINE to keep your data',
-    lineContinue: 'Continue with LINE',
+    lineContinue: 'Sign in with LINE',
     googleLink: 'Link Google to keep your data',
     googleLogin: 'Log in with Google',
     caution: 'Use the same login method next time (a different method creates a separate account).',
@@ -289,6 +289,14 @@ export const en: MessageTree = {
     footer: 'Logging in syncs favorites, memos, and home location across devices.',
     footerAnon: 'You can link LINE / Google later to keep guest data.',
     v02: 'Email / Instagram / X login is planned. Send feedback if you need it.',
+  },
+  authCallback: {
+    processing: 'Signing you in…',
+    backToTop: 'Back to top',
+    identityAlreadyExists:
+      'This account is already linked to another user.\nPlease log out first, then use “Continue with LINE” from the top page to sign in directly.',
+    timeout: 'Sign-in timed out. Please check your connection and try again.',
+    generic: 'Sign-in failed ({detail}). Please try again later.',
   },
   detail: {
     address: 'Address',
