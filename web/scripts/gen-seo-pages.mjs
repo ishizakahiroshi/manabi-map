@@ -23,7 +23,22 @@ const distArgIndex = process.argv.indexOf('--dist')
 const distDir = distArgIndex >= 0 ? process.argv[distArgIndex + 1] : join(webRoot, 'dist')
 
 const template = await readFile(join(distDir, 'index.html'), 'utf8')
-const schools = JSON.parse(await readFile(join(distDir, 'schools.json'), 'utf8'))
+
+// schools.json は build hash 付き URL 化されている（gen-schools-json.mjs）。
+// manifest → hash 付きファイル名の順で解決する。旧経路との互換として、
+// manifest が無い場合は従来の `schools.json` にフォールバックする。
+async function resolveSchoolsPath() {
+  try {
+    const manifestText = await readFile(join(distDir, 'schools-manifest.json'), 'utf8')
+    const manifest = JSON.parse(manifestText)
+    if (manifest?.url) return join(distDir, manifest.url.replace(/^\//, ''))
+  } catch (err) {
+    if (err?.code !== 'ENOENT') throw err
+  }
+  return join(distDir, 'schools.json')
+}
+const schoolsPath = await resolveSchoolsPath()
+const schools = JSON.parse(await readFile(schoolsPath, 'utf8'))
 
 function escapeHtml(value) {
   return String(value)
