@@ -291,6 +291,7 @@ export const ja: MessageTree = {
     v02: 'メール / Instagram / X ログインは 今後対応予定。要望があれば「フィードバックを送る」から教えてください。',
   },
   detail: {
+    address: '所在地',
     course: '課程',
     scale: '規模',
     genderRatio: '男女比',

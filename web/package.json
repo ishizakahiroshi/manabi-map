@@ -7,7 +7,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "pnpm fetch:tags && pnpm gen:schools-json && vite build",
+    "build": "pnpm fetch:tags && pnpm gen:schools-json && vite build && node scripts/gen-seo-pages.mjs",
     "fetch:tags": "git fetch --tags --depth=1 || true",
     "gen:schools-json": "node scripts/gen-schools-json.mjs",
     "typecheck": "tsc --noEmit -p tsconfig.app.json",
