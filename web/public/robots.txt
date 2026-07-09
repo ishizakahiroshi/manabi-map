@@ -1,0 +1,9 @@
+User-agent: *
+Allow: /
+Disallow: /auth/
+Disallow: /mypage
+Disallow: /favorites
+Disallow: /compare
+Disallow: /family/
+
+Sitemap: https://manabi-map.app/sitemap.xml
