@@ -27,8 +27,15 @@ function makeSchool(devs: (number | null)[]): School {
 }
 
 describe('shortSchoolName', () => {
-  it('県立接頭辞と高等学校を剥がす', () => {
+  it('群馬県立 + 高等学校を剥がす', () => {
     expect(shortSchoolName('群馬県立前橋高等学校')).toBe('前橋高校')
+  })
+  it('他県の県立も剥がす', () => {
+    expect(shortSchoolName('埼玉県立浦和高等学校')).toBe('浦和高校')
+    expect(shortSchoolName('神奈川県立横浜翠嵐高等学校')).toBe('横浜翠嵐高校')
+  })
+  it('東京都立を剥がす', () => {
+    expect(shortSchoolName('東京都立日比谷高等学校')).toBe('日比谷高校')
   })
   it('市名+市立+同市名 は市名までに', () => {
     expect(shortSchoolName('前橋市立前橋高等学校')).toBe('前橋高校')

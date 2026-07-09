@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { trackEvent } from '../lib/analytics'
 import { MAINTENANCE_MODE } from '../lib/maintenance'
@@ -34,6 +34,10 @@ export function useUserData(): UserData {
   const [notes, setNotes] = useState<Record<string, SchoolNote>>({})
   const [mine, setMine] = useState<Record<string, MineRecord>>({})
   const [loading, setLoading] = useState(false)
+  /** 連打で insert が二重に走らないよう school_id 単位で排他する */
+  const favoriteInFlight = useRef(new Set<string>())
+  const favoritesRef = useRef(favorites)
+  favoritesRef.current = favorites
 
   /**
    * メンテナンスモード中の書き込みガード。全 mutation の先頭で呼び、
@@ -54,6 +58,10 @@ export function useUserData(): UserData {
       return
     }
     let cancelled = false
+    // ユーザー切替時に前ユーザーのデータを一瞬でも見せない（取得完了前に空にする）
+    setFavorites({})
+    setNotes({})
+    setMine({})
     setLoading(true)
     void (async () => {
       const [favRes, noteRes, mineRes] = await Promise.all([
@@ -99,46 +107,61 @@ export function useUserData(): UserData {
   const toggleFavorite = useCallback(
     async (schoolId: string): Promise<boolean> => {
       if (!userId) throw new Error('not signed in')
-      if (blockedByMaintenance()) return Boolean(favorites[schoolId])
-      const prev = favorites[schoolId]
-      if (prev) {
-        setFavorites((cur) => {
-          const next = { ...cur }
-          delete next[schoolId]
-          return next
+      if (blockedByMaintenance()) return Boolean(favoritesRef.current[schoolId])
+      // 連打で同一 school の insert/delete が競合しないよう in-flight 排他
+      if (favoriteInFlight.current.has(schoolId)) {
+        return Boolean(favoritesRef.current[schoolId])
+      }
+      favoriteInFlight.current.add(schoolId)
+      try {
+        const prev = favoritesRef.current[schoolId]
+        if (prev) {
+          setFavorites((cur) => {
+            const next = { ...cur }
+            delete next[schoolId]
+            return next
+          })
+          const { error } = await supabase
+            .from('user_school_favorites')
+            .delete()
+            .eq('user_id', userId)
+            .eq('school_id', schoolId)
+          if (error) {
+            // DB 失敗時は楽観更新を巻き戻す（UI と DB の乖離防止）
+            setFavorites((cur) => ({ ...cur, [schoolId]: prev }))
+            throw error
+          }
+          return false
+        }
+        const fav: Favorite = { school_id: schoolId, priority: 3, status: 'interested' }
+        setFavorites((cur) => ({ ...cur, [schoolId]: fav }))
+        const { error } = await supabase.from('user_school_favorites').insert({
+          user_id: userId,
+          school_id: schoolId,
+          priority: fav.priority,
+          status: fav.status,
         })
-        const { error } = await supabase
-          .from('user_school_favorites')
-          .delete()
-          .eq('user_id', userId)
-          .eq('school_id', schoolId)
         if (error) {
-          // DB 失敗時は楽観更新を巻き戻す（UI と DB の乖離防止）
-          setFavorites((cur) => ({ ...cur, [schoolId]: prev }))
+          // unique 違反 = 既に登録済み（競合で先勝ちした insert）。UI はお気に入り済のまま成功扱い
+          const code = (error as { code?: string }).code
+          if (code === '23505') {
+            trackEvent('favorite_add', { school_id: schoolId })
+            return true
+          }
+          setFavorites((cur) => {
+            const next = { ...cur }
+            delete next[schoolId]
+            return next
+          })
           throw error
         }
-        return false
+        trackEvent('favorite_add', { school_id: schoolId })
+        return true
+      } finally {
+        favoriteInFlight.current.delete(schoolId)
       }
-      const fav: Favorite = { school_id: schoolId, priority: 3, status: 'interested' }
-      setFavorites((cur) => ({ ...cur, [schoolId]: fav }))
-      const { error } = await supabase.from('user_school_favorites').insert({
-        user_id: userId,
-        school_id: schoolId,
-        priority: fav.priority,
-        status: fav.status,
-      })
-      if (error) {
-        setFavorites((cur) => {
-          const next = { ...cur }
-          delete next[schoolId]
-          return next
-        })
-        throw error
-      }
-      trackEvent('favorite_add', { school_id: schoolId })
-      return true
     },
-    [userId, favorites, blockedByMaintenance],
+    [userId, blockedByMaintenance],
   )
 
   const setPriority = useCallback(
