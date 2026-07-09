@@ -469,6 +469,7 @@ body {
   margin-top: 12px; padding: 10px; border: 1px solid var(--line); border-radius: 12px; background: #fffaf2;
 }
 .info-grid div { min-width: 0; }
+.info-grid div.wide { grid-column: 1 / -1; }
 .info-grid span {
   display: block; color: var(--ink-soft); font-family: var(--display); font-weight: 700;
   font-size: 0.78rem; margin-bottom: 2px;
