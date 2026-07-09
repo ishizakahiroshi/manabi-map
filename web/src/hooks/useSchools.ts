@@ -119,7 +119,11 @@ async function fetchSchoolRows(): Promise<SchoolRow[]> {
     const manifestRes = await fetch('/schools-manifest.json', { cache: 'no-store' })
     if (manifestRes.ok) {
       const manifest = (await manifestRes.json()) as { url?: string }
-      if (typeof manifest.url === 'string' && manifest.url.length > 0) {
+      // 同一オリジンの schools JSON のみ許可（絶対 URL や path traversal を拒否）
+      if (
+        typeof manifest.url === 'string' &&
+        /^\/schools(?:-[0-9a-f]+)?\.json$/i.test(manifest.url)
+      ) {
         dataUrl = manifest.url
       }
     }
@@ -150,6 +154,8 @@ const listeners = new Set<Listener>()
 let cachedSchools: School[] | null = null
 let cacheError: string | null = null
 let inFlight: Promise<void> | null = null
+/** force 連打で古いレスポンスが新キャッシュを上書きしないための世代カウンタ */
+let loadGeneration = 0
 
 function emit(): void {
   for (const listener of listeners) listener()
@@ -158,15 +164,18 @@ function emit(): void {
 /** 学校データをロードする。cache があり force=false なら何もしない（再フェッチしない）。 */
 function loadSchools(force: boolean): Promise<void> {
   if (!force && cachedSchools != null) return Promise.resolve()
-  // 既に取得中なら、その完了を共有する（重複フェッチ防止）。
+  // 既に取得中なら、その完了を共有する（重複フェッチ防止）。force 時は新世代で取り直す。
   if (inFlight != null && !force) return inFlight
 
+  const gen = ++loadGeneration
   const run = async () => {
     try {
       const rows = await fetchSchoolRows()
+      if (gen !== loadGeneration) return
       cachedSchools = mapSchoolRows(rows)
       cacheError = null
     } catch {
+      if (gen !== loadGeneration) return
       cacheError = FETCH_ERROR_MESSAGE
     }
     emit()
@@ -176,8 +185,10 @@ function loadSchools(force: boolean): Promise<void> {
     if (inFlight === promise) inFlight = null
   })
   inFlight = promise
-  cacheError = null
-  emit()
+  if (gen === loadGeneration) {
+    cacheError = null
+    emit()
+  }
   return promise
 }
 

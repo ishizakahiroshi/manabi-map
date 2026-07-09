@@ -98,9 +98,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
   )
 
   // ログイン時: DB の自宅を読み込み。無ければ LocalStorage の仮住所を移送（§7.6.5）
+  // migratedFor は成功時のみ立てる（失敗時に再試行できるよう、エラーで固定しない）
   useEffect(() => {
     if (!session || migratedFor.current === session.user.id) return
-    migratedFor.current = session.user.id
+    const userId = session.user.id
     void (async () => {
       const { data, error: selErr } = await supabase
         .from('home_locations')
@@ -111,6 +112,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         console.error('home_locations load failed:', selErr.message)
         return
       }
+      migratedFor.current = userId
       if (data) {
         const h = { label: data.address, lat: Number(data.latitude), lng: Number(data.longitude) }
         setHomeState(h)
@@ -119,7 +121,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         const local = loadLocalHome()
         if (local) {
           const { error } = await supabase.from('home_locations').insert({
-            user_id: session.user.id,
+            user_id: userId,
             label: '自宅',
             address: local.label,
             latitude: local.lat,
