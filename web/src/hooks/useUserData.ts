@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { trackEvent } from '../lib/analytics'
+import { MAINTENANCE_MODE } from '../lib/maintenance'
+import { useApp } from '../contexts/AppContext'
 import { useAuth } from '../contexts/AuthContext'
+import { useI18n } from '../contexts/I18nContext'
 import type { Favorite, MineRecord, SchoolNote } from '../types/school'
 
 interface UserData {
@@ -24,11 +27,24 @@ const EMPTY_MINE: MineRecord = { depts: {}, note: '', visibility: 'private' }
 
 export function useUserData(): UserData {
   const { session } = useAuth()
+  const { toast } = useApp()
+  const { t } = useI18n()
   const userId = session?.user.id ?? null
   const [favorites, setFavorites] = useState<Record<string, Favorite>>({})
   const [notes, setNotes] = useState<Record<string, SchoolNote>>({})
   const [mine, setMine] = useState<Record<string, MineRecord>>({})
   const [loading, setLoading] = useState(false)
+
+  /**
+   * メンテナンスモード中の書き込みガード。全 mutation の先頭で呼び、
+   * 読み取り専用トーストを出して true を返した場合は呼び出し側が早期 return する。
+   * true 応答時は Supabase に一切書き込まない。
+   */
+  const blockedByMaintenance = useCallback((): boolean => {
+    if (!MAINTENANCE_MODE) return false
+    toast(t('maintenance.toast'))
+    return true
+  }, [toast, t])
 
   useEffect(() => {
     if (!userId) {
@@ -83,6 +99,7 @@ export function useUserData(): UserData {
   const toggleFavorite = useCallback(
     async (schoolId: string): Promise<boolean> => {
       if (!userId) throw new Error('not signed in')
+      if (blockedByMaintenance()) return Boolean(favorites[schoolId])
       const prev = favorites[schoolId]
       if (prev) {
         setFavorites((cur) => {
@@ -121,12 +138,13 @@ export function useUserData(): UserData {
       trackEvent('favorite_add', { school_id: schoolId })
       return true
     },
-    [userId, favorites],
+    [userId, favorites, blockedByMaintenance],
   )
 
   const setPriority = useCallback(
     async (schoolId: string, priority: number) => {
       if (!userId) throw new Error('not signed in')
+      if (blockedByMaintenance()) return
       const existing = favorites[schoolId]
       setFavorites((cur) => ({
         ...cur,
@@ -146,12 +164,13 @@ export function useUserData(): UserData {
         throw error
       }
     },
-    [userId, favorites],
+    [userId, favorites, blockedByMaintenance],
   )
 
   const saveNote = useCallback(
     async (schoolId: string, note: string, commuteNote: string) => {
       if (!userId) throw new Error('not signed in')
+      if (blockedByMaintenance()) return
       const prev = notes[schoolId]
       setNotes((cur) => ({ ...cur, [schoolId]: { school_id: schoolId, note, commute_note: commuteNote } }))
       const { error } = await supabase.from('user_school_notes').upsert(
@@ -175,7 +194,7 @@ export function useUserData(): UserData {
       }
       trackEvent('memo_save', { school_id: schoolId })
     },
-    [userId, notes],
+    [userId, notes, blockedByMaintenance],
   )
 
   /**
@@ -185,6 +204,7 @@ export function useUserData(): UserData {
   const saveMineValue = useCallback(
     async (schoolId: string, departmentId: string, value: number | null) => {
       if (!userId) throw new Error('not signed in')
+      if (blockedByMaintenance()) return
       const prev = mine[schoolId]
       const cur = prev ?? EMPTY_MINE
       const nextDepts = { ...cur.depts }
@@ -227,12 +247,13 @@ export function useUserData(): UserData {
         }
       }
     },
-    [userId, mine],
+    [userId, mine, blockedByMaintenance],
   )
 
   const saveMineNote = useCallback(
     async (schoolId: string, note: string) => {
       if (!userId) throw new Error('not signed in')
+      if (blockedByMaintenance()) return
       const prev = mine[schoolId]
       const cur = prev ?? EMPTY_MINE
       setMine((m) => ({ ...m, [schoolId]: { ...cur, note } }))
@@ -276,12 +297,13 @@ export function useUserData(): UserData {
         throw err
       }
     },
-    [userId, mine],
+    [userId, mine, blockedByMaintenance],
   )
 
   const saveMineConsent = useCallback(
     async (schoolId: string, submit: boolean) => {
       if (!userId) throw new Error('not signed in')
+      if (blockedByMaintenance()) return
       const visibility = submit ? 'submit_to_manabi' : 'private'
       const prev = mine[schoolId]
       const cur = prev ?? EMPTY_MINE
@@ -319,7 +341,7 @@ export function useUserData(): UserData {
         throw err
       }
     },
-    [userId, mine],
+    [userId, mine, blockedByMaintenance],
   )
 
   return {
