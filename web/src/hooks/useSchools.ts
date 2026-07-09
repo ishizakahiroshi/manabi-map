@@ -108,8 +108,27 @@ async function fetchSchoolRows(): Promise<SchoolRow[]> {
     return (data ?? []) as unknown as SchoolRow[]
   }
 
-  const response = await fetch('/schools.json')
-  if (!response.ok) throw new Error(`schools.json fetch failed: ${response.status}`)
+  // build hash 付き URL 化（docs/local/plan_schools-json-cache-strategy.md）:
+  // まず `/schools-manifest.json` を no-store で fetch し、そこに書かれた
+  // hash 付き URL（例: `/schools-abc1234567.json`）を続けて fetch する。
+  // manifest は常に fresh を取り、実体 JSON はブラウザ / CDN に永続キャッシュ可。
+  // dev サーバー（public/ 生成前）や旧デプロイ経路での fallback として、
+  // manifest 取得に失敗したら従来の `/schools.json` を試す。
+  let dataUrl = '/schools.json'
+  try {
+    const manifestRes = await fetch('/schools-manifest.json', { cache: 'no-store' })
+    if (manifestRes.ok) {
+      const manifest = (await manifestRes.json()) as { url?: string }
+      if (typeof manifest.url === 'string' && manifest.url.length > 0) {
+        dataUrl = manifest.url
+      }
+    }
+  } catch {
+    // manifest 取得に失敗しても、下の fallback で `/schools.json` を試す。
+  }
+
+  const response = await fetch(dataUrl)
+  if (!response.ok) throw new Error(`schools fetch failed: ${response.status} (${dataUrl})`)
   return (await response.json()) as SchoolRow[]
 }
 

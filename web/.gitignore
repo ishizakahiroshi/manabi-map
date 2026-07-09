@@ -11,6 +11,8 @@ node_modules
 dist
 dist-ssr
 public/schools.json
+public/schools-*.json
+public/schools-manifest.json
 *.local
 
 # Supabase CLI local state（project ref 等の機微情報を含む）
