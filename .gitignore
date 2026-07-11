@@ -19,8 +19,16 @@ desktop.ini
 .claude/
 .codex-tmp/
 
-# === wrangler キャッシュ（アカウント ID を含む・追跡しない） ===
+# === ツール生成キャッシュ（アカウント ID 等の識別子を含み得る・追跡しない） ===
 .wrangler/
+.vercel/
+.netlify/
+.firebase/
+.turbo/
+.parcel-cache/
+.terraform/
+.serverless/
+**/supabase/.temp/
 
 # === ローカル/プライベート追記（fresh public clone から除外） ===
 .env
