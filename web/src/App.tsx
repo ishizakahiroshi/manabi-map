@@ -19,6 +19,8 @@ import { Toast } from './components/Toast'
 import { OfflineBanner } from './components/OfflineBanner'
 import { MaintenanceBanner } from './components/MaintenanceBanner'
 import { BottomTabBar } from './components/BottomTabBar'
+import { DashboardPage } from './pages/DashboardPage'
+import { useIsAdmin } from './hooks/useIsAdmin'
 
 export default function App() {
   const navigate = useNavigate()
@@ -27,6 +29,7 @@ export default function App() {
   const { session, kind } = useAuth()
   const { t } = useI18n()
   const userData = useUserData()
+  const isAdmin = useIsAdmin()
 
   const favCount = Object.keys(userData.favorites).length
   const noteCount = useMemo(
@@ -78,10 +81,11 @@ export default function App() {
           <Route path="/legal/terms" element={<LegalPage doc="terms" />} />
           <Route path="/legal/privacy" element={<LegalPage doc="privacy" />} />
           <Route path="/legal/third-party" element={<LegalPage doc="third-party" />} />
+          <Route path="/dashboard" element={isAdmin ? <DashboardPage /> : <main id="main-content" className="page"><h1>ページが見つかりません</h1></main>} />
         </Routes>
 
         {showBottomTabs && <BottomTabBar />}
-        <Sidebar favCount={favCount} noteCount={noteCount} />
+        <Sidebar favCount={favCount} noteCount={noteCount} isAdmin={isAdmin} />
         <LoginSheet />
         <MaintenanceBanner />
         <OfflineBanner />
