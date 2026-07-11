@@ -19,6 +19,9 @@ desktop.ini
 .claude/
 .codex-tmp/
 
+# === wrangler キャッシュ（アカウント ID を含む・追跡しない） ===
+.wrangler/
+
 # === ローカル/プライベート追記（fresh public clone から除外） ===
 .env
 .env.*
