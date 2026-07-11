@@ -1,5 +1,6 @@
 import type { HomeLocation } from '../types/school'
 import {
+  ACTIVE_REGION,
   regionViewbox,
   prefectureForPostal3,
   addressInRegion,
@@ -311,8 +312,17 @@ export async function geocodeSearch(q: string): Promise<GeocodeCandidate[]> {
   return fallback.length > 0 ? fallback : nomi.length > 0 ? nomi : gsi
 }
 
+/**
+ * ホーム地点ラベルの短縮表示（「{label} の近く」向け）。
+ * アクティブなリージョン内の都道府県名は文脈上自明なので落とす（旧: 群馬県ハードコード）。
+ * 落とした結果が空・「周辺」だけ（例: 郵便番号の暫定ラベル「北海道周辺」）になる場合は元のまま返す。
+ */
 export function shortLabel(s: string): string {
-  return (s || '').split(',').slice(0, 2).join(',').replace(/群馬県/, '') || s
+  const base = (s || '').split(',').slice(0, 2).join(',')
+  let out = base
+  for (const p of ACTIVE_REGION.prefectures) out = out.replace(p.name, '')
+  out = out.replace(/^[\s,、]+|[\s,、]+$/g, '')
+  return out && out !== '周辺' ? out : base || s
 }
 
 export function googleMapsRoute(home: HomeLocation, school: { latitude: number; longitude: number }): string {
