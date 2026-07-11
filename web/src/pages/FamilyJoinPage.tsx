@@ -6,6 +6,12 @@ import { useFamilyShare } from '../hooks/useFamilyShare'
 
 const PENDING_KEY = 'mm.pending_family_invite'
 
+/**
+ * 同一 token の accept をモジュール単位で共有する。
+ * React StrictMode の二重マウントで「1 回目成功・2 回目 already used → error 表示」を防ぐ。
+ */
+const acceptInFlight = new Map<string, Promise<string>>()
+
 type JoinStatus = 'idle' | 'accepting' | 'done' | 'error' | 'need-login' | 'no-token'
 
 /**
@@ -45,12 +51,21 @@ export function FamilyJoinPage() {
     setStatus('accepting')
     void (async () => {
       try {
-        await acceptInvite(token)
-        if (cancelled) return
+        let pending = acceptInFlight.get(token)
+        if (!pending) {
+          pending = acceptInvite(token).finally(() => {
+            // 成功後も短時間残して StrictMode の再マウントに耐える
+            setTimeout(() => acceptInFlight.delete(token), 5000)
+          })
+          acceptInFlight.set(token, pending)
+        }
+        await pending
         try { localStorage.removeItem(PENDING_KEY) } catch { /* noop */ }
+        if (cancelled) return
         setStatus('done')
         setTimeout(() => navigate('/favorites', { replace: true }), 1200)
       } catch (err) {
+        acceptInFlight.delete(token)
         if (cancelled) return
         console.error('accept invite failed:', (err as Error)?.message)
         setStatus('error')

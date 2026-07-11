@@ -54,6 +54,8 @@ export function HomePage() {
     setSearching(true)
     try {
       const items = await geocodeSearch(query)
+      // 完了時に最新クエリでなければ捨てる（遅いレスポンスによる候補上書き防止）
+      if (query !== lastQuery.current) return
       setCandidates(items)
       setSearchError(false)
       // 郵便番号でも、候補（Nominatim の正確地点）が取れたら暫定の県中心から着地点を格上げする。
@@ -61,10 +63,15 @@ export function HomePage() {
         pick(items[0])
       }
     } catch {
+      if (query !== lastQuery.current) return
       setCandidates(null)
       setSearchError(true)
+      // 同一文字列での再試行を許す（失敗後に lastQuery が残るとリトライ不能になる）
+      lastQuery.current = ''
     } finally {
-      setSearching(false)
+      if (query === lastQuery.current || lastQuery.current === '') {
+        setSearching(false)
+      }
     }
   }
 

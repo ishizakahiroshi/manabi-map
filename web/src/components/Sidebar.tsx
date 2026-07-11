@@ -13,9 +13,10 @@ const FEEDBACK_URL = `${REPO_URL}/issues/new?labels=feedback&title=%E3%83%95%E3%
 interface SidebarProps {
   favCount: number
   noteCount: number
+  isAdmin: boolean
 }
 
-export function Sidebar({ favCount, noteCount }: SidebarProps) {
+export function Sidebar({ favCount, noteCount, isAdmin }: SidebarProps) {
   const { sidebarOpen, setSidebarOpen, setLoginOpen, toast } = useApp()
   const { session, kind, displayName, signOut } = useAuth()
   const { t, locale, setLocale } = useI18n()
@@ -97,6 +98,7 @@ export function Sidebar({ favCount, noteCount }: SidebarProps) {
               <span className="arrow" aria-hidden="true">›</span>
             </button>
           </div>
+          {isAdmin && <div className="sb-section"><button className="sb-item" onClick={() => go('/dashboard')}><span className="ic" aria-hidden="true">▦</span><span className="tx">管理ダッシュボード</span><span className="arrow" aria-hidden="true">›</span></button></div>}
 
           <div className="sb-section">
             <div className="sb-label">{t('nav.oss')}</div>

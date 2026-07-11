@@ -46,7 +46,7 @@ export function FamilyShareSheet({ open, onClose }: Props) {
 
   const schoolName = (id: string) => {
     const s = schools.find((x) => x.id === id)
-    return s ? shortSchoolName(s.name) : t('common.schoolUnknown')
+    return s ? shortSchoolName(s.name, s) : t('common.schoolUnknown')
   }
 
   const lineShareUrl = (inviteUrl: string): string => {

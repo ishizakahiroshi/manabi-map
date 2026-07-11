@@ -8,9 +8,9 @@
 
 [![License: AGPL-3.0-or-later](https://img.shields.io/badge/license-AGPL--3.0--or--later-blue.svg)](LICENSE)
 [![Data License: CC BY-SA 4.0](https://img.shields.io/badge/data-CC%20BY--SA%204.0-lightgrey.svg)](https://creativecommons.org/licenses/by-sa/4.0/)
-![Version: v0.2](https://img.shields.io/badge/version-v0.2%20関東版-orange.svg)
+![Version: v0.3](https://img.shields.io/badge/version-v0.3%20東日本版-orange.svg)
 
-**公開中 → https://manabi-map.app** （群馬県版・v0.2.0 関東展開はリリース準備中）
+**公開中 → https://manabi-map.app** （東日本 20 都道県・2,589 校に対応）
 
 ## 動作環境
 
@@ -58,8 +58,9 @@
 - **v0.1.3**（公開済）: 課程（全日/定時/通信）と連携校・全校生徒数・男女比・schools 静的化（Cloudflare Pages 経由）
 - **v0.1.4**（公開済）: nightly-backup (R2 + age)・AdSlot 骨組み・attribution UX 改修
 - **v0.1.5**（公開済）: データ層のフェイル・セーフ化（お気に入り楽観更新ロールバック等）・vitest 導入・Cloudflare Pages セキュリティヘッダ
-- **v0.2**（予定）: 関東 1 都 6 県への拡大・地図の表示改善（多数のピンの見せ方）
-- 以降: 家族共有・多言語対応・偏差値推計ロジックの公開などを検討
+- **v0.2**（公開済）: 関東 1 都 6 県 1,362 校への拡大・学科分類の master 化・SEO 基盤・偏差値修正ワークフロー
+- **v0.3**（公開済）: 東日本 20 都道県 2,589 校への拡大（北陸・甲信越・東北・北海道）・入試実績（募集/志願/受検/合格）の表示
+- 以降: 西日本展開・家族共有の拡充・多言語対応・偏差値推計ロジックの公開などを検討
 
 変更履歴の詳細は [CHANGELOG.md](CHANGELOG.md) を参照。
 
