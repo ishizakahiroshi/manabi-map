@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import type { School, Department } from '../types/school'
+import type { AdmissionStat, School, Department } from '../types/school'
 
 const FETCH_ERROR_MESSAGE = '学校データの取得に失敗しました。時間をおいて再読み込みしてください。'
 
@@ -42,6 +42,19 @@ interface SchoolRow {
   male_ratio?: number | null
   school_departments: DepartmentRow[]
   school_deviation_values: DeviationRow[]
+  school_admission_stats?: AdmissionStatRow[]
+}
+
+interface AdmissionStatRow {
+  id?: string
+  department_id: string | null
+  year: number
+  capacity: number | null
+  applicants: number | null
+  examinees: number | null
+  admitted: number | null
+  note: string | null
+  source_url: string | null
 }
 
 interface SchoolsState {
@@ -91,6 +104,7 @@ function mapSchoolRows(rows: SchoolRow[]): School[] {
         enrollment_year: r.enrollment_year ?? null,
         male_ratio: r.male_ratio ?? null,
         departments,
+        admission_stats: (r.school_admission_stats ?? []) as AdmissionStat[],
       }
     })
 }
@@ -101,7 +115,7 @@ async function fetchSchoolRows(): Promise<SchoolRow[]> {
     const { data, error } = await supabase
       .from('schools')
       .select(
-        '*, school_departments(id, school_id, name, course_type, ui_group), school_deviation_values(department_id, value, is_active)',
+        '*, school_departments(id, school_id, name, course_type, ui_group), school_deviation_values(department_id, value, is_active), school_admission_stats(id, department_id, year, capacity, applicants, examinees, admitted, note, source_url)',
       )
       .eq('is_active', true)
     if (error) throw error

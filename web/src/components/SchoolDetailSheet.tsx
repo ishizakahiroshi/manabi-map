@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type TouchEvent } from 'react'
-import type { School } from '../types/school'
+import type { AdmissionStat, School } from '../types/school'
 import {
   haversine,
   estimateWalkMinutes,
@@ -157,6 +157,21 @@ export function SchoolDetailSheet({ school, onClose, userData }: Props) {
   // DB 由来 URL は http(s) のみ許可（javascript: 等のスキームを href に通さない多層防御）
   const officialUrl =
     school.official_url && /^https?:\/\//i.test(school.official_url) ? school.official_url : null
+
+  const admissionByDepartment = new Map<string | null, AdmissionStat[]>()
+  for (const stat of school.admission_stats) {
+    const rows = admissionByDepartment.get(stat.department_id) ?? []
+    rows.push(stat)
+    admissionByDepartment.set(stat.department_id, rows)
+  }
+  const admissionRows = (departmentId: string | null): AdmissionStat[] =>
+    (admissionByDepartment.get(departmentId) ?? []).slice().sort((a, b) => b.year - a.year)
+  const admissionRatio = (stat: AdmissionStat): string | null => {
+    if (stat.capacity == null || stat.capacity <= 0 || stat.applicants == null) return null
+    return (stat.applicants / stat.capacity).toFixed(2)
+  }
+  const admissionValue = (value: number | null): string =>
+    value == null ? t('detail.admissionNoValue') : value.toLocaleString()
 
   const requireLogin = (): boolean => {
     if (session) return false
@@ -450,6 +465,62 @@ export function SchoolDetailSheet({ school, onClose, userData }: Props) {
             </a>
           </p>
         </div>
+
+        {school.admission_stats.length > 0 && (
+          <div className="admission-block">
+            <h4>📈 {t('detail.admissionTitle')}</h4>
+            <p className="sub">{t('detail.admissionSub')}</p>
+            {[
+              ...school.departments.map((d) => ({ id: d.id, name: d.name })),
+              ...(admissionRows(null).length > 0 ? [{ id: null, name: t('detail.admissionSchoolWide') }] : []),
+            ].map((group) => {
+              const rows = admissionRows(group.id)
+              if (rows.length === 0) return null
+              return (
+                <div className="admission-group" key={group.id ?? 'school'}>
+                  <h5>{group.name}</h5>
+                  <div className="admission-scroll">
+                    <table className="admission-table">
+                      <thead>
+                        <tr>
+                          <th>{t('detail.admissionYear')}</th>
+                          <th>{t('detail.admissionCapacity')}</th>
+                          <th>{t('detail.admissionApplicants')}</th>
+                          <th>{t('detail.admissionExaminees')}</th>
+                          <th>{t('detail.admissionAdmitted')}</th>
+                          <th>{t('detail.admissionRatio')}</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {rows.map((stat) => (
+                          <tr key={`${group.id ?? 'school'}-${stat.year}`}>
+                            <th scope="row">{stat.year}</th>
+                            <td>{admissionValue(stat.capacity)}</td>
+                            <td>{admissionValue(stat.applicants)}</td>
+                            <td>{admissionValue(stat.examinees)}</td>
+                            <td>{admissionValue(stat.admitted)}</td>
+                            <td>{admissionRatio(stat) ?? t('detail.admissionNoValue')}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  {rows.map((stat) => (
+                    <div className="admission-foot" key={`${group.id ?? 'school'}-${stat.year}-foot`}>
+                      {stat.note && <span>{t('detail.admissionNote', { note: stat.note })}</span>}
+                      {stat.source_url && /^https?:\/\//i.test(stat.source_url) && (
+                        <a href={stat.source_url} target="_blank" rel="noreferrer">
+                          {stat.year}: {t('detail.admissionSource')}
+                        </a>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )
+            })}
+            <p className="note">{t('detail.disclaimer')}</p>
+          </div>
+        )}
 
         <div className="mine-block">
           <h4>📊 {t('detail.myBlockTitle')}</h4>
