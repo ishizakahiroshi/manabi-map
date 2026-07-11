@@ -226,7 +226,7 @@ export async function searchGsi(q: string): Promise<GeocodeCandidate[]> {
 /**
  * 候補がアクティブなリージョン内か。
  * 1) リージョン内の県名を明示 → 圏内
- * 2) リージョン外の県名を明示（例: 関東版の「静岡県」） → 圏外（bbox の端に地理的に入っても除外）
+ * 2) リージョン外の県名を明示（例: 東日本版の「静岡県」） → 圏外（bbox の端に地理的に入っても除外）
  * 3) 県名が読み取れない → bbox で地理判定
  */
 function candidateInRegion(c: GeocodeCandidate): boolean {
@@ -272,7 +272,7 @@ async function fallbackTokens(q: string): Promise<GeocodeCandidate[]> {
 
 /**
  * provider 抽象。呼び出し側は provider を意識せずこれを使う。
- * アクティブなリージョン（いまは関東 1 都 6 県）に閉じた検索体験を提供する:
+ * アクティブなリージョン（いまは東日本 20 都道県）に閉じた検索体験を提供する:
  *   - 郵便番号 → Nominatim（リージョン内）。GSI は郵便番号を引けないため
  *   - 駅名     → Nominatim（リージョン優先）。GSI は駅を引けないため
  *   - 住所地名 → GSI（日本住所精度）→ リージョン内フィルタ&優先。圏内が無ければ Nominatim へ

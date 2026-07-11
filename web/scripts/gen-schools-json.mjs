@@ -50,7 +50,7 @@ const supabase = createClient(url, anonKey, {
 })
 
 const select =
-  '*, school_departments(id, school_id, name, course_type, ui_group), school_deviation_values(department_id, value, is_active)'
+  '*, school_departments(id, school_id, name, course_type, ui_group), school_deviation_values(department_id, value, is_active), school_admission_stats(id, department_id, year, capacity, applicants, examinees, admitted, note, source_url)'
 const pageSize = 1000
 const rows = []
 
