@@ -28,6 +28,7 @@ desktop.ini
 *.local.md
 *.local.json
 docs/local/
+scripts/local/
 
 # === DB ダンプ・バックアップ（本番 PII を含む可能性あり・public へ絶対に出さない） ===
 *.dump
