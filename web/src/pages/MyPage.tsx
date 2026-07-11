@@ -29,7 +29,7 @@ export function MyPage({ userData, favCount, noteCount }: Props) {
     () =>
       schools
         .filter((s) => notes[s.id]?.note || notes[s.id]?.commute_note)
-        .sort((a, b) => shortSchoolName(a.name).localeCompare(shortSchoolName(b.name), 'ja')),
+        .sort((a, b) => shortSchoolName(a.name, a).localeCompare(shortSchoolName(b.name, b), 'ja')),
     [schools, notes],
   )
 
@@ -40,7 +40,7 @@ export function MyPage({ userData, favCount, noteCount }: Props) {
           const record = mine[s.id]
           return !!record && (record.note.trim() !== '' || Object.values(record.depts).some((v) => v != null))
         })
-        .sort((a, b) => shortSchoolName(a.name).localeCompare(shortSchoolName(b.name), 'ja')),
+        .sort((a, b) => shortSchoolName(a.name, a).localeCompare(shortSchoolName(b.name, b), 'ja')),
     [schools, mine],
   )
 
@@ -121,7 +121,7 @@ export function MyPage({ userData, favCount, noteCount }: Props) {
               const text = (note?.note || note?.commute_note || '').split('\n')[0]
               return (
                 <button className="mypage-card" key={s.id} onClick={() => navigate(`/school/${s.id}`)}>
-                  <b>{shortSchoolName(s.name)}</b>
+                  <b>{shortSchoolName(s.name, s)}</b>
                   <small>{text}</small>
                 </button>
               )
@@ -145,7 +145,7 @@ export function MyPage({ userData, favCount, noteCount }: Props) {
                 .join(' / ')
               return (
                 <button className="mypage-card" key={s.id} onClick={() => navigate(`/school/${s.id}`)}>
-                  <b>{shortSchoolName(s.name)}</b>
+                  <b>{shortSchoolName(s.name, s)}</b>
                   <small>{values || record?.note || fmt.displayCode(s)}</small>
                 </button>
               )
