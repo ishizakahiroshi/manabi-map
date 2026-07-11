@@ -1,5 +1,6 @@
 import type { HomeLocation } from '../types/school'
 import {
+  ACTIVE_REGION,
   regionViewbox,
   prefectureForPostal3,
   addressInRegion,
@@ -226,7 +227,7 @@ export async function searchGsi(q: string): Promise<GeocodeCandidate[]> {
 /**
  * 候補がアクティブなリージョン内か。
  * 1) リージョン内の県名を明示 → 圏内
- * 2) リージョン外の県名を明示（例: 関東版の「静岡県」） → 圏外（bbox の端に地理的に入っても除外）
+ * 2) リージョン外の県名を明示（例: 東日本版の「静岡県」） → 圏外（bbox の端に地理的に入っても除外）
  * 3) 県名が読み取れない → bbox で地理判定
  */
 function candidateInRegion(c: GeocodeCandidate): boolean {
@@ -272,7 +273,7 @@ async function fallbackTokens(q: string): Promise<GeocodeCandidate[]> {
 
 /**
  * provider 抽象。呼び出し側は provider を意識せずこれを使う。
- * アクティブなリージョン（いまは関東 1 都 6 県）に閉じた検索体験を提供する:
+ * アクティブなリージョン（いまは東日本 20 都道県）に閉じた検索体験を提供する:
  *   - 郵便番号 → Nominatim（リージョン内）。GSI は郵便番号を引けないため
  *   - 駅名     → Nominatim（リージョン優先）。GSI は駅を引けないため
  *   - 住所地名 → GSI（日本住所精度）→ リージョン内フィルタ&優先。圏内が無ければ Nominatim へ
@@ -311,8 +312,17 @@ export async function geocodeSearch(q: string): Promise<GeocodeCandidate[]> {
   return fallback.length > 0 ? fallback : nomi.length > 0 ? nomi : gsi
 }
 
+/**
+ * ホーム地点ラベルの短縮表示（「{label} の近く」向け）。
+ * アクティブなリージョン内の都道府県名は文脈上自明なので落とす（旧: 群馬県ハードコード）。
+ * 落とした結果が空・「周辺」だけ（例: 郵便番号の暫定ラベル「北海道周辺」）になる場合は元のまま返す。
+ */
 export function shortLabel(s: string): string {
-  return (s || '').split(',').slice(0, 2).join(',').replace(/群馬県/, '') || s
+  const base = (s || '').split(',').slice(0, 2).join(',')
+  let out = base
+  for (const p of ACTIVE_REGION.prefectures) out = out.replace(p.name, '')
+  out = out.replace(/^[\s,、]+|[\s,、]+$/g, '')
+  return out && out !== '周辺' ? out : base || s
 }
 
 export function googleMapsRoute(home: HomeLocation, school: { latitude: number; longitude: number }): string {

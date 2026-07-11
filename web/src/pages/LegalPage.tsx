@@ -19,6 +19,7 @@ export function LegalPage({ doc }: Props) {
     doc === 'terms' ? t('nav.terms') : doc === 'privacy' ? t('nav.privacy') : t('nav.thirdParty')
 
   useEffect(() => {
+    let cancelled = false
     setBody(null)
     setError(false)
     fetch(`/legal/${doc}.md`)
@@ -26,8 +27,15 @@ export function LegalPage({ doc }: Props) {
         if (!r.ok) throw new Error(String(r.status))
         return r.text()
       })
-      .then(setBody)
-      .catch(() => setError(true))
+      .then((text) => {
+        if (!cancelled) setBody(text)
+      })
+      .catch(() => {
+        if (!cancelled) setError(true)
+      })
+    return () => {
+      cancelled = true
+    }
   }, [doc])
 
   return (
@@ -45,16 +53,21 @@ export function LegalPage({ doc }: Props) {
           <Markdown
             remarkPlugins={[remarkGfm]}
             components={{
-              a: ({ href, children, ...rest }) => (
-                <a
-                  href={href}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  {...rest}
-                >
-                  {children}
-                </a>
-              ),
+              a: ({ href, children, ...rest }) => {
+                // 第一党 markdown でも javascript: 等を href に通さない多層防御
+                const safe =
+                  href && /^(https?:|mailto:)/i.test(href) ? href : undefined
+                return (
+                  <a
+                    href={safe}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    {...rest}
+                  >
+                    {children}
+                  </a>
+                )
+              },
             }}
           >
             {body}

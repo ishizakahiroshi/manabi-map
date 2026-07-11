@@ -536,6 +536,23 @@ body {
 .depts .note { margin-top: 6px; font-size: 0.78rem; color: var(--ink-soft); }
 .depts .note a { color: var(--accent); }
 
+.admission-block {
+  margin-top: 14px; padding: 12px 14px; border: 2px solid var(--ink); border-radius: 14px; background: #fffaf2;
+}
+.admission-block h4 { margin: 0 0 6px; font-family: var(--display); font-size: 0.98rem; }
+.admission-block .sub { color: var(--ink-soft); font-size: 0.82rem; margin: 0 0 10px; }
+.admission-group { margin-top: 12px; }
+.admission-group h5 { margin: 0 0 5px; font-family: var(--display); font-size: 0.9rem; }
+.admission-scroll { overflow-x: auto; }
+.admission-table { width: 100%; min-width: 510px; border-collapse: collapse; font-size: 0.78rem; }
+.admission-table th, .admission-table td { padding: 6px 5px; border-bottom: 1px solid var(--line); text-align: right; white-space: nowrap; }
+.admission-table th:first-child, .admission-table td:first-child { text-align: left; }
+.admission-table thead th { color: var(--ink-soft); font-weight: 700; }
+.admission-table tbody th { font-weight: 700; }
+.admission-foot { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 5px; font-size: 0.74rem; color: var(--ink-soft); }
+.admission-foot a { color: var(--accent); }
+.admission-block > .note { margin: 9px 0 0; font-size: 0.78rem; color: var(--ink-soft); }
+
 .commute {
   margin-top: 16px; padding: 12px 14px; border: 2px solid var(--ink); border-radius: 14px;
   background: #fff9ef;
@@ -730,6 +747,17 @@ body {
   background: var(--warn); color: #fff;
   font-family: var(--body); font-weight: 700; font-size: 0.82rem;
   text-align: center; padding: 7px 14px; z-index: 1200;
+  box-shadow: 0 2px 0 var(--line);
+}
+
+/* メンテナンスモード（アプリ内読み取り専用）バナー
+   VITE_MAINTENANCE_MODE=1 の時のみ表示。オレンジ基調のブランドカラーで
+   OfflineBanner（warn 赤）と区別する。offline より下に重ねる（z-index）。 */
+.maintenance-banner {
+  position: absolute; top: 0; left: 0; right: 0;
+  background: var(--accent, #ff7a3d); color: #fff;
+  font-family: var(--body); font-weight: 700; font-size: 0.82rem;
+  text-align: center; padding: 7px 14px; z-index: 1150;
   box-shadow: 0 2px 0 var(--line);
 }
 

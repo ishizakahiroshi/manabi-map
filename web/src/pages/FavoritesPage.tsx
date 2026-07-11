@@ -87,7 +87,7 @@ export function FavoritesPage({ userData }: Props) {
               <span className="rank">{t('favorites.rank', { n: i + 1 })}</span>
               <span className="stars-inline" aria-hidden="true">{stars}</span>
               <h3>
-                {shortSchoolName(s.name)}（{fmt.displayCode(s)}：{fmt.devLabel(s)}）
+                {shortSchoolName(s.name, s)}（{fmt.displayCode(s)}：{fmt.devLabel(s)}）
               </h3>
               <div className="meta">
                 {fmt.ownFull(s)} / {fmt.genFull(s.gender_type)} /{' '}
