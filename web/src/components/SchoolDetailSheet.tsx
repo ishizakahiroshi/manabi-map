@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type TouchEvent } from 'react'
-import type { School } from '../types/school'
+import type { AdmissionStat, School } from '../types/school'
 import {
   haversine,
   estimateWalkMinutes,
@@ -17,6 +17,7 @@ import { useEscapeKey } from '../hooks/useEscapeKey'
 import type { useUserData } from '../hooks/useUserData'
 import { trackEvent } from '../lib/analytics'
 import { supabase } from '../lib/supabase'
+import { MAINTENANCE_MODE } from '../lib/maintenance'
 import { AdSlot } from './AdSlot'
 import { slotsForPlacement } from '../data/ad-slots'
 
@@ -34,12 +35,17 @@ export function SchoolDetailSheet({ school, onClose, userData }: Props) {
   const sheetRef = useRef<HTMLDivElement>(null)
   const touchStartY = useRef<number | null>(null)
   const touchCurrentY = useRef<number | null>(null)
-  const { favorites, notes, mine, toggleFavorite, setPriority, saveNote, saveMineValue, saveMineNote, saveMineConsent } = userData
+  const {
+    favorites, notes, mine, loading: userDataLoading,
+    toggleFavorite, setPriority, saveNote, saveMineValue, saveMineNote, saveMineConsent,
+  } = userData
 
   const [memo, setMemo] = useState('')
   const [commuteNote, setCommuteNote] = useState('')
   const [mineNote, setMineNote] = useState('')
   const [mineDeptDraft, setMineDeptDraft] = useState<Record<string, string>>({})
+  /** ユーザーが手編集したフィールドはサーバ再hydrateで上書きしない（保存によるデータ消失防止） */
+  const dirtyRef = useRef({ memo: false, commute: false, mineNote: false, depts: false })
   const [saving, setSaving] = useState(false)
   const [isAdmin, setIsAdmin] = useState(false)
   const [adminDraft, setAdminDraft] = useState<Record<string, string>>({})
@@ -71,11 +77,12 @@ export function SchoolDetailSheet({ school, onClose, userData }: Props) {
     if (!schoolId) return
     // 詳細シート開封（school 切替時に 1 回）。PII は載せない（school_id / prefecture のみ）
     trackEvent('detail_open', { school_id: schoolId, prefecture: school?.prefecture })
+    dirtyRef.current = { memo: false, commute: false, mineNote: false, depts: false }
     const n = notes[schoolId]
     setMemo(n?.note ?? '')
     setCommuteNote(n?.commute_note ?? '')
     setMineNote(mine[schoolId]?.note ?? '')
-    // 学科別ドラフトは mineRec から string へ再同期（school 切替時のみ）
+    // 学科別ドラフトは mineRec から string へ再同期（school 切替時）
     const src = mine[schoolId]?.depts ?? {}
     const next: Record<string, string> = {}
     for (const [k, v] of Object.entries(src)) next[k] = v == null ? '' : String(v)
@@ -86,9 +93,26 @@ export function SchoolDetailSheet({ school, onClose, userData }: Props) {
     setAdminOverride({})
     setAdminReason('')
     setAdminPin('')
-    // school 切替時のみ同期（notes/mine の参照更新でユーザー入力を上書きしない）
+    // school 切替時のみ初期同期（以降の notes/mine 到着は下の rehydrate effect へ）
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [schoolId])
+
+  // ログイン直後や userData 遅延到着で、未編集フィールドだけサーバ値に埋める。
+  // 編集済み（dirty）は触らない。保存時の空上書きによるデータ消失を防ぐ。
+  useEffect(() => {
+    if (!schoolId || userDataLoading) return
+    const n = notes[schoolId]
+    const m = mine[schoolId]
+    if (!dirtyRef.current.memo) setMemo(n?.note ?? '')
+    if (!dirtyRef.current.commute) setCommuteNote(n?.commute_note ?? '')
+    if (!dirtyRef.current.mineNote) setMineNote(m?.note ?? '')
+    if (!dirtyRef.current.depts) {
+      const src = m?.depts ?? {}
+      const next: Record<string, string> = {}
+      for (const [k, v] of Object.entries(src)) next[k] = v == null ? '' : String(v)
+      setMineDeptDraft(next)
+    }
+  }, [schoolId, userDataLoading, notes, mine])
 
   useEffect(() => {
     if (!session) {
@@ -134,6 +158,21 @@ export function SchoolDetailSheet({ school, onClose, userData }: Props) {
   const officialUrl =
     school.official_url && /^https?:\/\//i.test(school.official_url) ? school.official_url : null
 
+  const admissionByDepartment = new Map<string | null, AdmissionStat[]>()
+  for (const stat of school.admission_stats) {
+    const rows = admissionByDepartment.get(stat.department_id) ?? []
+    rows.push(stat)
+    admissionByDepartment.set(stat.department_id, rows)
+  }
+  const admissionRows = (departmentId: string | null): AdmissionStat[] =>
+    (admissionByDepartment.get(departmentId) ?? []).slice().sort((a, b) => b.year - a.year)
+  const admissionRatio = (stat: AdmissionStat): string | null => {
+    if (stat.capacity == null || stat.capacity <= 0 || stat.applicants == null) return null
+    return (stat.applicants / stat.capacity).toFixed(2)
+  }
+  const admissionValue = (value: number | null): string =>
+    value == null ? t('detail.admissionNoValue') : value.toLocaleString()
+
   const requireLogin = (): boolean => {
     if (session) return false
     setLoginOpen(true)
@@ -161,10 +200,16 @@ export function SchoolDetailSheet({ school, onClose, userData }: Props) {
 
   const handleSave = async () => {
     if (requireLogin()) return
+    // userData 未到着のうちに空欄保存すると既存メモを上書きしてしまう
+    if (userDataLoading) {
+      toast(t('common.loading'))
+      return
+    }
     setSaving(true)
     try {
       await saveNote(school.id, memo, commuteNote)
       if (mineNote !== (mineRec?.note ?? '')) await saveMineNote(school.id, mineNote)
+      dirtyRef.current = { memo: false, commute: false, mineNote: false, depts: dirtyRef.current.depts }
       toast(t('detail.saveDone'))
     } catch {
       toast(t('detail.saveFail'))
@@ -193,6 +238,7 @@ export function SchoolDetailSheet({ school, onClose, userData }: Props) {
   }
 
   const handleMineClear = (departmentId: string) => {
+    dirtyRef.current.depts = true
     setMineDeptDraft((prev) => ({ ...prev, [departmentId]: '' }))
     void handleMineValue(departmentId, '')
   }
@@ -212,6 +258,10 @@ export function SchoolDetailSheet({ school, onClose, userData }: Props) {
 
   const handleAdminCorrection = async (departmentId: string) => {
     if (requireLogin()) return
+    if (MAINTENANCE_MODE) {
+      toast(t('maintenance.toast'))
+      return
+    }
     const raw = adminDraft[departmentId] ?? ''
     const nextValue = parseInt(raw, 10)
     if (Number.isNaN(nextValue) || nextValue < 20 || nextValue > 80) {
@@ -247,6 +297,10 @@ export function SchoolDetailSheet({ school, onClose, userData }: Props) {
 
   const handleSnapshotRebuild = async () => {
     if (requireLogin()) return
+    if (MAINTENANCE_MODE) {
+      toast(t('maintenance.toast'))
+      return
+    }
     setAdminRebuilding(true)
     try {
       const { error } = await supabase.functions.invoke('trigger-snapshot-rebuild', { body: {} })
@@ -412,6 +466,62 @@ export function SchoolDetailSheet({ school, onClose, userData }: Props) {
           </p>
         </div>
 
+        {school.admission_stats.length > 0 && (
+          <div className="admission-block">
+            <h4>📈 {t('detail.admissionTitle')}</h4>
+            <p className="sub">{t('detail.admissionSub')}</p>
+            {[
+              ...school.departments.map((d) => ({ id: d.id, name: d.name })),
+              ...(admissionRows(null).length > 0 ? [{ id: null, name: t('detail.admissionSchoolWide') }] : []),
+            ].map((group) => {
+              const rows = admissionRows(group.id)
+              if (rows.length === 0) return null
+              return (
+                <div className="admission-group" key={group.id ?? 'school'}>
+                  <h5>{group.name}</h5>
+                  <div className="admission-scroll">
+                    <table className="admission-table">
+                      <thead>
+                        <tr>
+                          <th>{t('detail.admissionYear')}</th>
+                          <th>{t('detail.admissionCapacity')}</th>
+                          <th>{t('detail.admissionApplicants')}</th>
+                          <th>{t('detail.admissionExaminees')}</th>
+                          <th>{t('detail.admissionAdmitted')}</th>
+                          <th>{t('detail.admissionRatio')}</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {rows.map((stat) => (
+                          <tr key={`${group.id ?? 'school'}-${stat.year}`}>
+                            <th scope="row">{stat.year}</th>
+                            <td>{admissionValue(stat.capacity)}</td>
+                            <td>{admissionValue(stat.applicants)}</td>
+                            <td>{admissionValue(stat.examinees)}</td>
+                            <td>{admissionValue(stat.admitted)}</td>
+                            <td>{admissionRatio(stat) ?? t('detail.admissionNoValue')}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  {rows.map((stat) => (
+                    <div className="admission-foot" key={`${group.id ?? 'school'}-${stat.year}-foot`}>
+                      {stat.note && <span>{t('detail.admissionNote', { note: stat.note })}</span>}
+                      {stat.source_url && /^https?:\/\//i.test(stat.source_url) && (
+                        <a href={stat.source_url} target="_blank" rel="noreferrer">
+                          {stat.year}: {t('detail.admissionSource')}
+                        </a>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )
+            })}
+            <p className="note">{t('detail.disclaimer')}</p>
+          </div>
+        )}
+
         <div className="mine-block">
           <h4>📊 {t('detail.myBlockTitle')}</h4>
           <p className="sub">
@@ -433,7 +543,10 @@ export function SchoolDetailSheet({ school, onClose, userData }: Props) {
                   max={80}
                   placeholder={t('common.dash')}
                   value={mineDeptDraft[d.id] ?? ''}
-                  onChange={(e) => setMineDeptDraft((prev) => ({ ...prev, [d.id]: e.target.value }))}
+                  onChange={(e) => {
+                    dirtyRef.current.depts = true
+                    setMineDeptDraft((prev) => ({ ...prev, [d.id]: e.target.value }))
+                  }}
                   onBlur={() => handleMineBlur(d.id)}
                   aria-label={t('detail.myRecordAria', { name: d.name })}
                 />
@@ -449,7 +562,10 @@ export function SchoolDetailSheet({ school, onClose, userData }: Props) {
             className="mine-note"
             placeholder={t('detail.myNotePlaceholder')}
             value={mineNote}
-            onChange={(e) => setMineNote(e.target.value)}
+            onChange={(e) => {
+              dirtyRef.current.mineNote = true
+              setMineNote(e.target.value)
+            }}
             aria-label={t('detail.myNoteAria')}
           />
           <label className="mine-consent">
@@ -570,7 +686,10 @@ export function SchoolDetailSheet({ school, onClose, userData }: Props) {
               id="commute-note"
               placeholder={t('detail.commutePlaceholder')}
               value={commuteNote}
-              onChange={(e) => setCommuteNote(e.target.value)}
+              onChange={(e) => {
+                dirtyRef.current.commute = true
+                setCommuteNote(e.target.value)
+              }}
             />
           </div>
         )}
@@ -580,7 +699,10 @@ export function SchoolDetailSheet({ school, onClose, userData }: Props) {
           <textarea
             placeholder={t('detail.memoPlaceholder')}
             value={memo}
-            onChange={(e) => setMemo(e.target.value)}
+            onChange={(e) => {
+              dirtyRef.current.memo = true
+              setMemo(e.target.value)
+            }}
             aria-label={t('detail.memoAria')}
           />
         </div>

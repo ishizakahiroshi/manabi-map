@@ -27,8 +27,15 @@ function makeSchool(devs: (number | null)[]): School {
 }
 
 describe('shortSchoolName', () => {
-  it('県立接頭辞と高等学校を剥がす', () => {
+  it('群馬県立 + 高等学校を剥がす', () => {
     expect(shortSchoolName('群馬県立前橋高等学校')).toBe('前橋高校')
+  })
+  it('他県の県立も剥がす', () => {
+    expect(shortSchoolName('埼玉県立浦和高等学校')).toBe('浦和高校')
+    expect(shortSchoolName('神奈川県立横浜翠嵐高等学校')).toBe('横浜翠嵐高校')
+  })
+  it('東京都立を剥がす', () => {
+    expect(shortSchoolName('東京都立日比谷高等学校')).toBe('日比谷高校')
   })
   it('市名+市立+同市名 は市名までに', () => {
     expect(shortSchoolName('前橋市立前橋高等学校')).toBe('前橋高校')
@@ -41,6 +48,27 @@ describe('shortSchoolName', () => {
   })
   it('中等教育学校は中等に', () => {
     expect(shortSchoolName('群馬県立中央中等教育学校')).toBe('中央中等')
+  })
+  it('「立」を含まない公立正式名（北海道・宮城・長野）は school 情報付きで剥がす', () => {
+    const hokkaido = { ownership: 'prefectural', prefecture: '北海道' } as const
+    const miyagi = { ownership: 'prefectural', prefecture: '宮城県' } as const
+    const nagano = { ownership: 'prefectural', prefecture: '長野県' } as const
+    expect(shortSchoolName('北海道札幌南高等学校', hokkaido)).toBe('札幌南高校')
+    expect(shortSchoolName('宮城県仙台第一高等学校', miyagi)).toBe('仙台第一高校')
+    expect(shortSchoolName('長野県松本深志高等学校', nagano)).toBe('松本深志高校')
+  })
+  it('地名の「立科」型（蓼科）や school 情報なしでは接頭辞に触れない', () => {
+    const nagano = { ownership: 'prefectural', prefecture: '長野県' } as const
+    expect(shortSchoolName('長野県蓼科高等学校', nagano)).toBe('蓼科高校')
+    expect(shortSchoolName('北海道札幌南高等学校')).toBe('北海道札幌南高校')
+  })
+  it('私立の「北海道◯◯」ブランド名は剥がさない', () => {
+    const privateHokkaido = { ownership: 'private', prefecture: '北海道' } as const
+    expect(shortSchoolName('北海道科学大学高等学校', privateHokkaido)).toBe('北海道科学大学高校')
+  })
+  it('school 情報付きでも「立」あり県は従来どおり', () => {
+    const aomori = { ownership: 'prefectural', prefecture: '青森県' } as const
+    expect(shortSchoolName('青森県立青森高等学校', aomori)).toBe('青森高校')
   })
 })
 

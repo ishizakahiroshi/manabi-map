@@ -111,8 +111,10 @@ export const onRequest = async (context: Context): Promise<Response> => {
   if (!BOT_UA.test(ua)) return next();
 
   const id = params.id;
-  // uuid 以外（パストラバーサル等）は素通し
-  if (!/^[0-9a-fA-F-]{8,64}$/.test(id)) return next();
+  // UUID（8-4-4-4-12）以外は素通し（パストラバーサル・不正 id を REST に渡さない）
+  if (!/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(id)) {
+    return next();
+  }
 
   try {
     const school = await fetchSchool(env, id);

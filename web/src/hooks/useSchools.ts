@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import type { School, Department } from '../types/school'
+import type { AdmissionStat, School, Department } from '../types/school'
 
 const FETCH_ERROR_MESSAGE = '学校データの取得に失敗しました。時間をおいて再読み込みしてください。'
 
@@ -42,6 +42,19 @@ interface SchoolRow {
   male_ratio?: number | null
   school_departments: DepartmentRow[]
   school_deviation_values: DeviationRow[]
+  school_admission_stats?: AdmissionStatRow[]
+}
+
+interface AdmissionStatRow {
+  id?: string
+  department_id: string | null
+  year: number
+  capacity: number | null
+  applicants: number | null
+  examinees: number | null
+  admitted: number | null
+  note: string | null
+  source_url: string | null
 }
 
 interface SchoolsState {
@@ -91,6 +104,7 @@ function mapSchoolRows(rows: SchoolRow[]): School[] {
         enrollment_year: r.enrollment_year ?? null,
         male_ratio: r.male_ratio ?? null,
         departments,
+        admission_stats: (r.school_admission_stats ?? []) as AdmissionStat[],
       }
     })
 }
@@ -98,18 +112,52 @@ function mapSchoolRows(rows: SchoolRow[]): School[] {
 async function fetchSchoolRows(): Promise<SchoolRow[]> {
   if (import.meta.env.VITE_SCHOOLS_SOURCE === 'supabase') {
     const { supabase } = await import('../lib/supabase')
-    const { data, error } = await supabase
-      .from('schools')
-      .select(
-        '*, school_departments(id, school_id, name, course_type, ui_group), school_deviation_values(department_id, value, is_active)',
-      )
-      .eq('is_active', true)
-    if (error) throw error
-    return (data ?? []) as unknown as SchoolRow[]
+    // PostgREST（Supabase）は既定で最大 1000 行しか返さないため、
+    // gen-schools-json.mjs と同様に range でページングして全校取得する。
+    const pageSize = 1000
+    const rows: SchoolRow[] = []
+    for (let from = 0; ; from += pageSize) {
+      const { data, error } = await supabase
+        .from('schools')
+        .select(
+          '*, school_departments(id, school_id, name, course_type, ui_group), school_deviation_values(department_id, value, is_active), school_admission_stats(id, department_id, year, capacity, applicants, examinees, admitted, note, source_url)',
+        )
+        .eq('is_active', true)
+        .order('id', { ascending: true })
+        .range(from, from + pageSize - 1)
+      if (error) throw error
+      const page = (data ?? []) as unknown as SchoolRow[]
+      rows.push(...page)
+      if (page.length < pageSize) break
+    }
+    return rows
   }
 
-  const response = await fetch('/schools.json')
-  if (!response.ok) throw new Error(`schools.json fetch failed: ${response.status}`)
+  // build hash 付き URL 化（docs/local/plan_schools-json-cache-strategy.md）:
+  // まず `/schools-manifest.json` を no-store で fetch し、そこに書かれた
+  // hash 付き URL（例: `/schools-abc1234567.json`）を続けて fetch する。
+  // manifest は常に fresh を取り、実体 JSON はブラウザ / CDN に永続キャッシュ可。
+  // dev サーバー（public/ 生成前）や旧デプロイ経路での fallback として、
+  // manifest 取得に失敗したら従来の `/schools.json` を試す。
+  let dataUrl = '/schools.json'
+  try {
+    const manifestRes = await fetch('/schools-manifest.json', { cache: 'no-store' })
+    if (manifestRes.ok) {
+      const manifest = (await manifestRes.json()) as { url?: string }
+      // 同一オリジンの schools JSON のみ許可（絶対 URL や path traversal を拒否）
+      if (
+        typeof manifest.url === 'string' &&
+        /^\/schools(?:-[0-9a-f]+)?\.json$/i.test(manifest.url)
+      ) {
+        dataUrl = manifest.url
+      }
+    }
+  } catch {
+    // manifest 取得に失敗しても、下の fallback で `/schools.json` を試す。
+  }
+
+  const response = await fetch(dataUrl)
+  if (!response.ok) throw new Error(`schools fetch failed: ${response.status} (${dataUrl})`)
   return (await response.json()) as SchoolRow[]
 }
 
@@ -131,6 +179,8 @@ const listeners = new Set<Listener>()
 let cachedSchools: School[] | null = null
 let cacheError: string | null = null
 let inFlight: Promise<void> | null = null
+/** force 連打で古いレスポンスが新キャッシュを上書きしないための世代カウンタ */
+let loadGeneration = 0
 
 function emit(): void {
   for (const listener of listeners) listener()
@@ -139,15 +189,18 @@ function emit(): void {
 /** 学校データをロードする。cache があり force=false なら何もしない（再フェッチしない）。 */
 function loadSchools(force: boolean): Promise<void> {
   if (!force && cachedSchools != null) return Promise.resolve()
-  // 既に取得中なら、その完了を共有する（重複フェッチ防止）。
+  // 既に取得中なら、その完了を共有する（重複フェッチ防止）。force 時は新世代で取り直す。
   if (inFlight != null && !force) return inFlight
 
+  const gen = ++loadGeneration
   const run = async () => {
     try {
       const rows = await fetchSchoolRows()
+      if (gen !== loadGeneration) return
       cachedSchools = mapSchoolRows(rows)
       cacheError = null
     } catch {
+      if (gen !== loadGeneration) return
       cacheError = FETCH_ERROR_MESSAGE
     }
     emit()
@@ -157,8 +210,10 @@ function loadSchools(force: boolean): Promise<void> {
     if (inFlight === promise) inFlight = null
   })
   inFlight = promise
-  cacheError = null
-  emit()
+  if (gen === loadGeneration) {
+    cacheError = null
+    emit()
+  }
   return promise
 }
 

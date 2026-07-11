@@ -40,6 +40,18 @@ export interface Department {
   deviation: number | null
 }
 
+export interface AdmissionStat {
+  id?: string
+  department_id: string | null
+  year: number
+  capacity: number | null
+  applicants: number | null
+  examinees: number | null
+  admitted: number | null
+  note: string | null
+  source_url: string | null
+}
+
 export interface School {
   id: string
   name: string
@@ -64,6 +76,7 @@ export interface School {
   enrollment_year: number | null
   male_ratio: number | null
   departments: Department[]
+  admission_stats: AdmissionStat[]
 }
 
 export interface Favorite {
