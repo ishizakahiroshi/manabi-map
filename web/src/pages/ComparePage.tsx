@@ -105,7 +105,7 @@ export function ComparePage({ userData }: Props) {
                       aria-pressed={on}
                     >
                       {on ? '✓ ' : ''}
-                      {shortSchoolName(s.name)}
+                      {shortSchoolName(s.name, s)}
                     </button>
                   )
                 })}
@@ -131,7 +131,7 @@ export function ComparePage({ userData }: Props) {
                     return (
                       <article className="compare-col" key={s.id}>
                         <div className="cc-head">
-                          <h3>{shortSchoolName(s.name)}</h3>
+                          <h3>{shortSchoolName(s.name, s)}</h3>
                           <div className="cc-sub">
                             {fmt.displayCode(s)} ・ {fmt.ownFull(s)} / {fmt.genFull(s.gender_type)} ・{' '}
                             <span className="cc-stars">{'★'.repeat(pri) || '☆'}</span>

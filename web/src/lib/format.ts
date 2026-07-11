@@ -25,11 +25,33 @@ export const CAMPUS_TYPE_FULL: Record<string, string> = {
 }
 
 /**
+ * 公立の正式名称に「立」を含めない都道府県（北海道◯◯高等学校 / 宮城県◯◯高等学校 /
+ * 長野県◯◯高等学校 形式）。この 3 道県は接頭辞を正規表現（[都道府県]立）で判別できないため、
+ * 設置者が prefectural と分かる場合のみ都道府県名そのものを剥がす。
+ * 「立」を機械的に剥がさないのは「長野県立科高等学校」型（地名の立科）を守るため。
+ */
+const PREF_WITHOUT_RITSU = new Set(['北海道', '宮城県', '長野県'])
+
+/**
  * 地図ピン・一覧カード用の短縮校名。設置者情報は §7.7 の運営コード（県/市/国/私/組）で
  * 併記されるため、名称からは冗長な設置者接頭辞と「高等学校」を落とす。
  * 例: 群馬県立前橋高等学校 → 前橋高校 / 群馬工業高等専門学校 → 群馬工業高専
+ *
+ * school（ownership + prefecture）を渡すと、「立」を含まない公立正式名
+ * （例: 北海道札幌南高等学校 → 札幌南高校）も短縮できる。私立の「北海道◯◯」等の
+ * 校名ブランドを誤って剥がさないよう、public 判定できない場合は接頭辞に触れない。
  */
-export function shortSchoolName(name: string): string {
+export function shortSchoolName(
+  name: string,
+  school?: Pick<School, 'ownership' | 'prefecture'>,
+): string {
+  if (
+    school?.ownership === 'prefectural' &&
+    PREF_WITHOUT_RITSU.has(school.prefecture) &&
+    name.startsWith(school.prefecture)
+  ) {
+    name = name.slice(school.prefecture.length)
+  }
   return name
     // 都道府県名 + 都/道/府/県 + 立（例: 群馬県立 / 埼玉県立 / 東京都立 / 北海道立 / 大阪府立）
     .replace(/^.+?[都道府県]立/, '')

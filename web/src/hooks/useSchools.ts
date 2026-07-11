@@ -112,14 +112,25 @@ function mapSchoolRows(rows: SchoolRow[]): School[] {
 async function fetchSchoolRows(): Promise<SchoolRow[]> {
   if (import.meta.env.VITE_SCHOOLS_SOURCE === 'supabase') {
     const { supabase } = await import('../lib/supabase')
-    const { data, error } = await supabase
-      .from('schools')
-      .select(
-        '*, school_departments(id, school_id, name, course_type, ui_group), school_deviation_values(department_id, value, is_active), school_admission_stats(id, department_id, year, capacity, applicants, examinees, admitted, note, source_url)',
-      )
-      .eq('is_active', true)
-    if (error) throw error
-    return (data ?? []) as unknown as SchoolRow[]
+    // PostgREST（Supabase）は既定で最大 1000 行しか返さないため、
+    // gen-schools-json.mjs と同様に range でページングして全校取得する。
+    const pageSize = 1000
+    const rows: SchoolRow[] = []
+    for (let from = 0; ; from += pageSize) {
+      const { data, error } = await supabase
+        .from('schools')
+        .select(
+          '*, school_departments(id, school_id, name, course_type, ui_group), school_deviation_values(department_id, value, is_active), school_admission_stats(id, department_id, year, capacity, applicants, examinees, admitted, note, source_url)',
+        )
+        .eq('is_active', true)
+        .order('id', { ascending: true })
+        .range(from, from + pageSize - 1)
+      if (error) throw error
+      const page = (data ?? []) as unknown as SchoolRow[]
+      rows.push(...page)
+      if (page.length < pageSize) break
+    }
+    return rows
   }
 
   // build hash 付き URL 化（docs/local/plan_schools-json-cache-strategy.md）:

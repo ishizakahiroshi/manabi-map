@@ -67,7 +67,10 @@ export const EAST_JAPAN: Region = {
     { name: '埼玉県', postal3: [[330, 369]], center: { lat: 35.8617, lng: 139.6455 }, label: '埼玉県周辺' },
     { name: '群馬県', postal3: [[370, 379]], center: { lat: 36.3895, lng: 139.0634 }, label: '群馬県周辺' },
   ],
-  bbox: [135.8, 34.8, 146.0, 45.7],
+  // 西端 135.4 = 福井県嶺南（小浜・高浜）を含む / 南端 26.9 = 東京都島嶼部
+  // （伊豆諸島・小笠原）を含む。136〜146E の低緯度帯はほぼ海域で、bbox に入る
+  // 紀伊半島南岸などの圏外県は namesForeignPrefecture の県名判定で除外される。
+  bbox: [135.4, 26.9, 146.0, 45.7],
   mapCenter: { lat: 40.4, lng: 140.4 },
   mapZoom: 5,
 }

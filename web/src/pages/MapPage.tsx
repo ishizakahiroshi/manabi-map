@@ -142,7 +142,7 @@ function schoolIcon(
     iconAnchor: [100, home ? 70 : 56],
     html: `<div class="pin ${isFav ? 'fav' : ''}" ${b != null ? `data-band="${b}"` : ''}>
       <div class="label">
-        <div class="label-name">${escapeHtml(shortSchoolName(s.name))}</div>
+        <div class="label-name">${escapeHtml(shortSchoolName(s.name, s))}</div>
         <div class="label-dev">${escapeHtml(code)}<span class="dev-value">${escapeHtml(dev)}</span>${badge}</div>
         ${commute}
       </div>
@@ -451,7 +451,7 @@ export function MapPage({ userData }: Props) {
   }, [favorites, home, visibleSchools, fmt, t])
 
   const sortedVisible = useMemo(
-    () => [...visibleSchools].sort((a, b) => shortSchoolName(a.name).localeCompare(shortSchoolName(b.name), 'ja')),
+    () => [...visibleSchools].sort((a, b) => shortSchoolName(a.name, a).localeCompare(shortSchoolName(b.name, b), 'ja')),
     [visibleSchools],
   )
 
@@ -677,7 +677,7 @@ export function MapPage({ userData }: Props) {
             {sortedVisible.map((s) => (
               <li key={s.id}>
                 <button type="button" className="school-list-item" onClick={() => setDetail(s)}>
-                  <span className="school-list-name">{shortSchoolName(s.name)}</span>
+                  <span className="school-list-name">{shortSchoolName(s.name, s)}</span>
                   <span className="school-list-meta">
                     {fmt.displayCode(s)}：{fmt.devLabel(s)}
                   </span>
@@ -720,7 +720,7 @@ export function MapPage({ userData }: Props) {
               favSchools.map((s) => (
                 <button type="button" className="row" key={s.id} onClick={() => setDetail(s)}>
                   <span className="star" aria-hidden="true">★</span>
-                  <span className="name">{shortSchoolName(s.name)}</span>
+                  <span className="name">{shortSchoolName(s.name, s)}</span>
                   <span className="badge">
                     {fmt.displayCode(s)}：{fmt.devLabel(s)}
                   </span>
