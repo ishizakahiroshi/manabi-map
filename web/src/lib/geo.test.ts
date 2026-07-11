@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { parsePostal, haversine } from './geo'
 
 describe('parsePostal', () => {
-  // ACTIVE_REGION = 関東 1 都 6 県。郵便番号上 3 桁は県単位の暫定ラベル（都市名ではない）。
+  // ACTIVE_REGION = 東日本 20 都道県。郵便番号上 3 桁は県単位の暫定ラベル（都市名ではない）。
   it('半角ハイフン付き（現行受理）', () => {
     expect(parsePostal('371-0026')?.label).toBe('群馬県周辺')
   })
@@ -25,12 +25,20 @@ describe('parsePostal', () => {
   it('〒+全角の混在', () => {
     expect(parsePostal('〒３７１ー００２６')?.label).toBe('群馬県周辺')
   })
-  it('関東内の他県も受理', () => {
+  it('東日本内の他県も受理', () => {
     expect(parsePostal('100-0001')?.label).toBe('東京都周辺')
+    expect(parsePostal('060-0001')?.label).toBe('北海道周辺')
+    expect(parsePostal('980-0001')?.label).toBe('宮城県周辺')
+  })
+  it('北海道の非連続レンジを判定', () => {
+    expect(parsePostal('000-0001')?.label).toBe('北海道周辺')
+    expect(parsePostal('009-0001')?.label).toBe('北海道周辺')
+    expect(parsePostal('040-0001')?.label).toBe('北海道周辺')
+    expect(parsePostal('010-0001')?.label).toBe('秋田県周辺')
   })
   it('リージョン外の 3 桁は null', () => {
-    // 400 台 = 山梨・静岡付近（ACTIVE_REGION 外）
-    expect(parsePostal('400-0001')).toBe(null)
+    // 530 台 = 大阪府（ACTIVE_REGION 外）
+    expect(parsePostal('530-0001')).toBe(null)
   })
   it('英字混入は null', () => {
     expect(parsePostal('abc-defg')).toBe(null)

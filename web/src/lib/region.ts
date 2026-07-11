@@ -13,8 +13,8 @@
 export interface RegionPrefecture {
   /** 正式名称（「東京都」「群馬県」…）。住所文字列マッチと圏内判定に使う */
   name: string
-  /** 郵便番号 上 3 桁の範囲 [min, max]（両端含む） */
-  postal3: [number, number]
+  /** 郵便番号 上 3 桁の範囲（両端含む）。北海道のような非連続地域に対応する。 */
+  postal3: Array<[number, number]>
   /** 郵便番号しか分からないときの暫定代表点（県の中心付近）。正確な地点は後で geocoder が上書きする */
   center: { lat: number; lng: number }
   /** 暫定表示ラベル（「東京都周辺」など） */
@@ -37,33 +37,49 @@ export interface Region {
 }
 
 /**
- * 関東 1 都 6 県（東京・神奈川・埼玉・千葉・茨城・栃木・群馬）。
- * 郵便番号の上 3 桁は 100〜379 にほぼ連続で収まる。
+ * 東日本 20 都道県（北海道・東北・北陸・甲信越・関東）。
+ * 北海道の郵便番号は 001〜009 と 040〜099 に分かれるため、郵便番号範囲は配列で持つ。
  * center は県庁所在地付近（郵便番号だけの暫定着地用。正確な地点は geocoder が引き直す）。
  */
-export const KANTO: Region = {
-  id: 'kanto',
-  labelJa: '関東 1 都 6 県',
-  labelEn: 'Greater Tokyo (Kanto)',
+export const EAST_JAPAN: Region = {
+  id: 'east-japan',
+  labelJa: '東日本 20 都道県',
+  labelEn: 'Eastern Japan (20 prefectures)',
   prefectures: [
-    { name: '東京都', postal3: [100, 208], center: { lat: 35.6895, lng: 139.6917 }, label: '東京都周辺' },
-    { name: '神奈川県', postal3: [210, 259], center: { lat: 35.4478, lng: 139.6425 }, label: '神奈川県周辺' },
-    { name: '千葉県', postal3: [260, 299], center: { lat: 35.6074, lng: 140.1065 }, label: '千葉県周辺' },
-    { name: '茨城県', postal3: [300, 319], center: { lat: 36.3418, lng: 140.4468 }, label: '茨城県周辺' },
-    { name: '栃木県', postal3: [320, 329], center: { lat: 36.5658, lng: 139.8836 }, label: '栃木県周辺' },
-    { name: '埼玉県', postal3: [330, 369], center: { lat: 35.8617, lng: 139.6455 }, label: '埼玉県周辺' },
-    { name: '群馬県', postal3: [370, 379], center: { lat: 36.3895, lng: 139.0634 }, label: '群馬県周辺' },
+    { name: '北海道', postal3: [[0, 9], [40, 99]], center: { lat: 43.0642, lng: 141.3469 }, label: '北海道周辺' },
+    { name: '青森県', postal3: [[30, 39]], center: { lat: 40.8244, lng: 140.7400 }, label: '青森県周辺' },
+    { name: '岩手県', postal3: [[20, 29]], center: { lat: 39.7036, lng: 141.1527 }, label: '岩手県周辺' },
+    { name: '宮城県', postal3: [[980, 989]], center: { lat: 38.2682, lng: 140.8694 }, label: '宮城県周辺' },
+    { name: '秋田県', postal3: [[10, 19]], center: { lat: 39.7186, lng: 140.1024 }, label: '秋田県周辺' },
+    { name: '山形県', postal3: [[990, 999]], center: { lat: 38.2404, lng: 140.3633 }, label: '山形県周辺' },
+    { name: '福島県', postal3: [[960, 979]], center: { lat: 37.7608, lng: 140.4747 }, label: '福島県周辺' },
+    { name: '新潟県', postal3: [[940, 959]], center: { lat: 37.9026, lng: 139.0232 }, label: '新潟県周辺' },
+    { name: '富山県', postal3: [[930, 939]], center: { lat: 36.6953, lng: 137.2113 }, label: '富山県周辺' },
+    { name: '石川県', postal3: [[920, 929]], center: { lat: 36.5947, lng: 136.6256 }, label: '石川県周辺' },
+    { name: '福井県', postal3: [[910, 919]], center: { lat: 36.0652, lng: 136.2216 }, label: '福井県周辺' },
+    { name: '山梨県', postal3: [[400, 409]], center: { lat: 35.6642, lng: 138.5684 }, label: '山梨県周辺' },
+    { name: '長野県', postal3: [[380, 399]], center: { lat: 36.6513, lng: 138.1810 }, label: '長野県周辺' },
+    { name: '東京都', postal3: [[100, 208]], center: { lat: 35.6895, lng: 139.6917 }, label: '東京都周辺' },
+    { name: '神奈川県', postal3: [[210, 259]], center: { lat: 35.4478, lng: 139.6425 }, label: '神奈川県周辺' },
+    { name: '千葉県', postal3: [[260, 299]], center: { lat: 35.6074, lng: 140.1065 }, label: '千葉県周辺' },
+    { name: '茨城県', postal3: [[300, 319]], center: { lat: 36.3418, lng: 140.4468 }, label: '茨城県周辺' },
+    { name: '栃木県', postal3: [[320, 329]], center: { lat: 36.5658, lng: 139.8836 }, label: '栃木県周辺' },
+    { name: '埼玉県', postal3: [[330, 369]], center: { lat: 35.8617, lng: 139.6455 }, label: '埼玉県周辺' },
+    { name: '群馬県', postal3: [[370, 379]], center: { lat: 36.3895, lng: 139.0634 }, label: '群馬県周辺' },
   ],
-  bbox: [138.4, 34.9, 140.9, 37.16],
-  mapCenter: { lat: 36.05, lng: 139.6 },
-  mapZoom: 9,
+  bbox: [135.8, 34.8, 146.0, 45.7],
+  mapCenter: { lat: 40.4, lng: 140.4 },
+  mapZoom: 5,
 }
+
+/** 後方互換用。既存の関東固有コードを壊さず、アクティブ地域だけを東日本へ切り替える。 */
+export const KANTO: Region = EAST_JAPAN
 
 /**
  * いまアクティブな地方。全国展開時はここを差し替える（将来は複数リージョン選択も想定）。
- * 現在は関東 1 都 6 県だけをアクティブにして、そこをベストに仕上げる。
+ * 現在は東日本 20 都道県をアクティブにして、そこをベストに仕上げる。
  */
-export const ACTIVE_REGION: Region = KANTO
+export const ACTIVE_REGION: Region = EAST_JAPAN
 
 /**
  * Nominatim の viewbox 文字列（"west,north,east,south" 順）。
@@ -76,7 +92,7 @@ export function regionViewbox(r: Region = ACTIVE_REGION): string {
 
 /** 郵便番号 上 3 桁（数値）が属する都道府県。範囲外（圏外）なら null */
 export function prefectureForPostal3(n: number, r: Region = ACTIVE_REGION): RegionPrefecture | null {
-  return r.prefectures.find((p) => n >= p.postal3[0] && n <= p.postal3[1]) ?? null
+  return r.prefectures.find((p) => p.postal3.some(([min, max]) => n >= min && n <= max)) ?? null
 }
 
 /** 住所・表示名テキストにリージョン内の都道府県名が含まれるか */
