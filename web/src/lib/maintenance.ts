@@ -11,10 +11,12 @@
  * - 読み取り系（地図・詳細閲覧・お気に入り一覧の閲覧）は動作させる
  * - 認証状態は維持する（ログイン画面も動作）
  *
- * フラグ方式: **env var `VITE_MAINTENANCE_MODE=1`**。理由:
+ * フラグ方式: env var `VITE_MAINTENANCE_MODE=1` は DB に到達できない場合の
+ * 緊急保険として残し、通常運用では app_config の runtime フラグを使う。
+ * env var を保険として残す理由:
  * 1. DB 復元中のシナリオでも DB 参照なしで判定できる（plan の DB 非依存原則）
  * 2. Cloudflare Pages のダッシュボードで env var を差し替え → Retry deploy（数分）で切替可能
- * 3. 新規テーブル・migration 不要（app_config 案は将来 DB 依存の運用が増えた時に検討）
+ * 3. 新規テーブル・migration が未適用でも緊急遮断できる
  *
  * ローカル開発では `web/.env.local` に `VITE_MAINTENANCE_MODE=1` を追加すると動作を確認できる。
  */

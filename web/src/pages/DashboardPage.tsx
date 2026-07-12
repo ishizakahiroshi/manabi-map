@@ -4,8 +4,8 @@ import { useApp } from '../contexts/AppContext'
 import { LineChart } from '../components/dashboard/LineChart'
 import { HBarList } from '../components/dashboard/HBarList'
 import { supabase } from '../lib/supabase'
-import { MAINTENANCE_MODE } from '../lib/maintenance'
-import type { AdminCoverage, AdminDims, AdminReferer, Ranked, Report, ReportStatus, Summary } from '../types/admin'
+import { useMaintenanceMode } from '../hooks/useMaintenanceMode'
+import type { AdminCoverage, AdminDims, AdminReferer, MaintenanceState, Ranked, Report, ReportStatus, Summary } from '../types/admin'
 
 const fmt = (value: number | null) => value == null ? '—' : value.toLocaleString('ja-JP')
 const fmtPercent = (value: number | null) => value == null ? '—' : `${(value * 100).toLocaleString('ja-JP', { maximumFractionDigits: 1 })}%`
@@ -43,6 +43,7 @@ function reportStatusLabel(status: ReportStatus): string {
 function ReportsPanel() {
   const { session } = useAuth()
   const { toast } = useApp()
+  const { isOn: maintenanceMode } = useMaintenanceMode()
   const [reports, setReports] = useState<Report[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(false)
@@ -95,7 +96,7 @@ function ReportsPanel() {
   }, [session])
 
   const updateStatus = async (reportId: string, status: ReportStatus) => {
-    if (MAINTENANCE_MODE || !session) return
+    if (maintenanceMode || !session) return
     setUpdating(reportId)
     try {
       const { error: updateError } = await supabase
@@ -151,7 +152,7 @@ function ReportsPanel() {
                           key={status}
                           type="button"
                           className={`chip ${report.status === status ? 'on' : ''}`}
-                          disabled={MAINTENANCE_MODE || updating === report.id || report.status === status}
+                          disabled={maintenanceMode || updating === report.id || report.status === status}
                           onClick={() => void updateStatus(report.id, status)}
                         >
                           {reportStatusLabel(status)}
@@ -169,6 +170,97 @@ function ReportsPanel() {
   )
 }
 
+function MaintenanceControl() {
+  const { session } = useAuth()
+  const { toast } = useApp()
+  const { dbOn, envForced, loading: maintenanceLoading } = useMaintenanceMode()
+  const [serverState, setServerState] = useState<MaintenanceState | null>(null)
+  const [optimisticOn, setOptimisticOn] = useState<boolean | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [loadError, setLoadError] = useState(false)
+
+  useEffect(() => {
+    if (!session) {
+      setLoading(false)
+      return
+    }
+    let cancelled = false
+    void fetch('/api/admin/maintenance', {
+      headers: { authorization: `Bearer ${session.access_token}` },
+    }).then(async (response) => {
+      if (!response.ok) throw new Error('maintenance state request failed')
+      return response.json() as Promise<MaintenanceState>
+    }).then((next) => {
+      if (cancelled) return
+      setServerState(next)
+      setLoadError(false)
+    }).catch(() => {
+      if (!cancelled) setLoadError(true)
+    }).finally(() => {
+      if (!cancelled) setLoading(false)
+    })
+    return () => { cancelled = true }
+  }, [session])
+
+  const runtimeOn = optimisticOn ?? (maintenanceLoading ? serverState?.on ?? dbOn : dbOn)
+  const currentOn = envForced || runtimeOn
+  const disabled = envForced || maintenanceLoading || loading || saving || loadError
+
+  const toggle = async () => {
+    if (disabled || !session) return
+    const nextOn = !currentOn
+    const message = nextOn
+      ? '本番のメンテモードを ON にします。ユーザーの書き込みがブロックされます。続行しますか？'
+      : '本番のメンテモードを OFF にします。ユーザーの書き込みを再開します。続行しますか？'
+    if (!window.confirm(message)) return
+
+    const previousOn = currentOn
+    setOptimisticOn(nextOn)
+    setServerState((current) => current
+      ? { ...current, on: nextOn }
+      : { on: nextOn, updatedAt: '', updatedBy: null })
+    setSaving(true)
+    try {
+      const response = await fetch('/api/admin/maintenance', {
+        method: 'POST',
+        headers: {
+          authorization: `Bearer ${session.access_token}`,
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({ on: nextOn }),
+      })
+      if (!response.ok) throw new Error('maintenance state update failed')
+      const next = await response.json() as MaintenanceState
+      setServerState(next)
+      setOptimisticOn(null)
+      toast('メンテナンスモードを変更しました')
+    } catch {
+      setOptimisticOn(null)
+      setServerState((current) => current ? { ...current, on: previousOn } : current)
+      toast('メンテナンスモードを変更できませんでした')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="maintenance-control" style={{ marginTop: 12 }}>
+      <button
+        type="button"
+        className={`chip ${currentOn ? 'on' : ''}`}
+        aria-pressed={currentOn}
+        disabled={disabled}
+        onClick={() => void toggle()}
+      >
+        {`メンテモード: ${currentOn ? 'ON ▸ OFF にする' : 'OFF ▸ ON にする'}`}
+      </button>
+      {envForced && <small className="sub" style={{ display: 'block', marginTop: 4 }}>env var で強制 ON 中（CF Pages 側で解除してください）</small>}
+      {loadError && !envForced && <small className="sub" style={{ display: 'block', marginTop: 4 }}>メンテモードの状態を取得できませんでした。</small>}
+    </div>
+  )
+}
+
 type PageFrameProps = {
   tab: 'metrics' | 'reports'
   onTabChange: (tab: 'metrics' | 'reports') => void
@@ -183,6 +275,7 @@ function DashboardHeader({ tab, onTabChange, snapshotDate }: Omit<PageFrameProps
         <div>
           <h1>管理ダッシュボード</h1>
           <p className="sub">日次スナップショット（Search Console・Cloudflare Web Analytics・Supabase）</p>
+          <MaintenanceControl />
         </div>
         <p className="sub" style={{ margin: 0, textAlign: 'right' }}>
           スナップショット: {snapshotDate ?? '—'}（日次更新）<br />

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { trackEvent } from '../lib/analytics'
-import { MAINTENANCE_MODE } from '../lib/maintenance'
+import { useMaintenanceMode } from './useMaintenanceMode'
 import { useApp } from '../contexts/AppContext'
 import { useAuth } from '../contexts/AuthContext'
 import { useI18n } from '../contexts/I18nContext'
@@ -29,6 +29,7 @@ export function useUserData(): UserData {
   const { session } = useAuth()
   const { toast } = useApp()
   const { t } = useI18n()
+  const { isOn: maintenanceMode } = useMaintenanceMode()
   const userId = session?.user.id ?? null
   const [favorites, setFavorites] = useState<Record<string, Favorite>>({})
   const [notes, setNotes] = useState<Record<string, SchoolNote>>({})
@@ -45,10 +46,10 @@ export function useUserData(): UserData {
    * true 応答時は Supabase に一切書き込まない。
    */
   const blockedByMaintenance = useCallback((): boolean => {
-    if (!MAINTENANCE_MODE) return false
+    if (!maintenanceMode) return false
     toast(t('maintenance.toast'))
     return true
-  }, [toast, t])
+  }, [maintenanceMode, toast, t])
 
   useEffect(() => {
     if (!userId) {
