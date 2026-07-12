@@ -475,6 +475,34 @@ body {
   font-size: 0.78rem; margin-bottom: 2px;
 }
 .info-grid b { display: block; font-family: var(--body); font-size: 0.9rem; line-height: 1.35; overflow-wrap: anywhere; }
+.data-report { margin-top: 5px; }
+.data-report-toggle {
+  padding: 2px 0; border: 0; background: transparent; color: var(--accent);
+  font-family: var(--display); font-size: 0.76rem; font-weight: 800; cursor: pointer;
+  text-decoration: underline; text-underline-offset: 2px;
+}
+.data-report-form {
+  margin-top: 6px; padding: 9px; border: 1px solid var(--line); border-radius: 10px;
+  background: #fff; font-size: 0.82rem;
+}
+.data-report-form strong { display: block; font-family: var(--display); font-size: 0.86rem; }
+.data-report-target { margin: 3px 0 7px; color: var(--ink-soft); font-size: 0.76rem; }
+.data-report-fixed-note,
+.data-report-caution { margin: 7px 0; color: var(--ink-soft); font-size: 0.74rem; line-height: 1.5; }
+.data-report-fixed-note { color: var(--ink); font-weight: 700; }
+.data-report-form label { display: block; margin-top: 7px; font-family: var(--display); font-weight: 700; }
+.data-report-form input:not(.data-report-honeypot),
+.data-report-form textarea {
+  display: block; width: 100%; margin-top: 3px; padding: 6px 8px; border: 1px solid var(--line);
+  border-radius: 7px; background: #fffaf2; color: var(--ink); font-family: var(--body); font-size: 0.86rem;
+}
+.data-report-form textarea { min-height: 52px; resize: vertical; }
+.data-report-submit {
+  width: 100%; margin-top: 4px; padding: 7px 10px; border: 2px solid var(--ink); border-radius: 9px;
+  background: var(--accent); color: #fff; font-family: var(--display); font-weight: 800; cursor: pointer;
+}
+.data-report-submit:disabled { opacity: 0.55; cursor: default; }
+.data-report-honeypot { position: absolute; left: -10000px; width: 1px; height: 1px; opacity: 0; }
 .detail-actions { display: flex; gap: 8px; margin-top: 12px; align-items: center; flex-wrap: wrap; }
 .fav-toggle {
   padding: 10px 14px; border: 2px solid var(--ink); border-radius: 12px; background: #fff;
@@ -532,6 +560,7 @@ body {
 .dep-dev { font-size: 0.9rem; color: var(--ink-soft); }
 .dep-dev b { font-family: var(--display); font-size: 1.1rem; color: var(--ink); margin-left: 4px; }
 .dep-dev .mine-val { color: var(--ok); margin-left: 8px; font-family: var(--display); font-weight: 700; }
+.dep-dev .data-report { margin-top: 2px; }
 .self-label { margin-left: 3px; font-size: 0.76rem; color: var(--ink-soft); }
 .depts .note { margin-top: 6px; font-size: 0.78rem; color: var(--ink-soft); }
 .depts .note a { color: var(--accent); }
@@ -541,6 +570,8 @@ body {
 }
 .admission-block h4 { margin: 0 0 6px; font-family: var(--display); font-size: 0.98rem; }
 .admission-block .sub { color: var(--ink-soft); font-size: 0.82rem; margin: 0 0 10px; }
+.admission-pending { display: flex; align-items: center; justify-content: space-between; gap: 10px; color: var(--ink-soft); font-size: 0.86rem; }
+.admission-pending .data-report { margin-top: 0; }
 .admission-group { margin-top: 12px; }
 .admission-group h5 { margin: 0 0 5px; font-family: var(--display); font-size: 0.9rem; }
 .admission-scroll { overflow-x: auto; }
@@ -551,6 +582,8 @@ body {
 .admission-table tbody th { font-weight: 700; }
 .admission-foot { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 5px; font-size: 0.74rem; color: var(--ink-soft); }
 .admission-foot a { color: var(--accent); }
+.admission-missing { align-items: center; }
+.admission-missing .data-report { margin-top: 0; }
 .admission-block > .note { margin: 9px 0 0; font-size: 0.78rem; color: var(--ink-soft); }
 
 .commute {
@@ -950,6 +983,34 @@ body[data-sheet-open="true"] .leaflet-bottom.leaflet-right { display: none; }
   font-size: 1rem;
 }
 .admin-block textarea { min-height: 54px; resize: vertical; }
+
+/* 管理ダッシュボード: 情報提供レポート */
+.dashboard-tabs { display: flex; gap: 8px; flex-wrap: wrap; margin: 14px 0 18px; }
+.dashboard-number { font-variant-numeric: tabular-nums; }
+.dashboard-delta { display: block; margin-top: 2px; font-size: 0.8rem; font-weight: 700; }
+.dashboard-delta.up { color: var(--ok); }
+.dashboard-delta.down { color: var(--bad); }
+.dashboard-delta.flat { color: var(--ink-soft); }
+.dashboard-reports { margin-top: 16px; padding: 16px; border: 2px solid var(--ink); border-radius: 14px; background: #fffaf2; }
+.dashboard-reports-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.dashboard-reports-head h2 { margin: 0; font-family: var(--display); font-size: 1.1rem; }
+.dashboard-reports-head .sub { margin: 5px 0 0; font-size: 0.84rem; }
+.dashboard-report-count { flex: 0 0 auto; color: var(--ink-soft); font-size: 0.82rem; }
+.dashboard-report-table-wrap { overflow-x: auto; margin-top: 12px; }
+.dashboard-report-table { width: 100%; min-width: 920px; border-collapse: collapse; font-size: 0.8rem; background: #fff; }
+.dashboard-report-table th, .dashboard-report-table td { padding: 8px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+.dashboard-report-table th { color: var(--ink-soft); font-family: var(--display); white-space: nowrap; }
+.dashboard-report-table td b, .dashboard-report-table td small { display: block; }
+.dashboard-report-table td small { margin-top: 3px; color: var(--ink-soft); overflow-wrap: anywhere; }
+.dashboard-report-value { max-width: 220px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.dashboard-report-status { display: inline-block; padding: 3px 7px; border-radius: 999px; background: var(--line); font-family: var(--display); font-weight: 800; white-space: nowrap; }
+.dashboard-report-status.pending { background: #ffe0c8; color: #8a3f16; }
+.dashboard-report-status.applied { background: #d9f0df; color: #21613a; }
+.dashboard-report-status.rejected { background: #eee; color: var(--ink-soft); }
+.dashboard-report-actions { display: flex; gap: 4px; flex-wrap: wrap; min-width: 190px; }
+.dashboard-report-actions .chip { padding: 5px 7px; font-size: 0.72rem; }
+.dashboard-report-actions .chip:disabled { opacity: 0.55; cursor: default; }
+.dashboard-report-empty { padding: 20px; text-align: center; color: var(--ink-soft); }
 .admin-dept-list { margin-top: 10px; border-top: 1px solid var(--line); }
 .admin-dept-row,
 .admin-review-row {

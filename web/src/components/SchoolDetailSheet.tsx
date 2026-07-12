@@ -21,6 +21,8 @@ import { supabase } from '../lib/supabase'
 import { MAINTENANCE_MODE } from '../lib/maintenance'
 import { AdSlot } from './AdSlot'
 import { slotsForPlacement } from '../data/ad-slots'
+import { DataReportForm } from './DataReportForm'
+import { scaleBand } from '../lib/format'
 
 interface Props {
   school: School | null
@@ -156,6 +158,10 @@ export function SchoolDetailSheet({ school, onClose, userData }: Props) {
   const routeUrl = home ? googleMapsRoute(home, school) : null
   const genderRatio = fmt.genderRatioLabel(school)
   const ratio3y = threeYearApplicantRatio(school)
+  const hasCourseInfo = school.course_times.length > 0
+  const hasScaleInfo =
+    (school.total_students != null && school.enrollment_year != null) || scaleBand(school) != null
+  const hasCampusInfo = Boolean(fmt.campusFull(school.campus_type))
   // DB 由来 URL は http(s) のみ許可（javascript: 等のスキームを href に通さない多層防御）
   const officialUrl =
     school.official_url && /^https?:\/\//i.test(school.official_url) ? school.official_url : null
@@ -370,10 +376,16 @@ export function SchoolDetailSheet({ school, onClose, userData }: Props) {
           <div>
             <span>{t('detail.course')}</span>
             <b>{fmt.courseTimeLabel(school)}</b>
+            {!hasCourseInfo && (
+              <DataReportForm schoolId={school.id} field="other" targetLabel={t('detail.course')} />
+            )}
           </div>
           <div>
             <span>{t('detail.scale')}</span>
             <b>{fmt.enrollmentLabel(school)}</b>
+            {!hasScaleInfo && (
+              <DataReportForm schoolId={school.id} field="capacity" targetLabel={t('detail.scale')} />
+            )}
           </div>
           <div>
             <span>{t('detail.ratio3y')}</span>
@@ -386,10 +398,16 @@ export function SchoolDetailSheet({ school, onClose, userData }: Props) {
                   })
                 : t('common.infoPending')}
             </b>
+            {!ratio3y && (
+              <DataReportForm schoolId={school.id} field="other" targetLabel={t('detail.ratio3y')} />
+            )}
           </div>
           <div>
             <span>{t('detail.genderRatio')}</span>
             <b>{genderRatio ?? t('common.infoPending')}</b>
+            {!genderRatio && (
+              <DataReportForm schoolId={school.id} field="male_ratio" targetLabel={t('detail.genderRatio')} />
+            )}
           </div>
           {school.campus_type !== 'main' && (
             <div>
@@ -398,6 +416,9 @@ export function SchoolDetailSheet({ school, onClose, userData }: Props) {
                 {fmt.campusFull(school.campus_type) || t('common.infoPending')}
                 {school.main_school_name ? ` / ${t('labels.mainSchool', { name: school.main_school_name })}` : ''}
               </b>
+              {!hasCampusInfo && (
+                <DataReportForm schoolId={school.id} field="other" targetLabel={t('detail.campus')} />
+              )}
             </div>
           )}
         </div>
@@ -444,7 +465,7 @@ export function SchoolDetailSheet({ school, onClose, userData }: Props) {
               return (
                 <div className="dep-row" key={d.id}>
                   <span className="dep-name">{d.name}</span>
-                  <span className="dep-dev">
+                  <div className="dep-dev">
                     {dev != null ? (
                       <>
                         {t('detail.refValue')} <b>{dev}</b>
@@ -458,7 +479,15 @@ export function SchoolDetailSheet({ school, onClose, userData }: Props) {
                         <span className="self-label">{t('detail.mineSelfLabel')}</span>
                       </span>
                     )}
-                  </span>
+                    {dev == null && (
+                      <DataReportForm
+                        schoolId={school.id}
+                        departmentId={d.id}
+                        field="deviation"
+                        targetLabel={`${d.name} / ${t('detail.deptDeviation')}`}
+                      />
+                    )}
+                  </div>
                 </div>
               )
             })}
@@ -478,16 +507,19 @@ export function SchoolDetailSheet({ school, onClose, userData }: Props) {
           </p>
         </div>
 
-        {school.admission_stats.length > 0 && (
-          <div className="admission-block">
-            <h4>📈 {t('detail.admissionTitle')}</h4>
-            <p className="sub">{t('detail.admissionSub')}</p>
-            {[
+        <div className="admission-block">
+          <h4>📈 {t('detail.admissionTitle')}</h4>
+          <p className="sub">{t('detail.admissionSub')}</p>
+          {school.admission_stats.length > 0 ? (
+            [
               ...school.departments.map((d) => ({ id: d.id, name: d.name })),
               ...(admissionRows(null).length > 0 ? [{ id: null, name: t('detail.admissionSchoolWide') }] : []),
             ].map((group) => {
               const rows = admissionRows(group.id)
               if (rows.length === 0) return null
+              const hasMissingValue = rows.some((stat) =>
+                stat.capacity == null || stat.applicants == null || stat.examinees == null || stat.admitted == null,
+              )
               return (
                 <div className="admission-group" key={group.id ?? 'school'}>
                   <h5>{group.name}</h5>
@@ -527,12 +559,32 @@ export function SchoolDetailSheet({ school, onClose, userData }: Props) {
                       )}
                     </div>
                   ))}
+                  {hasMissingValue && (
+                    <div className="admission-foot admission-missing">
+                      <span>{t('common.infoPending')}</span>
+                      <DataReportForm
+                        schoolId={school.id}
+                        departmentId={group.id}
+                        field="other"
+                        targetLabel={`${group.name} / ${t('detail.admissionTitle')}`}
+                      />
+                    </div>
+                  )}
                 </div>
               )
-            })}
-            <p className="note">{t('detail.disclaimer')}</p>
-          </div>
-        )}
+            })
+          ) : (
+            <div className="admission-pending">
+              <span>{t('common.infoPending')}</span>
+              <DataReportForm
+                schoolId={school.id}
+                field="other"
+                targetLabel={t('detail.admissionTitle')}
+              />
+            </div>
+          )}
+          <p className="note">{t('detail.disclaimer')}</p>
+        </div>
 
         <div className="mine-block">
           <h4>📊 {t('detail.myBlockTitle')}</h4>
