@@ -3,7 +3,7 @@ export interface Context { request: Request; env: Env }
 
 export const notFound = () => new Response('Not Found', { status: 404 })
 
-export async function requireAdmin(context: Context): Promise<Response | null> {
+export async function requireAdminUser(context: Context): Promise<Response | { userId: string }> {
   const token = context.request.headers.get('authorization')?.match(/^Bearer\s+(.+)$/i)?.[1]
   const { SUPABASE_URL: url, SUPABASE_SERVICE_ROLE_KEY: key, ADMIN_USER_ID: adminId } = context.env
   if (!token || !url || !key || !adminId) return notFound()
@@ -13,8 +13,13 @@ export async function requireAdmin(context: Context): Promise<Response | null> {
     })
     if (!response.ok) return notFound()
     const user = await response.json() as { id?: string }
-    return user.id === adminId ? null : notFound()
+    return user.id === adminId && user.id ? { userId: user.id } : notFound()
   } catch { return notFound() }
+}
+
+export async function requireAdmin(context: Context): Promise<Response | null> {
+  const result = await requireAdminUser(context)
+  return result instanceof Response ? result : null
 }
 
 export function json(value: unknown, status = 200): Response {

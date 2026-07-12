@@ -2,7 +2,7 @@ import { useState, type FormEvent } from 'react'
 import { useApp } from '../contexts/AppContext'
 import { useAuth } from '../contexts/AuthContext'
 import { useI18n } from '../contexts/I18nContext'
-import { MAINTENANCE_MODE } from '../lib/maintenance'
+import { useMaintenanceMode } from '../hooks/useMaintenanceMode'
 import { supabase } from '../lib/supabase'
 
 export type DataReportField = 'capacity' | 'total_students' | 'male_ratio' | 'deviation' | 'other'
@@ -43,6 +43,7 @@ export function DataReportForm({ schoolId, departmentId = null, field, targetLab
   const { session } = useAuth()
   const { setLoginOpen, toast } = useApp()
   const { t } = useI18n()
+  const { isOn: maintenanceMode } = useMaintenanceMode()
   const [expanded, setExpanded] = useState(false)
   const [proposedValue, setProposedValue] = useState('')
   const [source, setSource] = useState('')
@@ -52,7 +53,7 @@ export function DataReportForm({ schoolId, departmentId = null, field, targetLab
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
-    if (MAINTENANCE_MODE) {
+    if (maintenanceMode) {
       toast(t('maintenance.toast'))
       return
     }
@@ -164,7 +165,7 @@ export function DataReportForm({ schoolId, departmentId = null, field, targetLab
             onChange={(event) => setHoneypot(event.target.value)}
           />
           <p className="data-report-caution">{t('report.caution')}</p>
-          <button type="submit" className="data-report-submit" disabled={saving || MAINTENANCE_MODE}>
+          <button type="submit" className="data-report-submit" disabled={saving || maintenanceMode}>
             {saving ? t('report.submitting') : t('report.submit')}
           </button>
         </form>
