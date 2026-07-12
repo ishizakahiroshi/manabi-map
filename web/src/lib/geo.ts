@@ -46,6 +46,26 @@ export function haversine(a: { lat: number; lng: number }, b: { lat: number; lng
   return 2 * R * Math.asin(Math.sqrt(s))
 }
 
+/** 自宅ズームの通学圏パラメータ: 最寄り校がこの校数収まる半径を初期表示にする */
+const HOME_VIEW_NEAREST_COUNT = 15
+const HOME_VIEW_MIN_RADIUS_KM = 10
+const HOME_VIEW_MAX_RADIUS_KM = 40
+
+/**
+ * 自宅を中心にした地図初期表示の半径（km）。最寄り 15 校目までの直線距離を採用し、
+ * 10〜40km にクランプする。学校密度から自動で決まる（都市部は狭く・地方は広く）ので、
+ * 都道府県別の半径テーブルは持たない。学校 0 件時は上限半径にフォールバックする。
+ */
+export function homeViewRadiusKm(
+  home: { lat: number; lng: number },
+  schools: ReadonlyArray<{ lat: number; lng: number }>,
+): number {
+  if (schools.length === 0) return HOME_VIEW_MAX_RADIUS_KM
+  const dists = schools.map((s) => haversine(home, s)).sort((a, b) => a - b)
+  const nth = dists[Math.min(HOME_VIEW_NEAREST_COUNT, dists.length) - 1]
+  return Math.min(HOME_VIEW_MAX_RADIUS_KM, Math.max(HOME_VIEW_MIN_RADIUS_KM, nth))
+}
+
 /** 概算通学時間（§12.2: 直線距離 × 1.3 ÷ 40km/h・車前提の粗い目安） */
 export function estimateCommuteMinutes(distanceKm: number): number {
   return Math.round(((distanceKm * 1.3) / 40) * 60)
