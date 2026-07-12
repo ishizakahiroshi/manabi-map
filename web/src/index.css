@@ -685,7 +685,11 @@ body {
   display: flex; align-items: baseline; gap: 3px;
 }
 .pin .label-dev .dev-value { color: var(--accent, #ff7a3d); font-size: 0.82rem; }
-.pin .label-dev small { font-weight: 400; opacity: 0.7; margin-left: 2px; }
+.pin .label-name small { font-weight: 400; opacity: 0.7; margin-left: 2px; }
+.pin .label-admission {
+  white-space: nowrap; margin-left: 2px; font-size: 0.6rem;
+  color: var(--ink); opacity: 0.78; font-weight: 500;
+}
 .pin .label-commute {
   white-space: nowrap; margin-top: 2px; font-size: 0.65rem;
   color: var(--ink); opacity: 0.75; font-weight: 500;
