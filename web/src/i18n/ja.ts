@@ -107,6 +107,7 @@ export const ja: MessageTree = {
   map: {
     title: '地図',
     nearby: '{label}周辺',
+    applicantRatio3Years: '倍率 {ratio}（3年平均）',
     backHome: 'トップに戻る',
     searchOpen: 'フリーワード検索を開く',
     searchClose: 'フリーワード検索を閉じる',
@@ -142,6 +143,7 @@ export const ja: MessageTree = {
     filterCategory: {
       own: '種別',
       bands: '偏差値',
+      ratios: '倍率',
       gen: '性別',
       courseTimes: '課程',
       depts: '学科',
@@ -176,6 +178,13 @@ export const ja: MessageTree = {
       b40: '40台',
       b30: '40未満',
       unrated: '未測定',
+    },
+    ratio: {
+      under1: '1.0未満',
+      from1: '1.0〜1.2',
+      from1_2: '1.2〜1.5',
+      from1_5: '1.5以上',
+      unknown: '情報なし',
     },
     dept: {
       general: '普通科',
@@ -228,6 +237,12 @@ export const ja: MessageTree = {
     kosenBadge: ' [5年制]',
     integratedBadge: ' [中高一貫]',
     enrollment: '約 {count} 人（{year} 年）',
+    scale: {
+      small: '小規模',
+      medium: '中規模',
+      large: '大規模',
+    },
+    scaleBand: '{band}（募集定員ベースの目安）',
     genderRatio: '男 {male}% / 女 {female}%（{source}）',
     genderSourceSurvey: '{year} 年・学校基本調査ベース',
     genderSourceOfficial: '学校公表情報ベース',
@@ -302,6 +317,8 @@ export const ja: MessageTree = {
     address: '所在地',
     course: '課程',
     scale: '規模',
+    ratio3y: '倍率（3年平均）',
+    ratio3yValue: '{ratio}（{from}〜{to}年度）',
     genderRatio: '男女比',
     campus: 'キャンパス',
     interested: '気になる',

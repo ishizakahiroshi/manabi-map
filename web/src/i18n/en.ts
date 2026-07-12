@@ -107,6 +107,7 @@ export const en: MessageTree = {
   map: {
     title: 'Map',
     nearby: 'Near {label}',
+    applicantRatio3Years: 'Ratio {ratio} (3-yr avg)',
     backHome: 'Back to home',
     searchOpen: 'Open free-word search',
     searchClose: 'Close free-word search',
@@ -142,6 +143,7 @@ export const en: MessageTree = {
     filterCategory: {
       own: 'Type',
       bands: 'Deviation',
+      ratios: 'Ratio',
       gen: 'Gender',
       courseTimes: 'Schedule',
       depts: 'Dept.',
@@ -176,6 +178,13 @@ export const en: MessageTree = {
       b40: '40s',
       b30: 'Below 40',
       unrated: 'Unrated',
+    },
+    ratio: {
+      under1: 'Under 1.0',
+      from1: '1.0–1.2',
+      from1_2: '1.2–1.5',
+      from1_5: '1.5+',
+      unknown: 'No data',
     },
     dept: {
       general: 'General',
@@ -228,6 +237,12 @@ export const en: MessageTree = {
     kosenBadge: ' [5-year]',
     integratedBadge: ' [Integrated JHS–HS]',
     enrollment: 'About {count} students ({year})',
+    scale: {
+      small: 'Small',
+      medium: 'Medium',
+      large: 'Large',
+    },
+    scaleBand: '{band} (rough size from published admission capacity)',
     genderRatio: 'Male {male}% / Female {female}% ({source})',
     genderSourceSurvey: '{year} school basic survey',
     genderSourceOfficial: 'Official school data',
@@ -302,6 +317,8 @@ export const en: MessageTree = {
     address: 'Address',
     course: 'Schedule',
     scale: 'Size',
+    ratio3y: 'Ratio (3-yr avg)',
+    ratio3yValue: '{ratio} ({from}–{to})',
     genderRatio: 'Gender ratio',
     campus: 'Campus',
     interested: 'Interested',

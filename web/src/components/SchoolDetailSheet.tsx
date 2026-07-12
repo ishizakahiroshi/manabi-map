@@ -8,6 +8,7 @@ import {
   estimateTransitMinutes,
   googleMapsRoute,
 } from '../lib/geo'
+import { threeYearApplicantRatio } from '../lib/admission'
 import { useApp } from '../contexts/AppContext'
 import { useAuth } from '../contexts/AuthContext'
 import { useI18n } from '../contexts/I18nContext'
@@ -154,6 +155,7 @@ export function SchoolDetailSheet({ school, onClose, userData }: Props) {
   const dist = home ? haversine(home, { lat: school.latitude, lng: school.longitude }) : null
   const routeUrl = home ? googleMapsRoute(home, school) : null
   const genderRatio = fmt.genderRatioLabel(school)
+  const ratio3y = threeYearApplicantRatio(school)
   // DB 由来 URL は http(s) のみ許可（javascript: 等のスキームを href に通さない多層防御）
   const officialUrl =
     school.official_url && /^https?:\/\//i.test(school.official_url) ? school.official_url : null
@@ -373,12 +375,22 @@ export function SchoolDetailSheet({ school, onClose, userData }: Props) {
             <span>{t('detail.scale')}</span>
             <b>{fmt.enrollmentLabel(school)}</b>
           </div>
-          {genderRatio && (
-            <div>
-              <span>{t('detail.genderRatio')}</span>
-              <b>{genderRatio}</b>
-            </div>
-          )}
+          <div>
+            <span>{t('detail.ratio3y')}</span>
+            <b>
+              {ratio3y
+                ? t('detail.ratio3yValue', {
+                    ratio: ratio3y.average.toFixed(2),
+                    from: ratio3y.years[2],
+                    to: ratio3y.years[0],
+                  })
+                : t('common.infoPending')}
+            </b>
+          </div>
+          <div>
+            <span>{t('detail.genderRatio')}</span>
+            <b>{genderRatio ?? t('common.infoPending')}</b>
+          </div>
           {school.campus_type !== 'main' && (
             <div>
               <span>{t('detail.campus')}</span>

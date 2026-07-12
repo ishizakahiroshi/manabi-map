@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { parsePostal, haversine } from './geo'
+import { parsePostal, haversine, homeViewRadiusKm } from './geo'
 
 describe('parsePostal', () => {
   // ACTIVE_REGION = 東日本 20 都道県。郵便番号上 3 桁は県単位の暫定ラベル（都市名ではない）。
@@ -65,5 +65,36 @@ describe('haversine', () => {
     )
     expect(d).toBeGreaterThan(7)
     expect(d).toBeLessThan(10)
+  })
+})
+
+describe('homeViewRadiusKm', () => {
+  // 合成データ: 緯度 0.01 度 ≈ 1.11km。自宅から北へ等間隔に並べた学校列で密度を再現する
+  const HOME = { lat: 36.0, lng: 139.0 }
+  const schoolsEvery = (stepDeg: number, count: number) =>
+    Array.from({ length: count }, (_, i) => ({ lat: 36.0 + (i + 1) * stepDeg, lng: 139.0 }))
+
+  it('中密度: 15 校目までの距離がそのまま半径になる', () => {
+    // 1.11km 間隔 × 20 校 → 15 校目 ≈ 16.7km（クランプ範囲内）
+    const r = homeViewRadiusKm(HOME, schoolsEvery(0.01, 20))
+    expect(r).toBeGreaterThan(15)
+    expect(r).toBeLessThan(18)
+  })
+  it('都市部（高密度）は下限 10km にクランプ', () => {
+    // 111m 間隔 × 20 校 → 15 校目 ≈ 1.7km → 10km に引き上げ
+    expect(homeViewRadiusKm(HOME, schoolsEvery(0.001, 20))).toBe(10)
+  })
+  it('地方（低密度）は上限 40km にクランプ', () => {
+    // 5.6km 間隔 × 20 校 → 15 校目 ≈ 83km → 40km に抑制
+    expect(homeViewRadiusKm(HOME, schoolsEvery(0.05, 20))).toBe(40)
+  })
+  it('15 校未満なら最遠校までの距離を使う', () => {
+    // 2.2km 間隔 × 5 校 → 最遠 ≈ 11.1km
+    const r = homeViewRadiusKm(HOME, schoolsEvery(0.02, 5))
+    expect(r).toBeGreaterThan(10)
+    expect(r).toBeLessThan(13)
+  })
+  it('学校 0 件は上限半径にフォールバック', () => {
+    expect(homeViewRadiusKm(HOME, [])).toBe(40)
   })
 })
