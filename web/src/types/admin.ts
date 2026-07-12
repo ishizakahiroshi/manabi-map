@@ -58,6 +58,12 @@ export interface AdminDimRow {
 
 export type AdminDims = Record<string, AdminDimRow[]>
 
+export interface MaintenanceState {
+  on: boolean
+  updatedAt: string
+  updatedBy: string | null
+}
+
 export type ReportStatus = 'pending' | 'reviewed' | 'applied' | 'rejected'
 
 export interface Report {

@@ -788,7 +788,7 @@ body {
 }
 
 /* メンテナンスモード（アプリ内読み取り専用）バナー
-   VITE_MAINTENANCE_MODE=1 の時のみ表示。オレンジ基調のブランドカラーで
+   runtime フラグまたは VITE_MAINTENANCE_MODE=1 の時に表示。オレンジ基調のブランドカラーで
    OfflineBanner（warn 赤）と区別する。offline より下に重ねる（z-index）。 */
 .maintenance-banner {
   position: absolute; top: 0; left: 0; right: 0;

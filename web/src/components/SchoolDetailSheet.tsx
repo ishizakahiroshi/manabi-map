@@ -18,7 +18,7 @@ import { useEscapeKey } from '../hooks/useEscapeKey'
 import type { useUserData } from '../hooks/useUserData'
 import { trackEvent } from '../lib/analytics'
 import { supabase } from '../lib/supabase'
-import { MAINTENANCE_MODE } from '../lib/maintenance'
+import { useMaintenanceMode } from '../hooks/useMaintenanceMode'
 import { AdSlot } from './AdSlot'
 import { slotsForPlacement } from '../data/ad-slots'
 import { DataReportForm } from './DataReportForm'
@@ -34,6 +34,7 @@ export function SchoolDetailSheet({ school, onClose, userData }: Props) {
   const { home, toast, setLoginOpen } = useApp()
   const { session } = useAuth()
   const { t } = useI18n()
+  const { isOn: maintenanceMode } = useMaintenanceMode()
   const fmt = useFormat()
   const sheetRef = useRef<HTMLDivElement>(null)
   const touchStartY = useRef<number | null>(null)
@@ -266,7 +267,7 @@ export function SchoolDetailSheet({ school, onClose, userData }: Props) {
 
   const handleAdminCorrection = async (departmentId: string) => {
     if (requireLogin()) return
-    if (MAINTENANCE_MODE) {
+    if (maintenanceMode) {
       toast(t('maintenance.toast'))
       return
     }
@@ -305,7 +306,7 @@ export function SchoolDetailSheet({ school, onClose, userData }: Props) {
 
   const handleSnapshotRebuild = async () => {
     if (requireLogin()) return
-    if (MAINTENANCE_MODE) {
+    if (maintenanceMode) {
       toast(t('maintenance.toast'))
       return
     }
