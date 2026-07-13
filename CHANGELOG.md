@@ -4,6 +4,22 @@
 
 各バージョンの詳細な実行記録は `docs/local/manual_release-vX.Y.Z_YYYY-MM-DD.md`（非公開・gitignored）にある。ここは公開レポの正史。
 
+## [v0.3.1] - 2026-07-13
+
+### Added
+- 「情報募集中」項目からその場で情報提供・訂正報告できる簡易フォーム（`data_reports` テーブル + 管理者ダッシュボードのレポートタブで承認フロー）
+- 管理者ダッシュボードの KPI タイルに前期間比 delta 表示（▲/▼/− + 数値 + 色。色だけに頼らずアクセシビリティ配慮）
+- runtime メンテナンスモード切替（`app_config` テーブル + realtime 反映 + 管理者ダッシュボードのトグル UI + `scripts/maintenance.mjs` CLI）。従来の `VITE_MAINTENANCE_MODE` env var は DB 復元中など緊急時の保険として残す
+- `school_deviation_values.estimate_basis` 列と `application_ratio_legacy AND is_active` を拒否する CHECK 制約（偏差値推計経路の恒久的品質防壁）
+- 関東 6 都県の私立高校の入試実績 1,145 行（群馬 42/栃木 60/埼玉 100/千葉 177/東京 505/神奈川 261）。県教委・私学主管課の一括公表資料からの転記のみで、募集人員・応募者数が中心（受検/合格は一括資料に載らないため空欄・秋以降に追補予定）。茨城は一括公表なしにより対象外
+
+### Changed
+- 自宅設定後の地図初期ズームを、最寄り 15 校目までの距離ベース fitBounds に変更（10〜40km でクランプ・都市部は狭く / 地方は広く自動調整）。従来は東日本リージョン初期値の zoom 5（日本全図）に据え置かれ、毎回手動ズームが必要だった
+- 管理者ダッシュボードの型を `web/src/types/admin.ts` に集約し、UI と Cloudflare Pages Functions で単一ソース化
+
+### Fixed
+- 保存済み自宅の復元経路でも通学圏へ自動 fit するよう修正（v0.3.0 東日本拡大でリージョン zoom が 5 に広がり顕在化していた症状）
+
 ## [v0.3.0] - 2026-07-12
 
 ### Added

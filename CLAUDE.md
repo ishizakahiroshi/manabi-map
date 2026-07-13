@@ -84,6 +84,14 @@ Supabase / LINE の接続情報はリポジトリ外に保管する。`web/.env.
 
 ビルド・コミット禁止、secrets-scan 責務、plan/bugfix/pending md の作成ルール等の AI 作業共通ルールは、各利用者のグローバル AI 設定に従う（作者環境の例: `~/.claude/CLAUDE.md` および `~/.claude/guides/`）。
 
+### メンテナンスモードの AI トリガー
+
+- ユーザーが「メンテにして」「メンテモード ON」「メンテ入れて」等と言ったら、`node scripts/maintenance.mjs on` を実行する。
+- 「メンテ解除」「メンテ OFF」「メンテ戻して」等は `node scripts/maintenance.mjs off` を実行する。
+- 状態確認は `node scripts/maintenance.mjs status` を実行する。
+- CLI は `web/.env.local` の service role key を読むため、キーを出力・ログ・コミットしない。
+- DB 復元中など CLI が DB に到達できない非常時だけ、既存の env var + Retry deployment 経路を使う。
+
 ## 利用可能な skill（作者環境）
 
 このプロジェクト向けに専用 skill を用意している（作者環境の `~/.claude/skills/` 配下）。**skill を起動できる環境なら、下記の操作は直接手作業でやらず skill 経由が原則**（手順の一貫性・記録の再現性のため）。skill が無い環境（他人の clone や別 AI CLI）では手動手順として本 CLAUDE.md 下記の「運用ルール」を読み下してください。
