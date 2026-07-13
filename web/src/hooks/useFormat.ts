@@ -1,5 +1,5 @@
 import type { School } from '../types/school'
-import { GEN_LABEL, band, botDev, ownershipFull, ownershipShort, topDev } from '../lib/format'
+import { GEN_LABEL, band, botDev, ownershipFull, ownershipShort, scaleBand, topDev } from '../lib/format'
 import { useI18n, type TFunction } from '../contexts/I18nContext'
 
 function label(t: TFunction, prefix: string, key: string): string {
@@ -37,11 +37,15 @@ export function useFormat() {
     },
 
     enrollmentLabel: (s: School) => {
-      if (s.total_students == null || s.enrollment_year == null) return t('common.infoPending')
-      return t('labels.enrollment', {
-        count: s.total_students.toLocaleString(),
-        year: s.enrollment_year,
-      })
+      if (s.total_students != null && s.enrollment_year != null) {
+        return t('labels.enrollment', {
+          count: s.total_students.toLocaleString(),
+          year: s.enrollment_year,
+        })
+      }
+      const bandKey = scaleBand(s)
+      if (bandKey) return t('labels.scaleBand', { band: label(t, 'labels.scale', bandKey) })
+      return t('common.infoPending')
     },
 
     genderRatioLabel: (s: School): string | null => {

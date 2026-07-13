@@ -7,6 +7,7 @@ import { AuthProvider } from './contexts/AuthContext'
 import { AppProvider } from './contexts/AppContext'
 import { I18nProvider } from './contexts/I18nContext'
 import { ErrorBoundary } from './components/ErrorBoundary'
+import { MaintenanceProvider } from './hooks/useMaintenanceMode'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
@@ -14,9 +15,11 @@ createRoot(document.getElementById('root')!).render(
       <ErrorBoundary>
         <BrowserRouter>
           <AuthProvider>
-            <AppProvider>
-              <App />
-            </AppProvider>
+            <MaintenanceProvider>
+              <AppProvider>
+                <App />
+              </AppProvider>
+            </MaintenanceProvider>
           </AuthProvider>
         </BrowserRouter>
       </ErrorBoundary>

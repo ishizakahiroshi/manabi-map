@@ -7,10 +7,12 @@ import 'leaflet.markercluster/dist/MarkerCluster.css'
 import 'leaflet.markercluster/dist/MarkerCluster.Default.css'
 import type { CourseTime, DeptUiGroup, School } from '../types/school'
 import { band, topDev, shortSchoolName, escapeHtml } from '../lib/format'
+import { APPLICANT_RATIO_BANDS, applicantRatioBand, threeYearApplicantRatio, type ApplicantRatioBand } from '../lib/admission'
 import { useI18n } from '../contexts/I18nContext'
 import { useFormat } from '../hooks/useFormat'
 import {
   haversine,
+  homeViewRadiusKm,
   shortLabel,
   estimateWalkMinutes,
   estimateBikeMinutes,
@@ -119,6 +121,7 @@ function schoolIcon(
   home: HomeLocation | null,
   code: string,
   dev: string,
+  applicantRatio: string,
   kosenBadge: string,
   integratedBadge: string,
 ): L.DivIcon {
@@ -136,14 +139,15 @@ function schoolIcon(
         return `<div class="label-commute">🚶${estimateWalkMinutes(d)}/🚲${estimateBikeMinutes(d)}/🚗${estimateCarMinutes(d)}/🚃${estimateTransitMinutes(d)}分</div>`
       })()
     : ''
+  const height = 56 + (home ? 14 : 0)
   return L.divIcon({
     className: '',
-    iconSize: [200, home ? 70 : 56],
-    iconAnchor: [100, home ? 70 : 56],
+    iconSize: [200, height],
+    iconAnchor: [100, height],
     html: `<div class="pin ${isFav ? 'fav' : ''}" ${b != null ? `data-band="${b}"` : ''}>
       <div class="label">
-        <div class="label-name">${escapeHtml(shortSchoolName(s.name, s))}</div>
-        <div class="label-dev">${escapeHtml(code)}<span class="dev-value">${escapeHtml(dev)}</span>${badge}</div>
+        <div class="label-name">${escapeHtml(shortSchoolName(s.name, s))}${badge}</div>
+        <div class="label-dev">${escapeHtml(code)}<span class="dev-value">${escapeHtml(dev)}</span>${applicantRatio ? `<span class="label-admission">${escapeHtml(applicantRatio)}</span>` : ''}</div>
         ${commute}
       </div>
       <div class="dot"></div>
@@ -160,8 +164,18 @@ function homeIcon(homeLabel: string): L.DivIcon {
   })
 }
 
+/** 自宅を中心に、最寄り校が収まる「通学圏」の正方形 bounds（fitBounds 用） */
+function homeViewBounds(home: HomeLocation, schools: School[]): L.LatLngBounds {
+  const radiusKm = homeViewRadiusKm(
+    home,
+    schools.map((s) => ({ lat: s.latitude, lng: s.longitude })),
+  )
+  return L.latLng(home.lat, home.lng).toBounds(radiusKm * 2 * 1000)
+}
+
 interface Filters {
   bands: Set<number>
+  ratios: Set<ApplicantRatioBand>
   own: Set<string>
   gen: Set<string>
   types: Set<string>
@@ -170,7 +184,7 @@ interface Filters {
   onlyIntegrated: boolean
 }
 
-type PopoverKey = 'own' | 'bands' | 'gen' | 'courseTimes' | 'depts' | null
+type PopoverKey = 'own' | 'bands' | 'ratios' | 'gen' | 'courseTimes' | 'depts' | null
 
 interface Props {
   userData: ReturnType<typeof useUserData>
@@ -204,6 +218,10 @@ export function MapPage({ userData }: Props) {
         [30, t('filter.band.b30')],
         [UNRATED, t('filter.band.unrated')],
       ] as const,
+    [t],
+  )
+  const RATIO_CHIPS = useMemo(
+    () => APPLICANT_RATIO_BANDS.map((k) => [k, t(`filter.ratio.${k}`)] as const),
     [t],
   )
   const OWN_CHIPS = useMemo(
@@ -258,6 +276,7 @@ export function MapPage({ userData }: Props) {
 
   const [filters, setFilters] = useState<Filters>({
     bands: new Set([...ALL_BANDS, UNRATED as number]),
+    ratios: new Set<ApplicantRatioBand>(APPLICANT_RATIO_BANDS),
     own: new Set(['prefectural', 'municipal', 'national', 'private', 'union']),
     gen: new Set(['coed', 'boys', 'girls']),
     types: new Set(['high_school', 'kosen']),
@@ -271,12 +290,14 @@ export function MapPage({ userData }: Props) {
   const searchInputRef = useRef<HTMLInputElement | null>(null)
   const [filterSheetOpen, setFilterSheetOpen] = useState(false)
 
-  const center = useMemo<[number, number]>(
-    () => (home ? [home.lat, home.lng] : [ACTIVE_REGION.mapCenter.lat, ACTIVE_REGION.mapCenter.lng]),
-    [home],
-  )
-
   const normalizedQuery = useMemo(() => normalizeQuery(query.trim()), [query])
+
+  // 倍率区分は学校データが変わらない限り不変なので、フィルタ評価のたびに再計算しない
+  const ratioBands = useMemo(() => {
+    const bands = new Map<string, ApplicantRatioBand>()
+    for (const s of schools) bands.set(s.id, applicantRatioBand(s))
+    return bands
+  }, [schools])
 
   const visibleSchools = useMemo(() => {
     return schools.filter((s) => {
@@ -295,6 +316,7 @@ export function MapPage({ userData }: Props) {
       }
       // 偏差値未測定校は sentinel UNRATED として明示的にフィルタ制御可能
       const passBand = top == null ? filters.bands.has(UNRATED) : filters.bands.has(band(top))
+      const passRatio = filters.ratios.has(ratioBands.get(s.id) ?? 'unknown')
       const passOwn = filters.own.has(s.ownership)
       const passGen = filters.gen.has(s.gender_type)
       const passType = filters.types.has(s.type)
@@ -309,16 +331,16 @@ export function MapPage({ userData }: Props) {
           ? s.departments.map((d) => d.ui_group ?? 'other')
           : ['other']
       const passDept = groups.some((g) => filters.depts.has(g))
-      return passBounds && passBand && passOwn && passGen && passType && passCourseTime && passDept && passInt && passQuery
+      return passBounds && passBand && passRatio && passOwn && passGen && passType && passCourseTime && passDept && passInt && passQuery
     })
-  }, [schools, favorites, mapBounds, filters, normalizedQuery])
+  }, [schools, favorites, mapBounds, filters, normalizedQuery, ratioBands])
 
   const favSchools = useMemo(
     () => schools.filter((s) => favorites[s.id]),
     [schools, favorites],
   )
 
-  const toggleSet = (key: 'bands' | 'own' | 'gen' | 'types' | 'courseTimes' | 'depts', value: never) => {
+  const toggleSet = (key: 'bands' | 'ratios' | 'own' | 'gen' | 'types' | 'courseTimes' | 'depts', value: never) => {
     setFilters((f) => {
       const next = new Set(f[key] as Set<unknown>)
       if (next.has(value)) next.delete(value)
@@ -331,6 +353,7 @@ export function MapPage({ userData }: Props) {
     setFilters((f) => ({
       ...f,
       bands: new Set([...ALL_BANDS, UNRATED as number]),
+      ratios: new Set<ApplicantRatioBand>(APPLICANT_RATIO_BANDS),
       own: new Set(['prefectural', 'municipal', 'national', 'private', 'union']),
       gen: new Set(['coed', 'boys', 'girls']),
       courseTimes: new Set<CourseTime>(['fulltime', 'parttime']),
@@ -346,11 +369,12 @@ export function MapPage({ userData }: Props) {
       [
         ['own', t('map.filterCategory.own'), OWN_CHIPS, filters.own],
         ['bands', t('map.filterCategory.bands'), BAND_CHIPS, filters.bands],
+        ['ratios', t('map.filterCategory.ratios'), RATIO_CHIPS, filters.ratios],
         ['gen', t('map.filterCategory.gen'), GEN_CHIPS, filters.gen],
         ['courseTimes', t('map.filterCategory.courseTimes'), COURSE_TIME_CHIPS, filters.courseTimes],
         ['depts', t('map.filterCategory.depts'), DEPT_CHIPS, filters.depts],
       ] as const,
-    [t, OWN_CHIPS, BAND_CHIPS, GEN_CHIPS, COURSE_TIME_CHIPS, DEPT_CHIPS, filters],
+    [t, OWN_CHIPS, BAND_CHIPS, RATIO_CHIPS, GEN_CHIPS, COURSE_TIME_CHIPS, DEPT_CHIPS, filters],
   )
 
   const activeFilterCount = FILTER_CATEGORIES.reduce(
@@ -399,10 +423,27 @@ export function MapPage({ userData }: Props) {
     }
   }, [])
 
+  // 自宅が決まったら、最寄り校が収まる「通学圏」へ自動ズームする（半径は学校密度で
+  // 自動決定・都道府県別の設定は持たない）。保存済み自宅の復元は学校データ到着より
+  // 先に来ることがあるため、両方そろった時点で自宅地点ごとに 1 回だけ適用する。
+  // 共有 URL で開いた場合は後続の effect の「該当校へ寄せる」が後から走って優先される。
+  const appliedHomeViewRef = useRef<string | null>(null)
   useEffect(() => {
     if (!mapRef) return
-    mapRef.setView(center, mapRef.getZoom())
-  }, [center, mapRef])
+    if (!home) {
+      mapRef.setView([ACTIVE_REGION.mapCenter.lat, ACTIVE_REGION.mapCenter.lng], mapRef.getZoom())
+      return
+    }
+    if (schools.length === 0) {
+      // データ到着前は中心だけ自宅へ追従（到着後に下の fitBounds が走る）
+      mapRef.setView([home.lat, home.lng], mapRef.getZoom())
+      return
+    }
+    const key = `${home.lat},${home.lng}`
+    if (appliedHomeViewRef.current === key) return
+    appliedHomeViewRef.current = key
+    mapRef.fitBounds(homeViewBounds(home, schools))
+  }, [home, schools, mapRef])
 
   // 共有 URL で開かれたら、学校データ到着後に 1 回だけ該当校の詳細シートを開いて寄せる
   useEffect(() => {
@@ -442,6 +483,10 @@ export function MapPage({ userData }: Props) {
           home,
           fmt.displayCode(s),
           fmt.devLabel(s),
+          (() => {
+            const ratio = threeYearApplicantRatio(s)
+            return ratio ? t('map.applicantRatio3Years', { ratio: ratio.average.toFixed(2) }) : ''
+          })(),
           kosenBadge,
           integratedBadge,
         ),
@@ -641,7 +686,7 @@ export function MapPage({ userData }: Props) {
         </button>
         <button
           type="button"
-          onClick={() => home && mapRef?.setView([home.lat, home.lng], 10)}
+          onClick={() => home && mapRef?.fitBounds(homeViewBounds(home, schools))}
           title={t('map.recenter')}
           aria-label={t('map.recenter')}
         >
