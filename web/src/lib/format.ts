@@ -151,9 +151,55 @@ export function courseTimeLabel(s: School): string {
   return labels.length ? labels.join('・') : '情報募集中'
 }
 
+export type ScaleBand = 'small' | 'medium' | 'large'
+
+const SCALE_BAND_LABEL: Record<ScaleBand, string> = {
+  small: '小規模',
+  medium: '中規模',
+  large: '大規模',
+}
+
+/**
+ * admission_stats の最新年から 1 学年あたり募集定員を学校単位で合算する。
+ * 学科行がある年は学科行のみ合算し、学校全体行（department_id = null）との二重計上を避ける。
+ * 前期/後期分割の県では capacity が後期枠のみのことがあり過小になり得る（バンドは目安表記で吸収）。
+ */
+export function gradeCapacity(s: School): number | null {
+  const byYear = new Map<number, { dept: number; wide: number; hasDept: boolean; hasWide: boolean }>()
+  for (const stat of s.admission_stats) {
+    if (stat.capacity == null || stat.capacity <= 0) continue
+    const e = byYear.get(stat.year) ?? { dept: 0, wide: 0, hasDept: false, hasWide: false }
+    if (stat.department_id == null) {
+      e.wide += stat.capacity
+      e.hasWide = true
+    } else {
+      e.dept += stat.capacity
+      e.hasDept = true
+    }
+    byYear.set(stat.year, e)
+  }
+  if (byYear.size === 0) return null
+  const latest = Math.max(...byYear.keys())
+  const e = byYear.get(latest)!
+  return e.hasDept ? e.dept : e.hasWide ? e.wide : null
+}
+
+/** 1 学年募集定員から規模バンドを導出（小=〜120 / 中=121〜240 / 大=241〜） */
+export function scaleBand(s: School): ScaleBand | null {
+  const cap = gradeCapacity(s)
+  if (cap == null) return null
+  if (cap <= 120) return 'small'
+  if (cap <= 240) return 'medium'
+  return 'large'
+}
+
 export function enrollmentLabel(s: School): string {
-  if (s.total_students == null || s.enrollment_year == null) return '情報募集中'
-  return `約 ${s.total_students.toLocaleString()} 人（${s.enrollment_year} 年）`
+  if (s.total_students != null && s.enrollment_year != null) {
+    return `約 ${s.total_students.toLocaleString()} 人（${s.enrollment_year} 年）`
+  }
+  const band = scaleBand(s)
+  if (band) return `${SCALE_BAND_LABEL[band]}（募集定員ベースの目安）`
+  return '情報募集中'
 }
 
 export function genderRatioLabel(s: School): string | null {
