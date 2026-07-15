@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto'
 import { mkdir, readdir, readFile, unlink, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { gzipSync } from 'node:zlib'
 import { createClient } from '@supabase/supabase-js'
 
 const here = dirname(fileURLToPath(import.meta.url))
@@ -98,6 +99,35 @@ for (const row of rows) {
   }
 }
 
+// 指標別出典は学校・年度ごとに同じ公式資料を繰り返すため、そのままJSON化
+// すると約46,000個の同型objectで単一ファイルがPages上限を超える。
+// 静的配信だけsource objectをcatalog化し、各統計にはindexを持たせる。
+// ブラウザ側で元objectへ復元するため、表示情報は一切落とさない。
+const sourceCatalog = []
+const sourceIndex = new Map()
+function compactUnitSources(units) {
+  for (const unit of units ?? []) {
+    for (const stat of unit.school_admission_selection_stats ?? []) {
+      stat.school_admission_stat_sources = (stat.school_admission_stat_sources ?? []).map((source) => {
+        const key = JSON.stringify(source)
+        let index = sourceIndex.get(key)
+        if (index == null) {
+          index = sourceCatalog.length
+          sourceCatalog.push(source)
+          sourceIndex.set(key, index)
+        }
+        return index
+      })
+    }
+  }
+}
+for (const row of rows) {
+  compactUnitSources(row.admission_recruitment_units)
+  for (const relationship of row.predecessor_relationships ?? []) {
+    compactUnitSources(relationship.predecessor?.admission_recruitment_units)
+  }
+}
+
 // --- build hash 付き URL 化 -------------------------------------------------
 // 内容から sha256 の先頭 10 桁を hash とし、`schools-<hash>.json` を出力する。
 // あわせて `schools-manifest.json` を「常に fresh に取る」ポインタとして書き、
@@ -107,26 +137,30 @@ for (const row of rows) {
 const publicDir = join(webRoot, 'public')
 await mkdir(publicDir, { recursive: true })
 
-const body = `${JSON.stringify(rows)}\n`
+const payload = { formatVersion: 2, sourceCatalog, schools: rows }
+const body = `${JSON.stringify(payload)}\n`
 const hash = createHash('sha256').update(body).digest('hex').slice(0, 10)
-const filename = `schools-${hash}.json`
+const filename = `schools-${hash}.json.gz`
 const outputPath = join(publicDir, filename)
 
 // 古い schools-*.json / schools.json を掃除（本 build で出力する分だけ残す）。
 const existing = await readdir(publicDir)
 for (const name of existing) {
   if (name === filename) continue
-  if (name === 'schools.json' || /^schools-[0-9a-f]+\.json$/.test(name)) {
+  if (name === 'schools.json' || /^schools-[0-9a-f]+\.json(?:\.gz)?$/.test(name)) {
     await unlink(join(publicDir, name))
   }
 }
 
-await writeFile(outputPath, body)
+await writeFile(outputPath, gzipSync(body, { level: 9 }))
 
 const manifest = {
   url: `/${filename}`,
   hash,
   count: rows.length,
+  formatVersion: payload.formatVersion,
+  compression: 'gzip',
+  sourceCatalogCount: sourceCatalog.length,
   generatedAt: new Date().toISOString(),
 }
 await writeFile(join(publicDir, 'schools-manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`)

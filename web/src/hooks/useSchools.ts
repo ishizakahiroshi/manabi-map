@@ -347,7 +347,7 @@ async function fetchSchoolRows(): Promise<SchoolRow[]> {
       // 同一オリジンの schools JSON のみ許可（絶対 URL や path traversal を拒否）
       if (
         typeof manifest.url === 'string' &&
-        /^\/schools(?:-[0-9a-f]+)?\.json$/i.test(manifest.url)
+        /^\/schools(?:-[0-9a-f]+)?\.json(?:\.gz)?$/i.test(manifest.url)
       ) {
         dataUrl = manifest.url
       }
@@ -358,7 +358,57 @@ async function fetchSchoolRows(): Promise<SchoolRow[]> {
 
   const response = await fetch(dataUrl)
   if (!response.ok) throw new Error(`schools fetch failed: ${response.status} (${dataUrl})`)
-  return (await response.json()) as SchoolRow[]
+  let payload: unknown
+  if (dataUrl.endsWith('.gz')) {
+    // CDN / dev serverによっては .gz をHTTP層で自動展開し、URLだけが .gz のまま
+    // になる。先頭のgzip magic byteを見て、raw gzipと展開済みJSONの両方を読む。
+    const bytes = new Uint8Array(await response.arrayBuffer())
+    if (bytes[0] === 0x1f && bytes[1] === 0x8b) {
+      const compressed = new Blob([bytes]).stream()
+      const decompressed = compressed.pipeThrough(new DecompressionStream('gzip'))
+      payload = await new Response(decompressed).json()
+    } else {
+      payload = JSON.parse(new TextDecoder().decode(bytes)) as unknown
+    }
+  } else {
+    payload = await response.json()
+  }
+  if (Array.isArray(payload)) return payload as SchoolRow[]
+  if (
+    payload == null ||
+    typeof payload !== 'object' ||
+    !Array.isArray((payload as { schools?: unknown }).schools) ||
+    !Array.isArray((payload as { sourceCatalog?: unknown }).sourceCatalog)
+  ) {
+    throw new Error('schools payload has an unsupported format')
+  }
+
+  const compact = payload as {
+    schools: SchoolRow[]
+    sourceCatalog: AdmissionSelectionSource[]
+  }
+  const hydrateUnitSources = (units: AdmissionRecruitmentUnitRow[] | null | undefined) => {
+    for (const unit of units ?? []) {
+      for (const stat of unit.school_admission_selection_stats ?? []) {
+        const refs = (stat.school_admission_stat_sources ?? []) as unknown[]
+        stat.school_admission_stat_sources = refs
+          .map((ref) =>
+            typeof ref === 'number' ? compact.sourceCatalog[ref] : ref,
+          )
+          .filter(
+            (source): source is AdmissionSelectionSource =>
+              source != null && typeof source === 'object',
+          )
+      }
+    }
+  }
+  for (const row of compact.schools) {
+    hydrateUnitSources(row.admission_recruitment_units)
+    for (const relationship of row.predecessor_relationships ?? []) {
+      hydrateUnitSources(relationship.predecessor?.admission_recruitment_units)
+    }
+  }
+  return compact.schools
 }
 
 // ---------------------------------------------------------------------------
