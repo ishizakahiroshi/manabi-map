@@ -1,0 +1,2 @@
+pref,school_name,unit_key,year,selection_stage_code,selection_track_code,stage_label_raw,track_label_raw,selection_scope_raw,population_scope_raw,scope_key,map_role_code,is_ratio_comparable,capacity,applicants,examinees,admitted,exam_scope_raw,exam_component_codes
+架空県,架空高等学校,general,2026,primary,combined,一次募集,一般＋特色,一次募集全体,,primary_total,primary_total,true,100,120,,,学力検査・面接,academic_test|interview

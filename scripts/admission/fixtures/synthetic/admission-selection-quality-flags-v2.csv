@@ -1,0 +1,2 @@
+pref,school_name,unit_key,year,selection_stage_code,selection_track_code,scope_key,metric_code,reason_code,note
+架空県,架空高等学校,general,2026,primary,combined,primary_total,admitted,metric_scope_mismatch,合格者の公表scopeが異なるため未収録

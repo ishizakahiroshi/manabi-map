@@ -1,0 +1,84 @@
+name: Validate web
+
+on:
+  pull_request:
+    branches: [main, develop]
+  push:
+    branches: [main, develop]
+
+permissions:
+  contents: read
+
+env:
+  HAS_SUPABASE_BUILD_ACCESS: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY != '' }}
+
+concurrency:
+  group: validate-web-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  web:
+    name: typecheck, test, and build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.1.1
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Test
+        run: pnpm test
+
+      - name: Generate public school data
+        if: env.HAS_SUPABASE_BUILD_ACCESS == 'true'
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          # This credential is scoped to this read-only Node step and is never
+          # passed to Vite or written to the generated JSON.
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: pnpm gen:schools-json
+
+      - name: Build app
+        if: env.HAS_SUPABASE_BUILD_ACCESS == 'true'
+        env:
+          # Build-time placeholders only. Production receives its real public
+          # values from Cloudflare Pages; no service credential reaches Vite.
+          VITE_SUPABASE_URL: https://example.supabase.co
+          VITE_SUPABASE_ANON_KEY: ci-public-placeholder
+          VERSION_OVERRIDE: ci-${{ github.sha }}
+        run: pnpm exec vite build
+
+      - name: Generate SEO pages
+        if: env.HAS_SUPABASE_BUILD_ACCESS == 'true'
+        run: node scripts/gen-seo-pages.mjs
+
+      - name: Verify output
+        if: env.HAS_SUPABASE_BUILD_ACCESS == 'true'
+        run: |
+          test -s dist/index.html
+          test -s dist/schools-manifest.json
+          test -s dist/sitemap.xml
