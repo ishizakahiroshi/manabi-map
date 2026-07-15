@@ -13,6 +13,7 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { gunzipSync } from 'node:zlib'
 
 const SITE_ORIGIN = 'https://manabi-map.app'
 
@@ -38,7 +39,11 @@ async function resolveSchoolsPath() {
   return join(distDir, 'schools.json')
 }
 const schoolsPath = await resolveSchoolsPath()
-const schools = JSON.parse(await readFile(schoolsPath, 'utf8'))
+const schoolsFile = await readFile(schoolsPath)
+const schoolsText = schoolsPath.endsWith('.gz') ? gunzipSync(schoolsFile).toString('utf8') : schoolsFile.toString('utf8')
+const schoolsPayload = JSON.parse(schoolsText)
+const schools = Array.isArray(schoolsPayload) ? schoolsPayload : schoolsPayload.schools
+if (!Array.isArray(schools)) throw new Error('schools payload has an unsupported format')
 
 function escapeHtml(value) {
   return String(value)

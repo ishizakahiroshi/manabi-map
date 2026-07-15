@@ -12,6 +12,7 @@ dist
 dist-ssr
 public/schools.json
 public/schools-*.json
+public/schools-*.json.gz
 public/schools-manifest.json
 *.local
 
