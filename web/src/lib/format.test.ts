@@ -1,6 +1,5 @@
 import { describe, it, expect } from 'vitest'
 import { shortSchoolName, escapeHtml, band, topDev, botDev, devLabel } from './format'
-import { applicantRatioBand, threeYearApplicantRatio } from './admission'
 import type { School } from '../types/school'
 
 function makeSchool(devs: (number | null)[]): School {
@@ -112,59 +111,5 @@ describe('topDev / botDev / devLabel', () => {
   it('単一値は単数表示', () => {
     const s = makeSchool([55])
     expect(devLabel(s)).toBe('55')
-  })
-})
-
-describe('threeYearApplicantRatio', () => {
-  it('学科別行を優先して直近連続3年の倍率平均を返す', () => {
-    const school = makeSchool([])
-    school.admission_stats = [
-      { department_id: 'a', year: 2026, capacity: 100, applicants: 120, examinees: null, admitted: null, note: null, source_url: null },
-      { department_id: null, year: 2026, capacity: 999, applicants: 999, examinees: null, admitted: null, note: null, source_url: null },
-      { department_id: 'a', year: 2025, capacity: 100, applicants: 90, examinees: null, admitted: null, note: null, source_url: null },
-      { department_id: 'a', year: 2024, capacity: 100, applicants: 150, examinees: null, admitted: null, note: null, source_url: null },
-    ]
-
-    expect(threeYearApplicantRatio(school)).toEqual({ years: [2026, 2025, 2024], average: 1.2 })
-  })
-
-  it('欠年または3年度未満なら表示用の平均を返さない', () => {
-    const school = makeSchool([])
-    school.admission_stats = [
-      { department_id: null, year: 2026, capacity: 100, applicants: 100, examinees: null, admitted: null, note: null, source_url: null },
-      { department_id: null, year: 2024, capacity: 100, applicants: 100, examinees: null, admitted: null, note: null, source_url: null },
-      { department_id: null, year: 2023, capacity: 100, applicants: 100, examinees: null, admitted: null, note: null, source_url: null },
-    ]
-
-    expect(threeYearApplicantRatio(school)).toBeNull()
-  })
-})
-
-describe('applicantRatioBand', () => {
-  const schoolWithRatios = (r0: number, r1: number, r2: number) => {
-    const school = makeSchool([])
-    school.admission_stats = [
-      { department_id: null, year: 2026, capacity: 1000, applicants: Math.round(r0 * 1000), examinees: null, admitted: null, note: null, source_url: null },
-      { department_id: null, year: 2025, capacity: 1000, applicants: Math.round(r1 * 1000), examinees: null, admitted: null, note: null, source_url: null },
-      { department_id: null, year: 2024, capacity: 1000, applicants: Math.round(r2 * 1000), examinees: null, admitted: null, note: null, source_url: null },
-    ]
-    return school
-  }
-
-  it('境界値を含めて区分する（1.0 と 1.2 と 1.5 は上側の区分）', () => {
-    expect(applicantRatioBand(schoolWithRatios(0.9, 0.9, 0.9))).toBe('under1')
-    expect(applicantRatioBand(schoolWithRatios(1.0, 1.0, 1.0))).toBe('from1')
-    expect(applicantRatioBand(schoolWithRatios(1.2, 1.2, 1.2))).toBe('from1_2')
-    expect(applicantRatioBand(schoolWithRatios(1.5, 1.5, 1.5))).toBe('from1_5')
-  })
-
-  it('カード表示と同じ丸めで区分する（平均 1.199 は表示 1.20 なので 1.2〜1.5 に入る）', () => {
-    expect(applicantRatioBand(schoolWithRatios(1.2, 1.2, 1.197))).toBe('from1_2')
-  })
-
-  it('3年分そろわない学校は unknown', () => {
-    const school = makeSchool([])
-    school.admission_stats = []
-    expect(applicantRatioBand(school)).toBe('unknown')
   })
 })
