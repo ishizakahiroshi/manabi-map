@@ -203,7 +203,14 @@ async function upsert(table, rows, conflictColumns) {
 
 async function main() {
   const failures = []
-  const daily = new Map(dates.map((date) => [date, { snapshot_date: date }]))
+  // PostgREST の一括 upsert は全行が同じキーセットを持つことを要求する (PGRST102)。
+  // 一部の日だけ値が付く列があるため、先に全カラムを null で埋めて揃える。
+  const dailyColumns = {
+    gsc_clicks: null, gsc_impressions: null, gsc_avg_position: null, sitemap_page_count: null,
+    cf_visits: null, cf_pageviews: null, app_users_total: null, app_users_line: null,
+    app_users_anon: null, favorites_total: null, notes_total: null, home_points_total: null,
+  }
+  const daily = new Map(dates.map((date) => [date, { snapshot_date: date, ...dailyColumns }]))
   let gsc
   let cloudflare
 
