@@ -475,6 +475,26 @@ body {
   font-size: 0.78rem; margin-bottom: 2px;
 }
 .info-grid b { display: block; font-family: var(--body); font-size: 0.9rem; line-height: 1.35; overflow-wrap: anywhere; }
+.lifecycle-block {
+  margin-top: 12px;
+  padding: 12px;
+  border: 1px solid color-mix(in srgb, var(--accent) 24%, var(--line));
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--accent) 5%, var(--paper));
+}
+.lifecycle-block h4 { margin: 0 0 8px; font-family: var(--display); font-size: 0.95rem; }
+.lifecycle-block dl { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 12px; margin: 0; }
+.lifecycle-block dl div { min-width: 0; }
+.lifecycle-block dt { color: var(--ink-soft); font-size: 0.74rem; }
+.lifecycle-block dd { margin: 1px 0 0; font-size: 0.86rem; font-weight: 700; overflow-wrap: anywhere; }
+.lifecycle-list { margin-top: 9px; font-size: 0.82rem; }
+.lifecycle-list ul { margin: 4px 0 0; padding-left: 1.25rem; }
+.lifecycle-list li + li { margin-top: 3px; }
+.lifecycle-list small { color: var(--ink-soft); }
+.predecessor-admissions { margin-top: 4px; }
+.predecessor-admissions summary { cursor: pointer; color: var(--primary-dark); font-weight: 650; }
+.predecessor-admissions > ul { margin-top: 5px; font-size: 0.78rem; }
+.predecessor-admissions > p { margin: 5px 0 0; color: var(--ink-soft); }
 .data-report { margin-top: 5px; }
 .data-report-toggle {
   padding: 2px 0; border: 0; background: transparent; color: var(--accent);
@@ -572,19 +592,48 @@ body {
 .admission-block .sub { color: var(--ink-soft); font-size: 0.82rem; margin: 0 0 10px; }
 .admission-pending { display: flex; align-items: center; justify-content: space-between; gap: 10px; color: var(--ink-soft); font-size: 0.86rem; }
 .admission-pending .data-report { margin-top: 0; }
-.admission-group { margin-top: 12px; }
-.admission-group h5 { margin: 0 0 5px; font-family: var(--display); font-size: 0.9rem; }
+.admission-trend { margin: 12px 0; padding: 12px; border-radius: 12px; background: var(--card); }
+.admission-trend h5, .admission-section h5 { margin: 0 0 6px; font-family: var(--display); font-size: 0.9rem; }
+.admission-trend p, .admission-section > p { margin: 7px 0 0; color: var(--ink-soft); font-size: 0.78rem; line-height: 1.55; }
+.admission-trend-years { display: flex; flex-wrap: wrap; gap: 6px; }
+.admission-trend-years > span { padding: 5px 8px; border: 1px solid var(--line); border-radius: 999px; background: #fff; font-size: 0.78rem; font-weight: 700; }
+.admission-trend-years small { color: var(--ink-soft); font-weight: 500; }
+.admission-trend .admission-average { font-weight: 700; color: var(--ink); }
+.admission-section { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--line); }
+.admission-section-warn { padding: 12px; border: 1px solid #e6c989; border-radius: 12px; background: #fffaf0; }
+.admission-empty { margin: 9px 0 0; padding: 9px; border-radius: 9px; background: var(--bg); color: var(--ink-soft); font-size: 0.78rem; }
+.admission-record { margin-top: 10px; padding: 11px; border: 1px solid var(--line); border-radius: 11px; background: #fff; }
+.admission-record-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; margin-bottom: 8px; font-size: 0.84rem; }
+.admission-ratio { flex: none; padding: 3px 7px; border-radius: 999px; background: #fff1e8; color: #8b3c16; font-size: 0.74rem; font-weight: 700; }
+.admission-meta { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px 10px; margin: 0 0 8px; }
+.admission-meta div { min-width: 0; }
+.admission-meta dt { color: var(--ink-soft); font-size: 0.69rem; }
+.admission-meta dd { margin: 1px 0 0; overflow-wrap: anywhere; font-size: 0.76rem; font-weight: 650; }
+.admission-meta code { font-size: 0.7rem; }
 .admission-scroll { overflow-x: auto; }
-.admission-table { width: 100%; min-width: 510px; border-collapse: collapse; font-size: 0.78rem; }
+.admission-table { width: 100%; min-width: 430px; border-collapse: collapse; font-size: 0.78rem; }
 .admission-table th, .admission-table td { padding: 6px 5px; border-bottom: 1px solid var(--line); text-align: right; white-space: nowrap; }
 .admission-table th:first-child, .admission-table td:first-child { text-align: left; }
 .admission-table thead th { color: var(--ink-soft); font-weight: 700; }
 .admission-table tbody th { font-weight: 700; }
+.admission-detail-line { margin-top: 7px; color: var(--ink-soft); font-size: 0.76rem; line-height: 1.45; }
+.admission-detail-line b { color: var(--ink); }
+.admission-quality, .admission-sources { margin-top: 9px; font-size: 0.74rem; line-height: 1.5; }
+.admission-quality > b, .admission-sources > b { font-size: 0.76rem; }
+.admission-quality ul, .admission-sources ul { margin: 4px 0 0; padding-left: 18px; }
+.admission-quality { padding: 8px; border-radius: 8px; background: #fff6dd; }
+.admission-sources a { color: var(--accent); }
+.admission-evidence { display: block; color: var(--ink-soft); }
 .admission-foot { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 5px; font-size: 0.74rem; color: var(--ink-soft); }
 .admission-foot a { color: var(--accent); }
 .admission-missing { align-items: center; }
 .admission-missing .data-report { margin-top: 0; }
 .admission-block > .note { margin: 9px 0 0; font-size: 0.78rem; color: var(--ink-soft); }
+@media (max-width: 520px) {
+  .admission-meta { grid-template-columns: 1fr; }
+  .admission-record-head { display: block; }
+  .admission-ratio { display: inline-block; margin-top: 5px; }
+}
 
 .commute {
   margin-top: 16px; padding: 12px 14px; border: 2px solid var(--ink); border-radius: 14px;
@@ -715,12 +764,12 @@ body {
 }
 .pin .label-dev {
   white-space: nowrap; margin-top: 1px; font-weight: 600;
-  display: flex; align-items: baseline; gap: 3px;
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: 3px;
 }
 .pin .label-dev .dev-value { color: var(--accent, #ff7a3d); font-size: 0.82rem; }
 .pin .label-name small { font-weight: 400; opacity: 0.7; margin-left: 2px; }
 .pin .label-admission {
-  white-space: nowrap; margin-left: 2px; font-size: 0.6rem;
+  flex-basis: 100%; white-space: nowrap; margin-left: 0; font-size: 0.6rem;
   color: var(--ink); opacity: 0.78; font-weight: 500;
 }
 .pin .label-commute {

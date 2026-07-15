@@ -7,7 +7,7 @@ import 'leaflet.markercluster/dist/MarkerCluster.css'
 import 'leaflet.markercluster/dist/MarkerCluster.Default.css'
 import type { CourseTime, DeptUiGroup, School } from '../types/school'
 import { band, topDev, shortSchoolName, escapeHtml } from '../lib/format'
-import { APPLICANT_RATIO_BANDS, applicantRatioBand, threeYearApplicantRatio, type ApplicantRatioBand } from '../lib/admission'
+import { APPLICANT_RATIO_BANDS, applicantRatioBand, primaryAdmissionTrend, type ApplicantRatioBand } from '../lib/admission'
 import { useI18n } from '../contexts/I18nContext'
 import { useFormat } from '../hooks/useFormat'
 import {
@@ -139,7 +139,7 @@ function schoolIcon(
         return `<div class="label-commute">🚶${estimateWalkMinutes(d)}/🚲${estimateBikeMinutes(d)}/🚗${estimateCarMinutes(d)}/🚃${estimateTransitMinutes(d)}分</div>`
       })()
     : ''
-  const height = 56 + (home ? 14 : 0)
+  const height = 56 + (home ? 14 : 0) + (applicantRatio ? 12 : 0)
   return L.divIcon({
     className: '',
     iconSize: [200, height],
@@ -292,7 +292,7 @@ export function MapPage({ userData }: Props) {
 
   const normalizedQuery = useMemo(() => normalizeQuery(query.trim()), [query])
 
-  // 倍率区分は学校データが変わらない限り不変なので、フィルタ評価のたびに再計算しない
+  // 最新年度の一次募集区分は学校データが変わらない限り不変なので、フィルタ評価のたびに再計算しない
   const ratioBands = useMemo(() => {
     const bands = new Map<string, ApplicantRatioBand>()
     for (const s of schools) bands.set(s.id, applicantRatioBand(s))
@@ -484,8 +484,10 @@ export function MapPage({ userData }: Props) {
           fmt.displayCode(s),
           fmt.devLabel(s),
           (() => {
-            const ratio = threeYearApplicantRatio(s)
-            return ratio ? t('map.applicantRatio3Years', { ratio: ratio.average.toFixed(2) }) : ''
+            const latest = primaryAdmissionTrend(s)?.annual[0]
+            return latest
+              ? t('map.primaryAdmissionLatest', { year: latest.year, ratio: latest.ratio.toFixed(2) })
+              : ''
           })(),
           kosenBadge,
           integratedBadge,
