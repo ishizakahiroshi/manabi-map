@@ -1,0 +1,3 @@
+pref,school_name,unit_key,year,selection_stage_code,selection_track_code,scope_key,fact_kind_code,official_url,doc_title,published_at,source_page_or_table,quoted_evidence,last_verified_at,last_http_status
+架空県,架空高等学校,general,2026,primary,combined,primary_total,capacity,https://example.pref.jp/capacity.pdf,募集定員,2025-10-01,p.1,募集定員,2026-07-14,200
+架空県,架空高等学校,general,2026,primary,combined,primary_total,applicants,https://example.pref.jp/applicants.pdf,志願状況,2026-02-01,p.2,志願者数,2026-07-14,200

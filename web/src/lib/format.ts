@@ -216,9 +216,17 @@ export function extraBadge(s: School): string {
 
 /** 校名（[運営][性別]：偏差値）+ 特殊バッジ */
 export function displayName(s: School): string {
-  const recruiting = s.is_recruiting ? '' : '[募集停止] '
-  return `${recruiting}${s.name}（${displayCode(s)}：${devLabel(s)}）${extraBadge(s)}`
+  const recruitmentStatus =
+    s.recruitment_status_code ??
+    (s.is_recruiting ? 'recruiting' : s.is_integrated ? 'no_external_high_school_intake' : 'unknown')
+  const prefix = {
+    recruiting: '',
+    stopped: '[募集終了] ',
+    no_external_high_school_intake: '[高校募集なし] ',
+    not_started: '[募集開始前] ',
+    unknown: '[募集状態未確認] ',
+  }[recruitmentStatus]
+  return `${prefix}${s.name}（${displayCode(s)}：${devLabel(s)}）${extraBadge(s)}`
 }
 
 /** テスト用: displayName の関数を、指定 ownership/prefecture の School で組む fixture */
-

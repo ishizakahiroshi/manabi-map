@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type TouchEvent } from 'react'
-import type { AdmissionStat, School } from '../types/school'
+import type { AdmissionSelection, AdmissionQualityReason, School } from '../types/school'
 import {
   haversine,
   estimateWalkMinutes,
@@ -8,7 +8,7 @@ import {
   estimateTransitMinutes,
   googleMapsRoute,
 } from '../lib/geo'
-import { threeYearApplicantRatio } from '../lib/admission'
+import { primaryAdmissionTrend } from '../lib/admission'
 import { useApp } from '../contexts/AppContext'
 import { useAuth } from '../contexts/AuthContext'
 import { useI18n } from '../contexts/I18nContext'
@@ -158,7 +158,7 @@ export function SchoolDetailSheet({ school, onClose, userData }: Props) {
   const dist = home ? haversine(home, { lat: school.latitude, lng: school.longitude }) : null
   const routeUrl = home ? googleMapsRoute(home, school) : null
   const genderRatio = fmt.genderRatioLabel(school)
-  const ratio3y = threeYearApplicantRatio(school)
+  const admissionTrend = primaryAdmissionTrend(school)
   const hasCourseInfo = school.course_times.length > 0
   const hasScaleInfo =
     (school.total_students != null && school.enrollment_year != null) || scaleBand(school) != null
@@ -166,21 +166,209 @@ export function SchoolDetailSheet({ school, onClose, userData }: Props) {
   // DB 由来 URL は http(s) のみ許可（javascript: 等のスキームを href に通さない多層防御）
   const officialUrl =
     school.official_url && /^https?:\/\//i.test(school.official_url) ? school.official_url : null
+  const lifecycleLabel = {
+    planned: t('detail.lifecyclePlanned'),
+    active: t('detail.lifecycleActive'),
+    closing: t('detail.lifecycleClosing'),
+    closed: t('detail.lifecycleClosed'),
+  }[school.lifecycle_status_code]
+  const recruitmentLabel = {
+    unknown: t('detail.recruitmentUnknown'),
+    not_started: t('detail.recruitmentNotStarted'),
+    recruiting: t('detail.recruitmentRecruiting'),
+    no_external_high_school_intake: t('detail.recruitmentNoExternal'),
+    stopped: t('detail.recruitmentStopped'),
+  }[school.recruitment_status_code]
+  const showLifecycle =
+    school.lifecycle_status_code !== 'active' ||
+    school.recruitment_status_code !== 'recruiting' ||
+    school.predecessor_relationships.length > 0 ||
+    school.name_history.length > 0 ||
+    school.legally_established_on != null ||
+    school.opened_on != null
 
-  const admissionByDepartment = new Map<string | null, AdmissionStat[]>()
-  for (const stat of school.admission_stats) {
-    const rows = admissionByDepartment.get(stat.department_id) ?? []
-    rows.push(stat)
-    admissionByDepartment.set(stat.department_id, rows)
-  }
-  const admissionRows = (departmentId: string | null): AdmissionStat[] =>
-    (admissionByDepartment.get(departmentId) ?? []).slice().sort((a, b) => b.year - a.year)
-  const admissionRatio = (stat: AdmissionStat): string | null => {
-    if (stat.capacity == null || stat.capacity <= 0 || stat.applicants == null) return null
-    return (stat.applicants / stat.capacity).toFixed(2)
-  }
+  const admissionSelections = school.admission_selections
+    .slice()
+    .sort((a, b) => b.year - a.year || a.unit_label.localeCompare(b.unit_label, 'ja'))
+  const isAdditionalStage = (row: AdmissionSelection): boolean =>
+    row.selection_stage_code === 'secondary' || row.selection_stage_code === 'supplemental'
+  const primarySelections = admissionSelections.filter(
+    (row) => row.selection_stage_code === 'primary' && row.is_ratio_comparable,
+  )
+  const additionalSelections = admissionSelections.filter(
+    (row) => isAdditionalStage(row),
+  )
+  const incomparableSelections = admissionSelections.filter(
+    (row) =>
+      !isAdditionalStage(row) &&
+      (!row.is_ratio_comparable || row.selection_stage_code !== 'primary'),
+  )
   const admissionValue = (value: number | null): string =>
     value == null ? t('detail.admissionNoValue') : value.toLocaleString()
+  const admissionRatio = (row: AdmissionSelection): string | null => {
+    if (!row.is_ratio_comparable || row.capacity == null || row.capacity <= 0 || row.applicants == null) return null
+    return (row.applicants / row.capacity).toFixed(2)
+  }
+  const qualityReasonLabel = (reason: AdmissionQualityReason): string =>
+    t(`detail.admissionQualityReason.${reason}`)
+  const examComponentLabel = (component: string): string =>
+    t(`detail.admissionExamComponent.${component}`)
+  const sourceFactLabel = (fact: string): string =>
+    t(`detail.admissionFact.${fact}`)
+  const safeSourceUrl = (url: string): string | null => (/^https?:\/\//i.test(url) ? url : null)
+  const trendDescription = admissionTrend ? t(`detail.admissionTrend${
+    admissionTrend.continuity === 'three'
+      ? 'Three'
+      : admissionTrend.continuity === 'two'
+        ? 'Two'
+        : admissionTrend.continuity === 'gapped'
+          ? 'Gapped'
+          : 'One'
+  }`) : null
+
+  const renderAdmissionRows = (rows: AdmissionSelection[], section: 'primary' | 'additional' | 'incomparable') => {
+    if (rows.length === 0) return <p className="admission-empty">{t('detail.admissionNoRows')}</p>
+    return rows.map((row) => {
+      const hasMissingValue =
+        row.capacity == null || row.applicants == null || row.examinees == null || row.admitted == null
+      return (
+        <article className="admission-record" key={row.id}>
+          <div className="admission-record-head">
+            <strong>{row.year}{t('detail.admissionYearSuffix')} / {row.unit_label}</strong>
+            {section !== 'incomparable' && admissionRatio(row) && (
+              <span className="admission-ratio">{t('detail.admissionRatio')}: {admissionRatio(row)}</span>
+            )}
+          </div>
+
+          <dl className="admission-meta">
+            <div>
+              <dt>{t('detail.admissionUnit')}</dt>
+              <dd>{row.unit_label}</dd>
+            </div>
+            <div>
+              <dt>{t('detail.admissionUnitKind')}</dt>
+              <dd><code>{row.unit_kind_code}</code></dd>
+            </div>
+            <div>
+              <dt>{t('detail.admissionStage')}</dt>
+              <dd>{t('detail.admissionRawAndCode', {
+                raw: row.stage_label_raw || t('detail.admissionNoValue'),
+                code: row.selection_stage_code,
+              })}</dd>
+            </div>
+            <div>
+              <dt>{t('detail.admissionTrack')}</dt>
+              <dd>{t('detail.admissionRawAndCode', {
+                raw: row.track_label_raw || t('detail.admissionNoValue'),
+                code: row.selection_track_code,
+              })}</dd>
+            </div>
+            <div>
+              <dt>{t('detail.admissionSelectionScope')}</dt>
+              <dd>{row.selection_scope_raw || t('detail.admissionNoValue')}</dd>
+            </div>
+            <div>
+              <dt>{t('detail.admissionPopulationScope')}</dt>
+              <dd>{row.population_scope_raw || t('detail.admissionNoValue')}</dd>
+            </div>
+            <div>
+              <dt>{t('detail.admissionCourseTime')}</dt>
+              <dd>{row.course_time ? t(`labels.course.${row.course_time}`) : t('detail.admissionNoValue')}</dd>
+            </div>
+          </dl>
+
+          {row.is_ratio_comparable ? (
+            <div className="admission-scroll">
+              <table className="admission-table">
+                <thead>
+                  <tr>
+                    <th>{t('detail.admissionYear')}</th>
+                    <th>{t('detail.admissionCapacity')}</th>
+                    <th>{t('detail.admissionApplicants')}</th>
+                    <th>{t('detail.admissionExaminees')}</th>
+                    <th>{t('detail.admissionAdmitted')}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <th scope="row">{row.year}</th>
+                    <td>{admissionValue(row.capacity)}</td>
+                    <td>{admissionValue(row.applicants)}</td>
+                    <td>{admissionValue(row.examinees)}</td>
+                    <td>{admissionValue(row.admitted)}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <p className="admission-unavailable">{t('detail.admissionValuesNotCompared')}</p>
+          )}
+
+          <div className="admission-detail-line">
+            <b>{t('detail.admissionExam')}:</b>{' '}
+            {row.exam_components.length > 0
+              ? row.exam_components.map(examComponentLabel).join(' / ')
+              : t('detail.admissionNoValue')}
+          </div>
+          {row.exam_scope_raw && (
+            <div className="admission-detail-line">
+              <b>{t('detail.admissionExamScope')}:</b> {row.exam_scope_raw}
+            </div>
+          )}
+
+          {row.quality_flags.length > 0 && (
+            <div className="admission-quality">
+              <b>{t('detail.admissionQuality')}</b>
+              <ul>
+                {row.quality_flags.map((flag, index) => (
+                  <li key={`${flag.reason_code}-${flag.metric_code ?? 'row'}-${index}`}>
+                    {flag.metric_code && `${t('detail.admissionMetric', { metric: sourceFactLabel(flag.metric_code) })} / `}
+                    {t('detail.admissionReason', { reason: qualityReasonLabel(flag.reason_code) })}
+                    {flag.note && ` / ${flag.note}`}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {row.sources.length > 0 && (
+            <div className="admission-sources">
+              <b>{t('detail.admissionSources')}</b>
+              <ul>
+                {row.sources.map((source, index) => {
+                  const label = `${sourceFactLabel(source.fact_kind_code)}: ${source.doc_title}`
+                  const href = safeSourceUrl(source.official_url)
+                  return (
+                    <li key={`${source.fact_kind_code}-${source.official_url}-${index}`}>
+                      {href ? (
+                        <a href={href} target="_blank" rel="noreferrer">{label}</a>
+                      ) : label}
+                      {source.source_page_or_table && <span> / {source.source_page_or_table}</span>}
+                      {source.published_at && <span> / {t('detail.admissionPublishedAt', { date: source.published_at })}</span>}
+                      {source.quoted_evidence && (
+                        <span className="admission-evidence">{t('detail.admissionEvidence', { evidence: source.quoted_evidence })}</span>
+                      )}
+                    </li>
+                  )
+                })}
+              </ul>
+            </div>
+          )}
+
+          {hasMissingValue && (
+            <div className="admission-foot admission-missing">
+              <span>{t('common.infoPending')}</span>
+              <DataReportForm
+                schoolId={school.id}
+                field="other"
+                targetLabel={`${row.year}${t('detail.admissionYearSuffix')} / ${row.unit_label}`}
+              />
+            </div>
+          )}
+        </article>
+      )
+    })
+  }
 
   const requireLogin = (): boolean => {
     if (session) return false
@@ -389,21 +577,6 @@ export function SchoolDetailSheet({ school, onClose, userData }: Props) {
             )}
           </div>
           <div>
-            <span>{t('detail.ratio3y')}</span>
-            <b>
-              {ratio3y
-                ? t('detail.ratio3yValue', {
-                    ratio: ratio3y.average.toFixed(2),
-                    from: ratio3y.years[2],
-                    to: ratio3y.years[0],
-                  })
-                : t('common.infoPending')}
-            </b>
-            {!ratio3y && (
-              <DataReportForm schoolId={school.id} field="other" targetLabel={t('detail.ratio3y')} />
-            )}
-          </div>
-          <div>
             <span>{t('detail.genderRatio')}</span>
             <b>{genderRatio ?? t('common.infoPending')}</b>
             {!genderRatio && (
@@ -423,6 +596,94 @@ export function SchoolDetailSheet({ school, onClose, userData }: Props) {
             </div>
           )}
         </div>
+
+        {showLifecycle && (
+          <section className="lifecycle-block">
+            <h4>🏫 {t('detail.lifecycleTitle')}</h4>
+            <dl>
+              <div>
+                <dt>{t('detail.lifecycleState')}</dt>
+                <dd>{lifecycleLabel}</dd>
+              </div>
+              <div>
+                <dt>{t('detail.recruitmentState')}</dt>
+                <dd>{recruitmentLabel}</dd>
+              </div>
+              {school.legally_established_on && (
+                <div>
+                  <dt>{t('detail.legallyEstablishedOn')}</dt>
+                  <dd>{school.legally_established_on}</dd>
+                </div>
+              )}
+              {school.opened_on && (
+                <div>
+                  <dt>{t('detail.openedOn')}</dt>
+                  <dd>{school.opened_on}</dd>
+                </div>
+              )}
+            </dl>
+            {school.predecessor_relationships.length > 0 && (
+              <div className="lifecycle-list">
+                <b>{t('detail.predecessorTitle')}</b>
+                <ul>
+                  {school.predecessor_relationships.map((relationship) => (
+                    <li key={relationship.id}>
+                      <div>
+                        {relationship.predecessor.name}{' '}
+                        <small>{t('detail.effectiveOn', { date: relationship.effective_on })}</small>{' '}
+                        <a href={relationship.official_url} target="_blank" rel="noreferrer">
+                          {t('detail.officialEvidence')}
+                        </a>
+                      </div>
+                      <details className="predecessor-admissions">
+                        <summary>
+                          {t('detail.predecessorAdmissions', {
+                            count: relationship.predecessor.admission_selections.length,
+                          })}
+                        </summary>
+                        {relationship.predecessor.admission_selections.length === 0 ? (
+                          <p>{t('detail.predecessorAdmissionsEmpty')}</p>
+                        ) : (
+                          <ul>
+                            {relationship.predecessor.admission_selections
+                              .slice()
+                              .sort((a, b) => b.year - a.year || a.unit_label.localeCompare(b.unit_label, 'ja'))
+                              .map((row) => (
+                                <li key={row.id}>
+                                  <b>{row.year}{t('detail.admissionYearSuffix')} / {row.unit_label}</b>
+                                  {' — '}{t('detail.admissionCapacity')}: {admissionValue(row.capacity)}
+                                  {' / '}{t('detail.admissionApplicants')}: {admissionValue(row.applicants)}
+                                  {admissionRatio(row) && ` / ${t('detail.admissionRatio')}: ${admissionRatio(row)}`}
+                                  {row.sources[0] && safeSourceUrl(row.sources[0].official_url) && (
+                                    <>{' '}<a href={row.sources[0].official_url} target="_blank" rel="noreferrer">
+                                      {t('detail.officialEvidence')}
+                                    </a></>
+                                  )}
+                                </li>
+                              ))}
+                          </ul>
+                        )}
+                      </details>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {school.name_history.length > 0 && (
+              <div className="lifecycle-list">
+                <b>{t('detail.previousNames')}</b>
+                <ul>
+                  {school.name_history.map((history) => (
+                    <li key={history.id}>
+                      {history.name}
+                      {history.valid_to ? `（〜${history.valid_to}）` : ''}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </section>
+        )}
 
         <div className="detail-actions">
           <span className="pri-label">{t('detail.priority')}</span>
@@ -511,69 +772,44 @@ export function SchoolDetailSheet({ school, onClose, userData }: Props) {
         <div className="admission-block">
           <h4>📈 {t('detail.admissionTitle')}</h4>
           <p className="sub">{t('detail.admissionSub')}</p>
-          {school.admission_stats.length > 0 ? (
-            [
-              ...school.departments.map((d) => ({ id: d.id, name: d.name })),
-              ...(admissionRows(null).length > 0 ? [{ id: null, name: t('detail.admissionSchoolWide') }] : []),
-            ].map((group) => {
-              const rows = admissionRows(group.id)
-              if (rows.length === 0) return null
-              const hasMissingValue = rows.some((stat) =>
-                stat.capacity == null || stat.applicants == null || stat.examinees == null || stat.admitted == null,
-              )
-              return (
-                <div className="admission-group" key={group.id ?? 'school'}>
-                  <h5>{group.name}</h5>
-                  <div className="admission-scroll">
-                    <table className="admission-table">
-                      <thead>
-                        <tr>
-                          <th>{t('detail.admissionYear')}</th>
-                          <th>{t('detail.admissionCapacity')}</th>
-                          <th>{t('detail.admissionApplicants')}</th>
-                          <th>{t('detail.admissionExaminees')}</th>
-                          <th>{t('detail.admissionAdmitted')}</th>
-                          <th>{t('detail.admissionRatio')}</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {rows.map((stat) => (
-                          <tr key={`${group.id ?? 'school'}-${stat.year}`}>
-                            <th scope="row">{stat.year}</th>
-                            <td>{admissionValue(stat.capacity)}</td>
-                            <td>{admissionValue(stat.applicants)}</td>
-                            <td>{admissionValue(stat.examinees)}</td>
-                            <td>{admissionValue(stat.admitted)}</td>
-                            <td>{admissionRatio(stat) ?? t('detail.admissionNoValue')}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+          {admissionSelections.length > 0 ? (
+            <>
+              {admissionTrend && (
+                <section className="admission-trend">
+                  <h5>{t('detail.admissionTrendTitle')}</h5>
+                  <div className="admission-trend-years">
+                    {admissionTrend.annual.map((annual) => (
+                      <span key={annual.year}>
+                        {annual.year}{t('detail.admissionYearSuffix')} {annual.ratio.toFixed(2)}
+                        <small> ({annual.applicants.toLocaleString()} / {annual.capacity.toLocaleString()})</small>
+                      </span>
+                    ))}
                   </div>
-                  {rows.map((stat) => (
-                    <div className="admission-foot" key={`${group.id ?? 'school'}-${stat.year}-foot`}>
-                      {stat.note && <span>{t('detail.admissionNote', { note: stat.note })}</span>}
-                      {stat.source_url && /^https?:\/\//i.test(stat.source_url) && (
-                        <a href={stat.source_url} target="_blank" rel="noreferrer">
-                          {stat.year}: {t('detail.admissionSource')}
-                        </a>
-                      )}
-                    </div>
-                  ))}
-                  {hasMissingValue && (
-                    <div className="admission-foot admission-missing">
-                      <span>{t('common.infoPending')}</span>
-                      <DataReportForm
-                        schoolId={school.id}
-                        departmentId={group.id}
-                        field="other"
-                        targetLabel={`${group.name} / ${t('detail.admissionTitle')}`}
-                      />
-                    </div>
+                  {trendDescription && <p>{trendDescription}</p>}
+                  {admissionTrend.average != null && (
+                    <p className="admission-average">
+                      {t('detail.admissionAverage', { ratio: admissionTrend.average.toFixed(2) })}
+                    </p>
                   )}
-                </div>
-              )
-            })
+                </section>
+              )}
+
+              <section className="admission-section">
+                <h5>{t('detail.admissionPrimarySection')}</h5>
+                <p>{t('detail.admissionPrimaryHelp')}</p>
+                {renderAdmissionRows(primarySelections, 'primary')}
+              </section>
+              <section className="admission-section">
+                <h5>{t('detail.admissionAdditionalSection')}</h5>
+                <p>{t('detail.admissionAdditionalHelp')}</p>
+                {renderAdmissionRows(additionalSelections, 'additional')}
+              </section>
+              <section className="admission-section admission-section-warn">
+                <h5>{t('detail.admissionIncomparableSection')}</h5>
+                <p>{t('detail.admissionIncomparableHelp')}</p>
+                {renderAdmissionRows(incomparableSelections, 'incomparable')}
+              </section>
+            </>
           ) : (
             <div className="admission-pending">
               <span>{t('common.infoPending')}</span>
