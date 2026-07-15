@@ -184,8 +184,17 @@ async function supabaseRequest(path, options = {}) {
       ...options.headers,
     },
   })
-  if (!response.ok) throw new Error(`Supabase ${path} failed (${response.status})`)
-  return response.status === 204 ? null : response.json()
+  const responseText = await response.text()
+  if (!response.ok) {
+    const details = responseText ? `: ${responseText}` : ''
+    throw new Error(`Supabase ${path} failed (${response.status})${details}`)
+  }
+  if (!responseText) return null
+  try {
+    return JSON.parse(responseText)
+  } catch (error) {
+    throw new Error(`Supabase ${path} returned invalid JSON (${response.status}): ${error.message}`)
+  }
 }
 
 async function upsert(table, rows, conflictColumns) {
