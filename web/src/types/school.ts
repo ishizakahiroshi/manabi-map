@@ -90,6 +90,7 @@ export type AdmissionMapRole =
 export type AdmissionQualityReason =
   | 'missing_capacity'
   | 'missing_applicants'
+  | 'metric_not_published'
   | 'stage_unknown'
   | 'track_scope_mismatch'
   | 'metric_scope_mismatch'

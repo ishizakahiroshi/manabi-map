@@ -12,7 +12,9 @@
     "gen:schools-json": "node scripts/gen-schools-json.mjs",
     "typecheck": "tsc --noEmit -p tsconfig.app.json",
     "lint": "oxlint",
-    "test": "vitest run",
+    "test": "vitest run && pnpm test:static",
+    "test:static": "node --test scripts/verify-static-output.test.mjs",
+    "verify:static": "node scripts/verify-static-output.mjs --dist dist --max-file-mib 25",
     "preview": "vite preview"
   },
   "dependencies": {
