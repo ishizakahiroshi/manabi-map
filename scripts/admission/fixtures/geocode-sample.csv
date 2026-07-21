@@ -1,0 +1,6 @@
+record_key,name,ownership,address,latitude,longitude
+school-0001,架空県立架空第一高等学校,prefectural,架空県架空市架空町1丁目1,35.000000,135.000000
+school-0002,架空県立架空第二高等学校,prefectural,架空県架空市架空町2丁目2,,
+school-0003,学校法人架空学園架空高等学校,private,,,
+school-0004,架空市立架空高等学校,municipal,架空県架空市架空町4丁目4,,
+school-0005,国立架空高等学校,national,架空県架空市架空町5丁目5,,
