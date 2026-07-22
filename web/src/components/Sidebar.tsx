@@ -147,6 +147,11 @@ export function Sidebar({ favCount, noteCount, isAdmin }: SidebarProps) {
               <span className="tx">{t('nav.license')}</span>
               <span className="arrow" aria-hidden="true">›</span>
             </button>
+            <button className="sb-item" onClick={() => go('/press')}>
+              <span className="ic" aria-hidden="true">📰</span>
+              <span className="tx">プレスキット</span>
+              <span className="arrow" aria-hidden="true">›</span>
+            </button>
           </div>
 
           <div className="sb-section">
@@ -199,6 +204,10 @@ export function Sidebar({ favCount, noteCount, isAdmin }: SidebarProps) {
               ・
               <a href="/legal/terms" onClick={(e) => { e.preventDefault(); go('/legal/terms') }}>
                 {t('nav.terms')}
+              </a>
+              ・
+              <a href="/press" onClick={(e) => { e.preventDefault(); go('/press') }}>
+                プレスキット
               </a>
             </div>
           </div>
