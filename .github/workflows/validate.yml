@@ -76,9 +76,6 @@ jobs:
         if: env.HAS_SUPABASE_BUILD_ACCESS == 'true'
         run: node scripts/gen-seo-pages.mjs
 
-      - name: Verify output
+      - name: Verify static output, SEO, gzip, and 25 MiB limit
         if: env.HAS_SUPABASE_BUILD_ACCESS == 'true'
-        run: |
-          test -s dist/index.html
-          test -s dist/schools-manifest.json
-          test -s dist/sitemap.xml
+        run: pnpm verify:static

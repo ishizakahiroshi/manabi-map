@@ -1,16 +1,42 @@
 import { useEffect, useState } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 
-export function useIsAdmin(): boolean {
+export interface AdminStatus {
+  isAdmin: boolean
+  checking: boolean
+}
+
+export function useIsAdmin(): AdminStatus {
   const { session, loading } = useAuth()
   const [isAdmin, setIsAdmin] = useState(false)
+  const [checking, setChecking] = useState(true)
+
   useEffect(() => {
-    if (loading || !session) { setIsAdmin(false); return }
+    if (loading) {
+      setChecking(true)
+      return
+    }
+    if (!session) {
+      setIsAdmin(false)
+      setChecking(false)
+      return
+    }
+
     let cancelled = false
+    setChecking(true)
     void fetch('/api/admin/me', { headers: { authorization: `Bearer ${session.access_token}` } })
-      .then((response) => { if (!cancelled) setIsAdmin(response.ok) })
-      .catch(() => { if (!cancelled) setIsAdmin(false) })
+      .then((response) => {
+        if (cancelled) return
+        setIsAdmin(response.ok)
+        setChecking(false)
+      })
+      .catch(() => {
+        if (cancelled) return
+        setIsAdmin(false)
+        setChecking(false)
+      })
     return () => { cancelled = true }
   }, [loading, session])
-  return isAdmin
+
+  return { isAdmin, checking }
 }

@@ -15,7 +15,7 @@
  * 本スクリプトは SQL を生成するだけで、DB へ接続・適用しない。
  */
 
-import { readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { basename, join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 
@@ -24,17 +24,22 @@ const FILES = {
   stats: 'admission-selection-stats-v2.csv',
   sources: 'admission-selection-sources-v2.csv',
   flags: 'admission-selection-quality-flags-v2.csv',
+  scope: 'replacement-scope.csv',
 }
 
 const HEADERS = {
-  units: ['pref', 'school_name', 'school_record_key', 'unit_key', 'unit_kind_code', 'unit_label', 'course_time', 'valid_from_year', 'valid_to_year', 'department_names'],
+  units: ['pref', 'school_name', 'school_record_key', 'unit_key', 'unit_kind_code', 'unit_label', 'course_time', 'valid_from_year', 'valid_to_year', 'department_names', 'department_record_keys'],
   stats: ['pref', 'school_name', 'school_record_key', 'unit_key', 'year', 'selection_stage_code', 'selection_track_code', 'stage_label_raw', 'track_label_raw', 'selection_scope_raw', 'population_scope_raw', 'scope_key', 'map_role_code', 'is_ratio_comparable', 'capacity', 'applicants', 'examinees', 'admitted', 'exam_scope_raw', 'exam_component_codes'],
   sources: ['pref', 'school_name', 'school_record_key', 'unit_key', 'year', 'selection_stage_code', 'selection_track_code', 'scope_key', 'fact_kind_code', 'official_url', 'doc_title', 'published_at', 'source_page_or_table', 'quoted_evidence', 'last_verified_at', 'last_http_status'],
   flags: ['pref', 'school_name', 'school_record_key', 'unit_key', 'year', 'selection_stage_code', 'selection_track_code', 'scope_key', 'metric_code', 'reason_code', 'note'],
+  scope: ['pref', 'school_name', 'school_record_key', 'complete_school_snapshot'],
 }
 
+const PREVIOUS_HEADERS = Object.fromEntries(
+  Object.entries(HEADERS).map(([kind, header]) => [kind, header.filter((name) => name !== 'department_record_keys')]),
+)
 const LEGACY_HEADERS = Object.fromEntries(
-  Object.entries(HEADERS).map(([kind, header]) => [kind, header.filter((name) => name !== 'school_record_key')]),
+  Object.entries(PREVIOUS_HEADERS).map(([kind, header]) => [kind, header.filter((name) => name !== 'school_record_key')]),
 )
 
 export const CODES = {
@@ -43,7 +48,7 @@ export const CODES = {
   stages: new Set(['primary', 'secondary', 'supplemental', 'unknown']),
   tracks: new Set(['general', 'recommendation', 'special', 'combined', 'other', 'unknown']),
   mapRoles: new Set(['primary_total', 'component_only', 'additional_stage', 'detail_only', 'unknown']),
-  reasons: new Set(['missing_capacity', 'missing_applicants', 'stage_unknown', 'track_scope_mismatch', 'metric_scope_mismatch', 'recruitment_unit_mismatch', 'overlapping_unit', 'mixed_population', 'source_conflict', 'source_unreachable', 'scheme_changed']),
+  reasons: new Set(['missing_capacity', 'missing_applicants', 'metric_not_published', 'stage_unknown', 'track_scope_mismatch', 'metric_scope_mismatch', 'recruitment_unit_mismatch', 'overlapping_unit', 'mixed_population', 'source_conflict', 'source_unreachable', 'scheme_changed']),
   examComponents: new Set(['academic_test', 'transcript', 'interview', 'essay', 'composition', 'practical', 'school_specific', 'other', 'unknown']),
   factKinds: new Set(['capacity', 'applicants', 'examinees', 'admitted', 'selection_rule', 'exam_method']),
   metricCodes: new Set(['capacity', 'applicants', 'examinees', 'admitted', 'selection_rule', 'exam_method']),
@@ -71,6 +76,46 @@ const OFFICIAL_HOST_SUFFIXES = new Map([
   ['千葉県', ['pref.chiba.lg.jp']],
   ['神奈川県', ['pref.kanagawa.jp']],
   ['東京都', ['kyoiku.metro.tokyo.lg.jp']],
+  ['徳島県', ['pref.tokushima.lg.jp', 'nyuushi.tokushima-ec.ed.jp', 'tokushima-ec.ed.jp', 'kosen-k.go.jp', 'anan-nct.ac.jp', 'kamiyama.ac.jp']],
+  ['香川県', ['pref.kagawa.lg.jp', 'taka-ichi-h.ed.jp', 'kagawa-nct.ac.jp', 'fujii.ed.jp', 'sangawa.ed.jp']],
+  ['高知県', ['pref.kochi.lg.jp', 'city.kochi.kochi.jp', 'kochi-ct.ac.jp', 'kosen-k.go.jp', 'mext.go.jp', 'daiichigakuin.ed.jp', 'hchs.ed.jp', 'kochigakuen.jp', 'tosa.ed.jp', 'tosajoshi-jh.ed.jp', 'seiwa-girl.ed.jp', 'kochi-gakugei.ed.jp', 'kochi-chuo.ed.jp', 'meitoku-gijuku.ed.jp', 'tosajuku.ed.jp', 'taiheiyo.ed.jp']],
+  ['愛媛県', ['pref.ehime.jp', 'ehime-kyoiku.esnet.ed.jp', 'ehime-c.esnet.ed.jp', 'hi.ehime-u.ac.jp', 'niihama-nct.ac.jp', 'yuge.ac.jp']],
+  ['鳥取県', ['pref.tottori.lg.jp']],
+  ['島根県', ['pref.shimane.lg.jp', 'minamigaoka-girls-hs.matsue.ed.jp']],
+  ['岡山県', ['pref.okayama.jp', 'edu.city.bizen.okayama.jp']],
+  ['広島県', ['pref.hiroshima.lg.jp', 'city.hiroshima.lg.jp', 'city.onomichi.hiroshima.jp', 'city.fukuyama.hiroshima.jp', 'city.kure.lg.jp']],
+  ['山口県', ['pref.yamaguchi.lg.jp']],
+  ['岐阜県', ['pref.gifu.lg.jp', 'mext.go.jp', 'school.gifu-net.ed.jp', 'city.gifu.lg.jp', 'city.seki.lg.jp', 'city.nakatsugawa.lg.jp', 'gifu-nct.ac.jp']],
+  ['静岡県', ['pref.shizuoka.jp', 'mext.go.jp', 'city.shizuoka.lg.jp', 'city.hamamatsu.shizuoka.jp', 'numazu-ct.ac.jp']],
+  ['愛知県', ['pref.aichi.jp', 'mext.go.jp', 'city.nagoya.jp', 'toyota-ct.ac.jp', 'city.toyohashi.lg.jp']],
+  ['三重県', ['pref.mie.lg.jp', 'mext.go.jp']],
+  ['滋賀県', ['pref.shiga.lg.jp', 'mext.go.jp']],
+  ['奈良県', ['pref.nara.lg.jp', 'mext.go.jp', 'nara-k.ac.jp', 'nwuss.nara-wu.ac.jp']],
+  ['和歌山県', ['pref.wakayama.lg.jp', 'wave.pref.wakayama.lg.jp', 'mext.go.jp', 'wakayama-nct.ac.jp']],
+  ['京都府', ['kyoto-be.ne.jp', 'pref.kyoto.jp', 'city.kyoto.lg.jp', 'kyokyo-u.ac.jp', 'maizuru-ct.ac.jp', 'kosen-k.go.jp', 'mext.go.jp']],
+  ['大阪府', ['pref.osaka.lg.jp', 'city.osaka.lg.jp', 'city.higashiosaka.lg.jp', 'city.sakai.lg.jp', 'city.kishiwada.lg.jp', 'osaka-kyoiku.ac.jp', 'ct.omu.ac.jp', 'mext.go.jp']],
+  // 兵庫県: 市立20校は神戸10/姫路4/尼崎3/西宮2/伊丹1/明石1。西宮市の公式は nishi.or.jp。
+  // hyogo-c.ed.jp は県立の共通ホストで www2. / dmzcms. / www. すべて suffix 一致で通る。
+  ['兵庫県', ['mext.go.jp', 'hyogo-c.ed.jp', 'pref.hyogo.lg.jp', 'city.kobe.lg.jp', 'city.amagasaki.hyogo.jp', 'city.himeji.lg.jp', 'nishi.or.jp', 'city.itami.lg.jp', 'city.akashi.lg.jp', 'kobe-kosen.ac.jp']],
+  ['福岡県', ['mext.go.jp', 'pref.fukuoka.lg.jp', 'fku.ed.jp', 'city.fukuoka.lg.jp', 'city.kitakyushu.lg.jp', 'kita9.ed.jp', 'f-sigaku.com', 'ariake-nct.ac.jp', 'kct.ac.jp', 'kurume-nct.ac.jp']],
+  ['佐賀県', ['mext.go.jp', 'pref.saga.lg.jp', 'saga-ed.jp', 'saga-high-school.jp', 'education.saga.jp', 'sy.pref.saga.lg.jp']],
+  ['長崎県', ['mext.go.jp', 'pref.nagasaki.jp', 'news.ed.jp', 'city.nagasaki.lg.jp', 'nagasaki-city.ed.jp', 'city.sasebo.lg.jp', 'ed.city.sasebo.nagasaki.jp', 'sasebo-nct.ac.jp']],
+  ['大分県', ['mext.go.jp', 'pref.oita.jp', 'oen.ed.jp', 'oita-ed.jp', 'city.oita.oita.jp', 'oita-ct.ac.jp']],
+  // 熊本県: sh.higo.ed.jp は県立高校の共通ホスト（佐賀 education.saga.jp と同型のper-school経路）。
+  // 末尾4件は県立高が独自ドメインで持つ学校公式（2026-07-21 に親がHTTP実測して追加）。
+  // 八代清流は sites.google.com 上にあるが、共有ホストを許可すると任意のGoogle Sitesが通るため登録しない。
+  ['熊本県', ['mext.go.jp', 'pref.kumamoto.jp', 'sh.higo.ed.jp', 'city.kumamoto.jp', 'kumamoto-kmm.ed.jp', 'kumamoto-pref-hs.jp', 'k-shigaku.com', 'kumamoto-nct.ac.jp', 'seiseiko-hs.ed.jp', 'kumamoto-kitako.ed.jp', 'kumamoto-d2hs.ed.jp', 'yatsushirohighschool.com']],
+  // 鹿児島県: edu.pref.kagoshima.jp（県立per-school・<school>.edu.pref.kagoshima.jp 形式）は
+  // pref.kagoshima.jp の suffix 一致で通るため個別登録しない。
+  // keinet.com は「鹿児島市立学校ICT推進センター」が市立校の公式サイトを置くhost。
+  // 商用受験サイトの keinet.ne.jp（河合塾Kei-Net）とは別物なので混同しないこと。
+  ['鹿児島県', ['mext.go.jp', 'pref.kagoshima.jp', 'city.kagoshima.lg.jp', 'keinet.com', 'city.kanoya.lg.jp', 'kagoshima-ct.ac.jp']],
+  // 宮崎県: 県は lg.jp（sun.pref.miyazaki.lg.jp も suffix 一致で通る）。
+  ['宮崎県', ['mext.go.jp', 'pref.miyazaki.lg.jp', 'miyazaki-c.ed.jp', 'miyazaki-shigaku.jp', 'miyakonojo-nct.ac.jp']],
+  // 沖縄県: pref.okinawa.lg.jp と pref.okinawa.jp は別hostとして両方使われる。
+  // open.ed.jp は県立高の per-school ホスト。実働形は `www.<slug>-h.open.ed.jp`（**www. 必須**・
+  // www 無しは DNS は引けるが HTTP 503）。2026-07-21 に親が実測して追加した。
+  ['沖縄県', ['mext.go.jp', 'pref.okinawa.lg.jp', 'pref.okinawa.jp', 'okinawa-shigaku.jp', 'okinawa-ct.ac.jp', 'open.ed.jp']],
   // 合成fixture専用。実県を追加するときは、県教委の公式hostを明示登録する。
   ['架空県', ['example.pref.jp']],
 ])
@@ -120,14 +165,15 @@ function readRecords(path, expectedHeader, { allowEmpty = false, legacyHeader = 
   if (rows.length === 0 || (!allowEmpty && rows.length < 2)) throw new Error(`${basename(path)} にデータ行がありません`)
   const header = rows[0].map((value) => value.trim())
   const isCurrent = header.length === expectedHeader.length && header.every((value, index) => value === expectedHeader[index])
-  const isLegacy = legacyHeader != null && header.length === legacyHeader.length && header.every((value, index) => value === legacyHeader[index])
-  if (!isCurrent && !isLegacy) {
+  const compatibleHeaders = legacyHeader == null ? [] : (Array.isArray(legacyHeader[0]) ? legacyHeader : [legacyHeader])
+  const compatible = compatibleHeaders.find((candidate) => header.length === candidate.length && header.every((value, index) => value === candidate[index]))
+  if (!isCurrent && !compatible) {
     throw new Error(`${basename(path)} の列が固定スキーマと一致しません\n期待: ${expectedHeader.join(',')}\n実際: ${header.join(',')}`)
   }
   return rows.slice(1).map((row, rowIndex) => {
     if (row.length !== header.length) throw new Error(`${basename(path)}:${rowIndex + 2} の列数が不正です`)
     const record = Object.fromEntries(header.map((name, index) => [name, (row[index] ?? '').trim()]))
-    if (isLegacy) record.school_record_key = ''
+    for (const field of expectedHeader) if (!(field in record)) record[field] = ''
     return record
   })
 }
@@ -173,8 +219,8 @@ function requireCode(value, allowed, label) {
 }
 
 export function validateBundle(bundle) {
-  const { units, stats, sources, flags } = bundle
-  const prefs = new Set([...units, ...stats, ...sources, ...flags].map((row) => row.pref))
+  const { units, stats, sources, flags, replacementScope = [] } = bundle
+  const prefs = new Set([...units, ...stats, ...sources, ...flags, ...replacementScope].map((row) => row.pref))
   if (prefs.size !== 1 || ![...prefs][0]) throw new Error(`1 bundle = 1都道府県にしてください: ${[...prefs].join(', ')}`)
   const pref = [...prefs][0]
   if (!/(都|道|府|県)$/.test(pref)) throw new Error(`pref は正式都道府県名で指定してください: ${pref}`)
@@ -194,10 +240,13 @@ export function validateBundle(bundle) {
     const to = integer(row.valid_to_year, `${label} valid_to_year`, { min: 2000, max: 2100 })
     if (from != null && to != null && from > to) throw new Error(`${label}: valid_from_year > valid_to_year`)
     const departments = list(row.department_names)
+    const departmentRecordKeys = list(row.department_record_keys)
     if (row.unit_kind_code === 'department' && departments.length !== 1) throw new Error(`${label}: department は department_names を1件指定してください`)
     if (row.unit_kind_code === 'department_group' && departments.length < 2) throw new Error(`${label}: department_group は department_names を2件以上指定してください`)
     if (new Set(departments).size !== departments.length) throw new Error(`${label}: department_names が重複しています`)
-    unitByKey.set(unitIdentity(row), { ...row, departments })
+    if (departmentRecordKeys.length > 0 && departmentRecordKeys.length !== departments.length) throw new Error(`${label}: department_names と department_record_keys の件数が一致しません`)
+    if (new Set(departmentRecordKeys).size !== departmentRecordKeys.length) throw new Error(`${label}: department_record_keys が重複しています`)
+    unitByKey.set(unitIdentity(row), { ...row, departments, departmentRecordKeys })
   }
 
   const statByKey = new Map()
@@ -229,6 +278,7 @@ export function validateBundle(bundle) {
     let url
     try { url = new URL(row.official_url) } catch { throw new Error(`${label}: official_url がURLではありません`) }
     if (!['http:', 'https:'].includes(url.protocol)) throw new Error(`${label}: official_url はhttp(s)のみ許可します`)
+    if (url.username || url.password || url.port) throw new Error(`${label}: official_url にuserinfo・password・portは許可しません`)
     if (COMMERCIAL_DOMAINS.some((domain) => url.hostname.includes(domain))) throw new Error(`${label}: 商用受験サイトは禁止です: ${url.hostname}`)
     const allowedHosts = OFFICIAL_HOST_SUFFIXES.get(row.pref)
     const hostname = url.hostname.toLowerCase()
@@ -293,15 +343,29 @@ export function validateBundle(bundle) {
     if (hasSchoolUnit && rows.length > 1) throw new Error(`学校全体行と他の地図対象単位が共存しています: ${key.replaceAll('\u001f', ' / ')}`)
   }
 
-  return { pref, units: [...unitByKey.values()], stats: [...statByKey.values()], sources, flags }
+  const scopeBySchool = new Map()
+  for (const [index, row] of replacementScope.entries()) {
+    const label = `replacement-scope:${index + 2}`
+    requireText(row, ['pref', 'school_name', 'school_record_key', 'complete_school_snapshot'], label)
+    if (boolean(row.complete_school_snapshot, `${label} complete_school_snapshot`) !== true) {
+      throw new Error(`${label}: complete_school_snapshot=true の学校だけを置換できます`)
+    }
+    const key = schoolIdentity(row)
+    if (scopeBySchool.has(key)) throw new Error(`${label}: school_record_key が重複しています`)
+    scopeBySchool.set(key, row)
+  }
+
+  return { pref, units: [...unitByKey.values()], stats: [...statByKey.values()], sources, flags, replacementScope: [...scopeBySchool.values()] }
 }
 
 export function loadBundle(dir) {
+  const scopePath = join(dir, FILES.scope)
   return validateBundle({
-    units: readRecords(join(dir, FILES.units), HEADERS.units, { legacyHeader: LEGACY_HEADERS.units }),
+    units: readRecords(join(dir, FILES.units), HEADERS.units, { legacyHeader: [PREVIOUS_HEADERS.units, LEGACY_HEADERS.units] }),
     stats: readRecords(join(dir, FILES.stats), HEADERS.stats, { legacyHeader: LEGACY_HEADERS.stats }),
     sources: readRecords(join(dir, FILES.sources), HEADERS.sources, { legacyHeader: LEGACY_HEADERS.sources }),
     flags: readRecords(join(dir, FILES.flags), HEADERS.flags, { allowEmpty: true, legacyHeader: LEGACY_HEADERS.flags }),
+    replacementScope: existsSync(scopePath) ? readRecords(scopePath, HEADERS.scope) : [],
   })
 }
 
@@ -315,12 +379,29 @@ function tempInsert(table, columns, records, valueOf) {
   return `insert into ${table} (${columns.join(', ')}) values\n${values};`
 }
 
-export function generateSql(bundle, sourceDir = '') {
-  const { pref, units, stats, sources, flags } = bundle
+export function generateSql(bundle, sourceDir = '', { inputSchoolsOnly = false, fragment = false } = {}) {
+  const { pref, units, stats, sources, flags, replacementScope = [] } = bundle
+  if (inputSchoolsOnly && units.some((row) => !row.school_record_key)) {
+    throw new Error('対象校限定モードでは全募集単位にschool_record_keyが必要')
+  }
+  if (inputSchoolsOnly && replacementScope.length === 0) {
+    throw new Error('対象校限定モードではreplacement-scope.csvが必要')
+  }
+  if (inputSchoolsOnly && units.some((row) => row.departments.length > 0 && row.departmentRecordKeys.length !== row.departments.length)) {
+    throw new Error('対象校限定モードでは全学科にdepartment_record_keysが必要')
+  }
+  if (inputSchoolsOnly) {
+    const unitSchools = new Set(units.map((row) => row.school_record_key))
+    const scopeSchools = new Set(replacementScope.map((row) => row.school_record_key))
+    if (unitSchools.size !== scopeSchools.size || [...unitSchools].some((key) => !scopeSchools.has(key))) {
+      throw new Error('replacement-scope.csvと募集単位の学校集合が一致しません')
+    }
+  }
   const unitColumns = HEADERS.units
   const statColumns = HEADERS.stats
   const sourceColumns = HEADERS.sources
   const flagColumns = HEADERS.flags
+  const scopeColumns = HEADERS.scope
   const textValue = (record, column) => sqlString(record[column])
   const schoolJoin = (inputAlias = 'i') => `(
     (nullif(${inputAlias}.school_record_key,'') is not null
@@ -332,26 +413,60 @@ export function generateSql(bundle, sourceDir = '') {
       and s.prefecture=${inputAlias}.pref
       and s.name=${inputAlias}.school_name)
   )`
+  const departmentJoin = `(
+    (nullif(split_part(i.department_record_keys,'|',d.ord::int),'') is not null
+      and sd.record_key=split_part(i.department_record_keys,'|',d.ord::int)
+      and sd.school_id=s.id
+      and sd.name=d.name)
+    or
+    (nullif(split_part(i.department_record_keys,'|',d.ord::int),'') is null
+      and sd.school_id=s.id
+      and sd.name=d.name)
+  )`
+  const replacementWhere = inputSchoolsOnly
+    ? `school_id in (select school_id from _adv2_target_schools)`
+    : `school_id in (select id from schools where prefecture=${sqlRequired(pref)})`
+  const validationScope = inputSchoolsOnly
+    ? `and u.school_id in (select school_id from _adv2_target_schools)`
+    : ''
+  const expectedMemberships = units.reduce((sum, row) => sum + row.departments.length, 0)
+  const expectedComponents = bundle.stats.reduce((sum, row) => sum + row.examComponents.length, 0)
 
   const lines = [
-    'begin;',
-    '',
+    ...(fragment ? [] : ['begin;', '']),
     `-- admission selection v2: ${pref}`,
     `-- generated from ${sqlComment(sourceDir || 'CSV v2 bundle')}; DBへの適用は別途承認が必要。`,
+    `-- replacement scope: ${inputSchoolsOnly ? 'input school_record_keys only' : 'whole prefecture'}.`,
+    `-- transaction owner: ${fragment ? 'outer apply-candidate.sql' : 'this generated file'}.`,
     '',
     `create temp table _adv2_units (${unitColumns.map((name) => `${name} text`).join(', ')}) on commit drop;`,
     `create temp table _adv2_stats (${statColumns.map((name) => `${name} text`).join(', ')}) on commit drop;`,
     `create temp table _adv2_sources (${sourceColumns.map((name) => `${name} text`).join(', ')}) on commit drop;`,
     `create temp table _adv2_flags (${flagColumns.map((name) => `${name} text`).join(', ')}) on commit drop;`,
+    `create temp table _adv2_scope (${scopeColumns.map((name) => `${name} text`).join(', ')}) on commit drop;`,
     '',
     tempInsert('_adv2_units', unitColumns, units, textValue),
     tempInsert('_adv2_stats', statColumns, stats, textValue),
     tempInsert('_adv2_sources', sourceColumns, sources, textValue),
     tempInsert('_adv2_flags', flagColumns, flags, textValue),
+    tempInsert('_adv2_scope', scopeColumns, replacementScope, textValue),
+    '',
+    `create temp table _adv2_target_schools (school_id uuid primary key) on commit drop;`,
+    inputSchoolsOnly
+      ? `insert into _adv2_target_schools (school_id)
+select s.id
+  from _adv2_scope i
+  join schools s on ${schoolJoin()};`
+      : `insert into _adv2_target_schools (school_id)
+select id from schools where prefecture=${sqlRequired(pref)};`,
     '',
     `do $$
 declare n int;
 begin
+  select count(*) into n from _adv2_target_schools;
+  if n <> ${inputSchoolsOnly ? replacementScope.length : `(select count(*) from schools where prefecture=${sqlRequired(pref)})`} then
+    raise exception 'CSV v2: replacement scopeの学校解決件数不一致 %件', n;
+  end if;
   select count(*) into n from _adv2_units i
    where (
      nullif(i.school_record_key,'') is not null
@@ -362,14 +477,68 @@ begin
    );
   if n > 0 then raise exception 'CSV v2: schools未解決または曖昧 %件', n; end if;
   select count(*) into n
-    from _adv2_units i cross join lateral regexp_split_to_table(nullif(i.department_names,''), '\\|') d(name)
+    from _adv2_units i
+    cross join lateral regexp_split_to_table(nullif(i.department_names,''), '\\|') with ordinality d(name, ord)
     join schools s on ${schoolJoin()}
-   where (select count(*) from school_departments sd where sd.school_id=s.id and sd.name=d.name) <> 1;
+   where (select count(*) from school_departments sd where ${departmentJoin}) <> 1;
   if n > 0 then raise exception 'CSV v2: school_departments未解決または曖昧 %件', n; end if;
 end $$;`,
     '',
+    `create temp view _adv2_outside_rows as
+select 'admission_recruitment_units'::text table_name, u.id::text row_key, to_jsonb(u)::text row_value
+  from admission_recruitment_units u where u.school_id not in (select school_id from _adv2_target_schools)
+union all
+select 'admission_recruitment_unit_departments', m.unit_id::text || ':' || m.department_id::text, to_jsonb(m)::text
+  from admission_recruitment_unit_departments m
+  join admission_recruitment_units u on u.id=m.unit_id
+ where u.school_id not in (select school_id from _adv2_target_schools)
+union all
+select 'school_admission_selection_stats', st.id::text, to_jsonb(st)::text
+  from school_admission_selection_stats st
+  join admission_recruitment_units u on u.id=st.recruitment_unit_id
+ where u.school_id not in (select school_id from _adv2_target_schools)
+union all
+select 'school_admission_stat_exam_components', c.stat_id::text || ':' || c.component_code, to_jsonb(c)::text
+  from school_admission_stat_exam_components c
+  join school_admission_selection_stats st on st.id=c.stat_id
+  join admission_recruitment_units u on u.id=st.recruitment_unit_id
+ where u.school_id not in (select school_id from _adv2_target_schools)
+union all
+select 'school_admission_stat_sources', so.stat_id::text || ':' || so.fact_kind_code, to_jsonb(so)::text
+  from school_admission_stat_sources so
+  join school_admission_selection_stats st on st.id=so.stat_id
+  join admission_recruitment_units u on u.id=st.recruitment_unit_id
+ where u.school_id not in (select school_id from _adv2_target_schools)
+union all
+select 'school_admission_stat_quality_flags', q.stat_id::text || ':' || coalesce(q.metric_code,'') || ':' || q.reason_code, to_jsonb(q)::text
+  from school_admission_stat_quality_flags q
+  join school_admission_selection_stats st on st.id=q.stat_id
+  join admission_recruitment_units u on u.id=st.recruitment_unit_id
+ where u.school_id not in (select school_id from _adv2_target_schools)
+union all
+select 'school_admission_stat_legacy_links', l.stat_id::text || ':' || l.legacy_stat_id::text, to_jsonb(l)::text
+  from school_admission_stat_legacy_links l
+  join school_admission_selection_stats st on st.id=l.stat_id
+  join admission_recruitment_units u on u.id=st.recruitment_unit_id
+ where u.school_id not in (select school_id from _adv2_target_schools);`,
+    `create temp table _adv2_outside_baseline on commit drop as
+select names.table_name,
+       count(r.row_key)::bigint as row_count,
+       encode(extensions.digest(coalesce(string_agg(r.row_value, E'\\n' order by r.row_key), ''), 'sha256'), 'hex') as digest
+  from (values
+    ('admission_recruitment_units'),
+    ('admission_recruitment_unit_departments'),
+    ('school_admission_selection_stats'),
+    ('school_admission_stat_exam_components'),
+    ('school_admission_stat_sources'),
+    ('school_admission_stat_quality_flags'),
+    ('school_admission_stat_legacy_links')
+  ) names(table_name)
+  left join _adv2_outside_rows r using (table_name)
+ group by names.table_name;`,
+    '',
     `delete from admission_recruitment_units
- where school_id in (select id from schools where prefecture=${sqlRequired(pref)});`,
+ where ${replacementWhere};`,
     '',
     `insert into admission_recruitment_units
   (school_id, unit_key, unit_kind_code, label, course_time, valid_from_year, valid_to_year)
@@ -380,10 +549,10 @@ select s.id, i.unit_key, i.unit_kind_code, i.unit_label, i.course_time::school_c
     `insert into admission_recruitment_unit_departments (unit_id, department_id)
 select u.id, sd.id
   from _adv2_units i
-  cross join lateral regexp_split_to_table(nullif(i.department_names,''), '\\|') d(name)
+  cross join lateral regexp_split_to_table(nullif(i.department_names,''), '\\|') with ordinality d(name, ord)
   join schools s on ${schoolJoin()}
   join admission_recruitment_units u on u.school_id=s.id and u.unit_key=i.unit_key
-  join school_departments sd on sd.school_id=s.id and sd.name=d.name;`,
+  join school_departments sd on ${departmentJoin};`,
     '',
     `insert into school_admission_selection_stats
   (recruitment_unit_id, year, selection_stage_code, selection_track_code,
@@ -451,23 +620,83 @@ begin
     from school_admission_selection_stats st
     join admission_recruitment_units u on u.id=st.recruitment_unit_id
     join schools s on s.id=u.school_id
-   where s.prefecture=${sqlRequired(pref)} and st.is_ratio_comparable
+   where s.prefecture=${sqlRequired(pref)} ${validationScope} and st.is_ratio_comparable
      and (st.capacity is null or st.capacity <= 0 or st.applicants is null);
   if n > 0 then raise exception 'CSV v2: 比較可能行の数値制約違反 %件', n; end if;
+
+  select count(*) into n from admission_recruitment_units
+   where school_id in (select school_id from _adv2_target_schools);
+  if n <> ${units.length} then raise exception 'CSV v2: target units件数不一致 expected=${units.length} actual=%', n; end if;
+
+  select count(*) into n
+    from admission_recruitment_unit_departments m
+    join admission_recruitment_units u on u.id=m.unit_id
+   where u.school_id in (select school_id from _adv2_target_schools);
+  if n <> ${expectedMemberships} then raise exception 'CSV v2: target memberships件数不一致 expected=${expectedMemberships} actual=%', n; end if;
+
+  select count(*) into n
+    from school_admission_selection_stats st
+    join admission_recruitment_units u on u.id=st.recruitment_unit_id
+   where u.school_id in (select school_id from _adv2_target_schools);
+  if n <> ${stats.length} then raise exception 'CSV v2: target stats件数不一致 expected=${stats.length} actual=%', n; end if;
+
+  select count(*) into n
+    from school_admission_stat_exam_components c
+    join school_admission_selection_stats st on st.id=c.stat_id
+    join admission_recruitment_units u on u.id=st.recruitment_unit_id
+   where u.school_id in (select school_id from _adv2_target_schools);
+  if n <> ${expectedComponents} then raise exception 'CSV v2: target components件数不一致 expected=${expectedComponents} actual=%', n; end if;
+
+  select count(*) into n
+    from school_admission_stat_sources so
+    join school_admission_selection_stats st on st.id=so.stat_id
+    join admission_recruitment_units u on u.id=st.recruitment_unit_id
+   where u.school_id in (select school_id from _adv2_target_schools);
+  if n <> ${sources.length} then raise exception 'CSV v2: target sources件数不一致 expected=${sources.length} actual=%', n; end if;
+
+  select count(*) into n
+    from school_admission_stat_quality_flags q
+    join school_admission_selection_stats st on st.id=q.stat_id
+    join admission_recruitment_units u on u.id=st.recruitment_unit_id
+   where u.school_id in (select school_id from _adv2_target_schools);
+  if n <> ${flags.length} then raise exception 'CSV v2: target flags件数不一致 expected=${flags.length} actual=%', n; end if;
+
+  with actual as (
+    select names.table_name,
+           count(r.row_key)::bigint as row_count,
+           encode(extensions.digest(coalesce(string_agg(r.row_value, E'\\n' order by r.row_key), ''), 'sha256'), 'hex') as digest
+      from (values
+        ('admission_recruitment_units'),
+        ('admission_recruitment_unit_departments'),
+        ('school_admission_selection_stats'),
+        ('school_admission_stat_exam_components'),
+        ('school_admission_stat_sources'),
+        ('school_admission_stat_quality_flags'),
+        ('school_admission_stat_legacy_links')
+      ) names(table_name)
+      left join _adv2_outside_rows r using (table_name)
+     group by names.table_name
+  )
+  select count(*) into n
+    from _adv2_outside_baseline b
+    full join actual a using (table_name)
+   where b.row_count is distinct from a.row_count or b.digest is distinct from a.digest;
+  if n <> 0 then raise exception 'CSV v2: 対象外admission fingerprint差分 %表', n; end if;
 end $$;`,
     '',
-    'commit;',
-    '',
+    ...(fragment ? [] : ['commit;', '']),
   ]
   return lines.join('\n')
 }
 
 function parseArgs(argv) {
-  const args = { dir: '', out: '', validateOnly: false }
+  const args = { dir: '', out: '', validateOnly: false, inputSchoolsOnly: false, fragment: false }
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === '--dir') args.dir = argv[++i] ?? ''
     else if (argv[i] === '--out') args.out = argv[++i] ?? ''
     else if (argv[i] === '--validate-only') args.validateOnly = true
+    else if (argv[i] === '--input-schools-only') args.inputSchoolsOnly = true
+    else if (argv[i] === '--fragment') args.fragment = true
     else if (argv[i] === '--help' || argv[i] === '-h') args.help = true
     else throw new Error(`不明な引数: ${argv[i]}`)
   }
@@ -477,13 +706,16 @@ function parseArgs(argv) {
 function main() {
   const args = parseArgs(process.argv.slice(2))
   if (args.help || !args.dir || (!args.validateOnly && !args.out)) {
-    console.error('使い方: node scripts/admission/gen-admission-v2.mjs --dir <bundle-dir> (--out <sql> | --validate-only)')
+    console.error('使い方: node scripts/admission/gen-admission-v2.mjs --dir <bundle-dir> (--out <sql> | --validate-only) [--input-schools-only] [--fragment]')
     process.exit(args.help ? 0 : 2)
   }
   const bundle = loadBundle(args.dir)
   console.error(`検査成功: ${bundle.pref} / units=${bundle.units.length} stats=${bundle.stats.length} sources=${bundle.sources.length} flags=${bundle.flags.length}`)
+  const sql = (args.inputSchoolsOnly || !args.validateOnly)
+    ? generateSql(bundle, args.dir, { inputSchoolsOnly: args.inputSchoolsOnly, fragment: args.fragment })
+    : null
   if (!args.validateOnly) {
-    writeFileSync(args.out, generateSql(bundle, args.dir), 'utf8')
+    writeFileSync(args.out, sql, 'utf8')
     console.error(`SQLを書き出しました: ${args.out}`)
   }
 }
