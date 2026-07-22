@@ -274,7 +274,8 @@ body {
 
 /* --- 地図 --- */
 .map-screen { background: #dbe9d7; }
-.map-canvas { position: absolute; inset: 40px 0 calc(96px + var(--tabbar-h)) 0; }
+/* 下端はタブバーの分だけ空ける（v0.3.4 でボトムシートを撤去し 96px 分を地図へ返した） */
+.map-canvas { position: absolute; inset: 40px 0 var(--tabbar-h) 0; }
 .float-bar {
   position: absolute; top: 48px; left: 8px; right: 8px;
   display: flex; gap: 6px; flex-wrap: wrap;
@@ -403,7 +404,6 @@ body {
   height: 96px;
   z-index: 700;
 }
-.sheet.expanded { height: min(70%, 560px); }
 .sheet.full { height: calc(100% - 40px - var(--tabbar-h)); }
 .sheet.hidden { transform: translateY(105%); }
 .sheet.auto { height: auto; }
@@ -429,36 +429,6 @@ body {
   background: none; border: 0; color: var(--accent); font-family: var(--display);
   font-weight: 700; cursor: pointer; padding: 4px 6px;
   text-decoration: underline; text-underline-offset: 3px; font-size: 1rem;
-}
-
-.fav-mini { display: flex; flex-direction: column; gap: 6px; margin-top: 2px; }
-.fav-mini .row {
-  display: flex; align-items: center; gap: 10px; padding: 8px 10px;
-  border: 2px solid var(--ink); border-radius: 12px; background: #fff; cursor: pointer;
-  width: 100%; text-align: left; font-family: var(--body); font-size: 1rem;
-}
-.fav-mini .row .star { color: var(--fav-yellow); font-weight: 800; font-family: var(--display); }
-.fav-mini .row .name { flex: 1; font-family: var(--display); font-weight: 700; font-size: 0.95rem; }
-.fav-mini .row .badge { font-size: 0.78rem; color: var(--ink-soft); }
-.fav-mini-empty { color: var(--ink-soft); font-size: 0.88rem; }
-
-.filter-group { margin-top: 6px; }
-.filter-group .label {
-  font-family: var(--display); font-weight: 700; font-size: 0.85rem;
-  color: var(--ink-soft); margin-bottom: 6px;
-}
-.filter-group .chips { display: flex; gap: 6px; flex-wrap: wrap; }
-.filter-group .chips .chip { background: #fff; }
-.filter-group .chips .chip.on { background: var(--accent); color: #fff; }
-/* 学科フィルタの「普通科系 / 専門学科」区切り (plan_v0.2.0_taxonomy-mext D3) */
-.filter-group .chips-divider {
-  display: flex; align-items: center; gap: 8px;
-  margin: 8px 0 6px; font-size: 0.72rem; color: var(--ink-soft);
-  font-family: var(--display); font-weight: 700; letter-spacing: 0.02em;
-}
-.filter-group .chips-divider::before,
-.filter-group .chips-divider::after {
-  content: ''; flex: 1; height: 1px; background: var(--line);
 }
 
 /* --- 学校詳細 --- */
@@ -1256,7 +1226,7 @@ button:focus:not(:focus-visible), a:focus:not(:focus-visible), input:focus:not(:
   overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
 }
 
-.filter-group .label, .mini-hint.soft, .sb-stat, .detail-meta, .ad-slot p {
+.mini-hint.soft, .sb-stat, .detail-meta, .ad-slot p {
   color: #5c5348;
 }
 
@@ -1265,7 +1235,7 @@ button:focus:not(:focus-visible), a:focus:not(:focus-visible), input:focus:not(:
 }
 
 .school-list-panel {
-  position: absolute; left: 8px; right: 8px; top: 96px; bottom: calc(112px + var(--tabbar-h)); z-index: 680;
+  position: absolute; left: 8px; right: 8px; top: 96px; bottom: calc(16px + var(--tabbar-h)); z-index: 680;
   background: var(--card); border: 2px solid var(--ink); border-radius: 16px;
   box-shadow: 4px 4px 0 var(--line); display: flex; flex-direction: column; overflow: hidden;
 }
