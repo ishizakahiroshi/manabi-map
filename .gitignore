@@ -63,3 +63,11 @@ secrets.*
 .netrc
 .npmrc
 .pypirc
+
+# 作業用スクラッチ（S4 ローカル検証の postgres スナップショット・取得済み PDF 等）
+# 実測 3.8GB / 3 万ファイル規模になるため決してコミットしない
+/tmp/
+
+# 西日本 v0.4 の成果物置き場を誤ったもの。正しい場所は docs/local/ 配下（gitignored）
+# ここは公開リポなので root の artifacts/ を追跡すると監査データが公開される
+/artifacts/
