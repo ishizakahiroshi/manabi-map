@@ -10,7 +10,7 @@
 [![Data License: CC BY-SA 4.0](https://img.shields.io/badge/data-CC%20BY--SA%204.0-lightgrey.svg)](https://creativecommons.org/licenses/by-sa/4.0/)
 ![Version: v0.3](https://img.shields.io/badge/version-v0.3%20東日本版-orange.svg)
 
-**公開中 → https://manabi-map.app** （東日本 20 都道県・2,590 校に対応）
+**公開中 → https://manabi-map.app** （東日本 20 都道県・2,591 校に対応）
 
 ## 動作環境
 
