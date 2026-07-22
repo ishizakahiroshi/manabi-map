@@ -94,7 +94,12 @@ Supabase / LINE の接続情報はリポジトリ外に保管する。`web/.env.
 
 ## 利用可能な skill（作者環境）
 
-このプロジェクト向けに専用 skill を用意している（作者環境の `~/.claude/skills/` 配下）。**skill を起動できる環境なら、下記の操作は直接手作業でやらず skill 経由が原則**（手順の一貫性・記録の再現性のため）。skill が無い環境（他人の clone や別 AI CLI）では手動手順として本 CLAUDE.md 下記の「運用ルール」を読み下してください。
+このプロジェクト向けに専用 skill を用意している。**skill を起動できる環境なら、下記の操作は直接手作業でやらず skill 経由が原則**（手順の一貫性・記録の再現性のため）。skill が無い環境（他人の clone や別 AI CLI）では手動手順として本 CLAUDE.md 下記の「運用ルール」を読み下してください。
+
+配置は 2 系統に分かれる:
+
+- **本リポ専用の 2 本**（`manabi-map-deploy` / `manabi-map-add-prefecture`）は **リポ内 `.claude/skills/` にある**（2026-07-23 に作者環境の横断棚から移設）。`.gitignore` が `.claude/` を丸ごと除外しているため **clone には含まれない**（作者環境固有の絶対パスを公開しないため）
+- **横断 skill**（`supabase-migrate` / `taxonomy-refactor` / `changelog-freshness` など）は作者環境の `~/.claude/skills/` 配下
 
 | 用途 | skill | 起動語 |
 |---|---|---|
