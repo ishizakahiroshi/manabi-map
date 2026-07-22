@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { Routes, Route, useNavigate, useLocation } from 'react-router-dom'
+import { Navigate, Routes, Route, useNavigate, useLocation } from 'react-router-dom'
 import { useApp } from './contexts/AppContext'
 import { useAuth } from './contexts/AuthContext'
 import { useI18n } from './contexts/I18nContext'
@@ -12,6 +12,7 @@ import { ComparePage } from './pages/ComparePage'
 import { AuthCallbackPage } from './pages/AuthCallbackPage'
 import { FamilyJoinPage } from './pages/FamilyJoinPage'
 import { LegalPage } from './pages/LegalPage'
+import { PressPage } from './pages/PressPage'
 import { MyPage } from './pages/MyPage'
 import { Sidebar } from './components/Sidebar'
 import { LoginSheet } from './components/LoginSheet'
@@ -22,6 +23,13 @@ import { BottomTabBar } from './components/BottomTabBar'
 import { DashboardPage } from './pages/DashboardPage'
 import { useIsAdmin } from './hooks/useIsAdmin'
 
+function DashboardRoute({ isAdmin, checking }: { isAdmin: boolean; checking: boolean }) {
+  // 管理者照会が終わるまで待つ。先に redirect すると、正規管理者が
+  // セッション復元直後にトップへ飛ばされる競合が起きる。
+  if (checking) return <main id="main-content" className="page" aria-busy="true" />
+  return isAdmin ? <DashboardPage /> : <Navigate to="/" replace />
+}
+
 export default function App() {
   const navigate = useNavigate()
   const location = useLocation()
@@ -29,7 +37,7 @@ export default function App() {
   const { session, kind } = useAuth()
   const { t } = useI18n()
   const userData = useUserData()
-  const isAdmin = useIsAdmin()
+  const { isAdmin, checking: checkingAdmin } = useIsAdmin()
 
   const favCount = Object.keys(userData.favorites).length
   const noteCount = useMemo(
@@ -41,7 +49,8 @@ export default function App() {
   const showBottomTabs = !(
     location.pathname === '/auth/callback' ||
     location.pathname === '/family/join' ||
-    location.pathname.startsWith('/legal/')
+    location.pathname.startsWith('/legal/') ||
+    location.pathname === '/press'
   )
 
   return (
@@ -81,7 +90,8 @@ export default function App() {
           <Route path="/legal/terms" element={<LegalPage doc="terms" />} />
           <Route path="/legal/privacy" element={<LegalPage doc="privacy" />} />
           <Route path="/legal/third-party" element={<LegalPage doc="third-party" />} />
-          <Route path="/dashboard" element={isAdmin ? <DashboardPage /> : <main id="main-content" className="page"><h1>ページが見つかりません</h1></main>} />
+          <Route path="/press" element={<PressPage />} />
+          <Route path="/dashboard" element={<DashboardRoute isAdmin={isAdmin} checking={checkingAdmin} />} />
         </Routes>
 
         {showBottomTabs && <BottomTabBar />}
