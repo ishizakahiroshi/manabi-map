@@ -26,8 +26,6 @@ import { useApp } from '../contexts/AppContext'
 import { useSchools } from '../hooks/useSchools'
 import type { useUserData } from '../hooks/useUserData'
 import { SchoolDetailSheet } from '../components/SchoolDetailSheet'
-import { AdSlot } from '../components/AdSlot'
-import { slotsForPlacement } from '../data/ad-slots'
 
 function normalizeQuery(s: string): string {
   return s
@@ -184,7 +182,7 @@ interface Filters {
   onlyIntegrated: boolean
 }
 
-type PopoverKey = 'own' | 'bands' | 'ratios' | 'gen' | 'courseTimes' | 'depts' | null
+type PopoverKey = 'own' | 'types' | 'bands' | 'ratios' | 'gen' | 'courseTimes' | 'depts' | null
 
 interface Props {
   userData: ReturnType<typeof useUserData>
@@ -204,7 +202,6 @@ export function MapPage({ userData }: Props) {
   const clusterLayerRef = useRef<L.MarkerClusterGroup | null>(null)
   const [mapRef, setMapRef] = useState<L.Map | null>(null)
   const [mapBounds, setMapBounds] = useState<L.LatLngBounds | null>(null)
-  const [sheetExpanded, setSheetExpanded] = useState(false)
   const [schoolListOpen, setSchoolListOpen] = useState(false)
   const [detail, setDetail] = useState<School | null>(null)
 
@@ -263,14 +260,6 @@ export function MapPage({ userData }: Props) {
   )
   const DEPT_CHIPS = useMemo(
     () => DEPT_KEYS.map((k) => [k, t(`filter.dept.${k}`)] as const),
-    [t],
-  )
-  const DEPT_CHIPS_ACADEMIC = useMemo(
-    () => DEPT_KEYS_ACADEMIC.map((k) => [k, t(`filter.dept.${k}`)] as const),
-    [t],
-  )
-  const DEPT_CHIPS_SPECIALIZED = useMemo(
-    () => DEPT_KEYS_SPECIALIZED.map((k) => [k, t(`filter.dept.${k}`)] as const),
     [t],
   )
 
@@ -335,11 +324,6 @@ export function MapPage({ userData }: Props) {
     })
   }, [schools, favorites, mapBounds, filters, normalizedQuery, ratioBands])
 
-  const favSchools = useMemo(
-    () => schools.filter((s) => favorites[s.id]),
-    [schools, favorites],
-  )
-
   const toggleSet = (key: 'bands' | 'ratios' | 'own' | 'gen' | 'types' | 'courseTimes' | 'depts', value: never) => {
     setFilters((f) => {
       const next = new Set(f[key] as Set<unknown>)
@@ -355,9 +339,11 @@ export function MapPage({ userData }: Props) {
       bands: new Set([...ALL_BANDS, UNRATED as number]),
       ratios: new Set<ApplicantRatioBand>(APPLICANT_RATIO_BANDS),
       own: new Set(['prefectural', 'municipal', 'national', 'private', 'union']),
+      types: new Set(['high_school', 'kosen']),
       gen: new Set(['coed', 'boys', 'girls']),
       courseTimes: new Set<CourseTime>(['fulltime', 'parttime']),
       depts: new Set(DEPT_KEYS),
+      onlyIntegrated: false,
     }))
   }
 
@@ -368,19 +354,19 @@ export function MapPage({ userData }: Props) {
     () =>
       [
         ['own', t('map.filterCategory.own'), OWN_CHIPS, filters.own],
+        ['types', t('map.filterCategory.types'), TYPE_CHIPS, filters.types],
         ['bands', t('map.filterCategory.bands'), BAND_CHIPS, filters.bands],
         ['ratios', t('map.filterCategory.ratios'), RATIO_CHIPS, filters.ratios],
         ['gen', t('map.filterCategory.gen'), GEN_CHIPS, filters.gen],
         ['courseTimes', t('map.filterCategory.courseTimes'), COURSE_TIME_CHIPS, filters.courseTimes],
         ['depts', t('map.filterCategory.depts'), DEPT_CHIPS, filters.depts],
       ] as const,
-    [t, OWN_CHIPS, BAND_CHIPS, RATIO_CHIPS, GEN_CHIPS, COURSE_TIME_CHIPS, DEPT_CHIPS, filters],
+    [t, OWN_CHIPS, TYPE_CHIPS, BAND_CHIPS, RATIO_CHIPS, GEN_CHIPS, COURSE_TIME_CHIPS, DEPT_CHIPS, filters],
   )
 
-  const activeFilterCount = FILTER_CATEGORIES.reduce(
-    (n, [, , list, set]) => (set.size < list.length ? n + 1 : n),
-    0,
-  )
+  const activeFilterCount =
+    FILTER_CATEGORIES.reduce((n, [, , list, set]) => (set.size < list.length ? n + 1 : n), 0) +
+    (filters.onlyIntegrated ? 1 : 0)
 
   useEffect(() => {
     if (!mapNodeRef.current) return
@@ -510,7 +496,7 @@ export function MapPage({ userData }: Props) {
         </div>
       </div>
 
-      <div className="map-canvas" aria-hidden={schoolListOpen}>
+      <main id="main-content" className="map-canvas" aria-hidden={schoolListOpen} tabIndex={-1}>
         <div
           ref={mapNodeRef}
           className="leaflet-map"
@@ -518,7 +504,7 @@ export function MapPage({ userData }: Props) {
           aria-label={t('map.title')}
           tabIndex={0}
         />
-      </div>
+      </main>
 
       <div className="float-bar">
         <div className={`map-search ${searchOpen ? 'open' : ''}`}>
@@ -601,6 +587,14 @@ export function MapPage({ userData }: Props) {
         ))}
         <button
           type="button"
+          className={`chip desktop-only ${filters.onlyIntegrated ? 'on' : ''}`}
+          aria-pressed={filters.onlyIntegrated}
+          onClick={() => setFilters((f) => ({ ...f, onlyIntegrated: !f.onlyIntegrated }))}
+        >
+          {t('map.integratedOnly')}
+        </button>
+        <button
+          type="button"
           className="chip drop mobile-only filters-btn"
           aria-label={filterSheetOpen ? t('map.filtersClose') : t('map.filtersOpen')}
           aria-expanded={filterSheetOpen}
@@ -658,6 +652,20 @@ export function MapPage({ userData }: Props) {
                   </div>
                 </section>
               ))}
+              {/* Set で表せない単発トグルなので FILTER_CATEGORIES の外に置く */}
+              <section className="filter-sheet-section">
+                <h3 className="filter-sheet-section-title">{t('map.filterOther')}</h3>
+                <div className="filter-sheet-chips">
+                  <button
+                    type="button"
+                    aria-pressed={filters.onlyIntegrated}
+                    className={`chip ${filters.onlyIntegrated ? 'on' : ''}`}
+                    onClick={() => setFilters((f) => ({ ...f, onlyIntegrated: !f.onlyIntegrated }))}
+                  >
+                    {t('map.integratedOnly')}
+                  </button>
+                </div>
+              </section>
             </div>
             <div className="filter-sheet-foot">
               <button
@@ -742,148 +750,6 @@ export function MapPage({ userData }: Props) {
         </div>
       )}
 
-      <div className={`sheet ${sheetExpanded ? 'expanded' : ''}`}>
-        <button
-          type="button"
-          className="handle"
-          onClick={() => setSheetExpanded((v) => !v)}
-          aria-expanded={sheetExpanded}
-          aria-label={t('map.toggleSheet')}
-        />
-        <div className="head">
-          <span className="grow">
-            <span style={{ color: 'var(--fav-yellow)' }} aria-hidden="true">★</span>{' '}
-            {t('map.favCount', { count: favSchools.length })}
-          </span>
-          <button type="button" className="link-btn" onClick={() => navigate('/favorites')}>
-            {t('map.listLink')}
-          </button>
-        </div>
-        <main id="main-content" className="body" tabIndex={-1}>
-          <div className="fav-mini">
-            {favSchools.length === 0 ? (
-              <div className="fav-mini-empty">{t('map.favEmpty')}</div>
-            ) : (
-              favSchools.map((s) => (
-                <button type="button" className="row" key={s.id} onClick={() => setDetail(s)}>
-                  <span className="star" aria-hidden="true">★</span>
-                  <span className="name">{shortSchoolName(s.name, s)}</span>
-                  <span className="badge">
-                    {fmt.displayCode(s)}：{fmt.devLabel(s)}
-                  </span>
-                </button>
-              ))
-            )}
-          </div>
-
-          <div className="filter-group">
-            <div className="label">{t('map.filterOwn')}</div>
-            <div className="chips">
-              {OWN_CHIPS.map(([k, label]) => (
-                <button
-                  key={k}
-                  className={`chip ${filters.own.has(k) ? 'on' : ''}`}
-                  onClick={() => toggleSet('own', k as never)}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="filter-group">
-            <div className="label">{t('map.filterType')}</div>
-            <div className="chips">
-              {TYPE_CHIPS.map(([k, label]) => (
-                <button
-                  key={k}
-                  className={`chip ${filters.types.has(k) ? 'on' : ''}`}
-                  onClick={() => toggleSet('types', k as never)}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="filter-group">
-            <div className="label">{t('map.filterCourse')}</div>
-            <div className="chips">
-              {COURSE_TIME_CHIPS.map(([k, label]) => (
-                <button
-                  key={k}
-                  className={`chip ${filters.courseTimes.has(k) ? 'on' : ''}`}
-                  onClick={() => toggleSet('courseTimes', k as never)}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="filter-group">
-            <div className="label">{t('map.filterGender')}</div>
-            <div className="chips">
-              {GEN_CHIPS.map(([k, label]) => (
-                <button
-                  key={k}
-                  className={`chip ${filters.gen.has(k) ? 'on' : ''}`}
-                  onClick={() => toggleSet('gen', k as never)}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="filter-group">
-            <div className="label">{t('map.filterDept')}</div>
-            <div className="chips">
-              {DEPT_CHIPS_ACADEMIC.map(([k, label]) => (
-                <button
-                  key={k}
-                  className={`chip ${filters.depts.has(k) ? 'on' : ''}`}
-                  onClick={() => toggleSet('depts', k as never)}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-            <div className="chips-divider">
-              <span>{t('map.deptSpecialized')}</span>
-            </div>
-            <div className="chips">
-              {DEPT_CHIPS_SPECIALIZED.map(([k, label]) => (
-                <button
-                  key={k}
-                  className={`chip ${filters.depts.has(k) ? 'on' : ''}`}
-                  onClick={() => toggleSet('depts', k as never)}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="filter-group">
-            <div className="label">{t('map.filterOther')}</div>
-            <div className="chips">
-              <button
-                type="button"
-                className={`chip ${filters.onlyIntegrated ? 'on' : ''}`}
-                aria-pressed={filters.onlyIntegrated}
-                onClick={() => setFilters((f) => ({ ...f, onlyIntegrated: !f.onlyIntegrated }))}
-              >
-                {t('map.integratedOnly')}
-              </button>
-            </div>
-          </div>
-
-          {slotsForPlacement('map').map((s) => (
-            <AdSlot key={s.id} slot={s} categoryLabel={t('map.adCategory')} className="mt-2" />
-          ))}
-        </main>
-      </div>
 
       {detail && (
         <SchoolDetailSheet
