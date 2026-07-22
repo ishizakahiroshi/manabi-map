@@ -81,7 +81,9 @@ export const AD_SLOTS: AdSlotItem[] = [
   {
     id: 'dummy-school-map-v014',
     category: 'school',
-    placement: 'map',
+    // 地図画面のボトムシート撤去（v0.3.4）に伴い、school-detail へ寄せた。
+    // 'map' placement は型・枠定義としては残すが、現状これを使う案件は無い。
+    placement: 'school-detail',
     label: 'PR',
     title: '公立高校 過去問集（サンプル）',
     description:
