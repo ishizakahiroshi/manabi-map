@@ -189,6 +189,7 @@ export const ja: MessageTree = {
       agriculture_marine: '農業・水産',
       home_welfare_nursing: '家庭・福祉・看護',
       other: 'その他',
+      unknown: '学科情報なし',
     },
   },
   labels: {
@@ -341,6 +342,7 @@ export const ja: MessageTree = {
     officialSoon: '公式サイト情報は準備中です',
     googleMaps: 'Google Maps',
     deptDeviation: '学科別 参考偏差値',
+    deptDeviationEmpty: '学科情報は準備中です',
     refValue: '参考値',
     myRecord: '私の記録',
     sourceNote: '出典: Manabi Map 独自推計（公的資料に基づく）',
