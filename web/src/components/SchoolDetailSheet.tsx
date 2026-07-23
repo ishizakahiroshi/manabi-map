@@ -545,6 +545,18 @@ export function SchoolDetailSheet({ school, onClose, userData }: Props) {
       <div className="head">
         <span className="grow">
           <h3 className="detail-title">{fmt.displayName(school)}</h3>
+          {school.name_kana ? (
+            <span className="school-kana">{school.name_kana}</span>
+          ) : (
+            <span className="school-kana kana-empty">
+              {t('detail.kanaEmpty')}
+              <DataReportForm
+                schoolId={school.id}
+                field="other"
+                targetLabel={t('detail.kanaEmpty')}
+              />
+            </span>
+          )}
         </span>
       </div>
       <div className="body">
@@ -721,7 +733,14 @@ export function SchoolDetailSheet({ school, onClose, userData }: Props) {
         <div className="depts">
           <h4>🎓 {t('detail.deptDeviation')}</h4>
           {school.departments.length === 0 ? (
-            <p className="depts-empty">{t('detail.deptDeviationEmpty')}</p>
+            <div className="depts-empty">
+              <p>{t('detail.deptDeviationEmpty')}</p>
+              <DataReportForm
+                schoolId={school.id}
+                field="other"
+                targetLabel={t('detail.deptDeviation')}
+              />
+            </div>
           ) : (
           <>
           <div>
