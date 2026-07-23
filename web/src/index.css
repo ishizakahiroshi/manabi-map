@@ -554,7 +554,22 @@ body {
 .self-label { margin-left: 3px; font-size: 0.76rem; color: var(--ink-soft); }
 .depts .note { margin-top: 6px; font-size: 0.78rem; color: var(--ink-soft); }
 .depts-empty { margin: 4px 0 0; font-size: 0.86rem; color: var(--ink-soft); }
+.depts-empty p { margin: 0 0 4px; }
+.depts-empty .data-report { margin-top: 4px; }
 .depts .note a { color: var(--accent); }
+
+/* 校名下の「かな」表示（NULL 時は情報提供募集中） */
+.school-kana {
+  display: block;
+  margin-top: 3px;
+  font-family: var(--body);
+  font-size: 0.82rem;
+  color: var(--ink-soft);
+  font-weight: 500;
+  line-height: 1.35;
+}
+.school-kana.kana-empty { color: var(--ink-soft); }
+.school-kana .data-report { display: inline-block; margin-left: 6px; margin-top: 0; }
 
 .admission-block {
   margin-top: 14px; padding: 12px 14px; border: 2px solid var(--ink); border-radius: 14px; background: #fffaf2;
