@@ -86,7 +86,8 @@ export function PressPage() {
   const basics: Array<[string, React.ReactNode]> = [
     ['サービス名', 'Manabi Map（まなびマップ）'],
     ['URL', <a key="u" href="https://manabi-map.app" target="_blank" rel="noopener noreferrer">https://manabi-map.app</a>],
-    ['公開日', '2026-07-05（群馬県版 v0.1.0）'],
+    ['現行バージョン', <span key="v">v{__APP_VERSION__}</span>],
+    ['初回公開', '2026-07-05（群馬県版から段階的に全国展開中）'],
     ['開発者', 'ishizakahiroshi（個人 OSS）'],
     ['ライセンス', 'コード AGPL-3.0 / データ CC BY-SA 4.0'],
     ['料金', '無料（広告は進路・教育関連のみ控えめに掲載）'],
@@ -122,7 +123,7 @@ export function PressPage() {
         <button className="icon-btn" onClick={() => navigate(-1)} aria-label={t('common.back')}>
           ←
         </button>
-        <div className="brand">プレスキット</div>
+        <div className="brand">配布素材・プレスキット</div>
       </div>
       <main
         id="main-content"
