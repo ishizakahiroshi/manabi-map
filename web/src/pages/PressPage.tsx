@@ -1,19 +1,5 @@
-import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useI18n } from '../contexts/I18nContext'
-import { useApp } from '../contexts/AppContext'
-
-// 一言メモの型テキスト。開発者本人の姓は LICENSE / README 等で公開済みのため掲載する。
-// secrets-scan の family watchlist（family_name）にはヒットするので該当行のみ allow ディレクティブで除外する。
-const MEMO_TEMPLATE = [
-  'はじめまして。地元の開発者の石坂と申します。', // secrets-scan: allow 石坂
-  '親子の進路選び用に「Manabi Map」という無料の Web サービスを作りました。',
-  '完全無料・広告控えめ（進路教育関連のみ）・個人情報は最小限です。',
-  'ご検討の材料になれば幸いです。ご不要の際は破棄いただいてかまいません。',
-  '',
-  'ishizakahiroshi ／ hello@manabi-map.app',
-  'https://manabi-map.app',
-].join('\n')
 
 /**
  * /press — メディア関係者・教育関係者向けのプレスキット / 基礎情報ページ。
@@ -22,19 +8,6 @@ const MEMO_TEMPLATE = [
 export function PressPage() {
   const navigate = useNavigate()
   const { t } = useI18n()
-  const { toast } = useApp()
-  const [copied, setCopied] = useState(false)
-
-  const copyMemo = async () => {
-    try {
-      await navigator.clipboard.writeText(MEMO_TEMPLATE)
-      setCopied(true)
-      toast('一言メモをコピーしました')
-      window.setTimeout(() => setCopied(false), 2500)
-    } catch {
-      toast('コピーに失敗しました。テキストを長押しで選択してください')
-    }
-  }
 
   type KitItem = { label: string; href: string; note: string; ready?: boolean; thumb?: string; thumbAlt?: string }
   const distributionItems: KitItem[] = [
@@ -207,55 +180,6 @@ export function PressPage() {
           A3 掲示ポスターは職員室・進路指導室の掲示に、A4 handout は面談・保護者会での手渡しに使えます。
         </p>
         {renderKitList(distributionItems)}
-
-        <h2>一言メモ（同封・手渡し用の型テキスト）</h2>
-        <p style={{ color: 'var(--ink-soft)', fontSize: '0.9em' }}>
-          poster / handout に手書きで添える一言メモの型です。手書きの温かみが信頼形成に効くので、
-          可能な範囲で手書きを推奨。時間が無い時は下記をそのままコピーして印刷しても構いません。
-          <b>「PTA 役員」等の肩書きは書かない</b>ルールに沿っています（先生の心理的負担を下げるため
-          「押し付けない・ご不要なら破棄可」を必ず含めています）。
-        </p>
-        <div
-          style={{
-            border: '1px solid var(--line)',
-            borderRadius: 10,
-            background: 'var(--card)',
-            padding: '14px 16px',
-            marginBottom: 20,
-          }}
-        >
-          <pre
-            style={{
-              margin: 0,
-              fontFamily: 'inherit',
-              fontSize: '0.95em',
-              lineHeight: 1.7,
-              whiteSpace: 'pre-wrap',
-              color: 'var(--ink)',
-            }}
-          >
-            {MEMO_TEMPLATE}
-          </pre>
-          <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 10 }}>
-            <button
-              type="button"
-              onClick={() => void copyMemo()}
-              style={{
-                padding: '6px 14px',
-                borderRadius: 999,
-                border: 0,
-                background: copied ? 'var(--ink-soft)' : 'var(--accent)',
-                color: '#fff',
-                fontWeight: 700,
-                cursor: 'pointer',
-                fontSize: '0.9em',
-              }}
-              aria-live="polite"
-            >
-              {copied ? 'コピー済み ✓' : '📋 テキストをコピー'}
-            </button>
-          </div>
-        </div>
 
         <h2>プレスキット ダウンロード</h2>
         <p style={{ color: 'var(--ink-soft)', fontSize: '0.9em' }}>
