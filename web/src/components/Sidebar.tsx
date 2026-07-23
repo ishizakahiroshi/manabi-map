@@ -149,7 +149,7 @@ export function Sidebar({ favCount, noteCount, isAdmin }: SidebarProps) {
             </button>
             <button className="sb-item" onClick={() => go('/press')}>
               <span className="ic" aria-hidden="true">📰</span>
-              <span className="tx">プレスキット</span>
+              <span className="tx">配布素材・プレスキット</span>
               <span className="arrow" aria-hidden="true">›</span>
             </button>
           </div>
@@ -207,7 +207,7 @@ export function Sidebar({ favCount, noteCount, isAdmin }: SidebarProps) {
               </a>
               ・
               <a href="/press" onClick={(e) => { e.preventDefault(); go('/press') }}>
-                プレスキット
+                配布素材・プレスキット
               </a>
             </div>
           </div>
