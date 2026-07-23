@@ -8,7 +8,7 @@
   "scripts": {
     "dev": "vite",
     "build": "pnpm fetch:tags && pnpm gen:schools-json && vite build && node scripts/gen-seo-pages.mjs",
-    "fetch:tags": "git fetch --tags --depth=1 || true",
+    "fetch:tags": "git fetch --unshallow --tags 2>/dev/null || git fetch --deepen=200 --tags 2>/dev/null || git fetch --tags || true",
     "gen:schools-json": "node scripts/gen-schools-json.mjs",
     "typecheck": "tsc --noEmit -p tsconfig.app.json",
     "lint": "oxlint",
