@@ -189,6 +189,7 @@ export const en: MessageTree = {
       agriculture_marine: 'Agri & Marine',
       home_welfare_nursing: 'Home / Welfare / Nursing',
       other: 'Other',
+      unknown: 'No department data',
     },
   },
   labels: {
@@ -341,6 +342,7 @@ export const en: MessageTree = {
     officialSoon: 'Official site URL is not available yet',
     googleMaps: 'Google Maps',
     deptDeviation: 'Reference deviation by department',
+    deptDeviationEmpty: 'Department data is not available yet.',
     refValue: 'Ref.',
     myRecord: 'My record',
     sourceNote: 'Source: Manabi Map estimate (from public data)',

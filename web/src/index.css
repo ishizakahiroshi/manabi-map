@@ -553,6 +553,7 @@ body {
 .dep-dev .data-report { margin-top: 2px; }
 .self-label { margin-left: 3px; font-size: 0.76rem; color: var(--ink-soft); }
 .depts .note { margin-top: 6px; font-size: 0.78rem; color: var(--ink-soft); }
+.depts-empty { margin: 4px 0 0; font-size: 0.86rem; color: var(--ink-soft); }
 .depts .note a { color: var(--accent); }
 
 .admission-block {
@@ -560,6 +561,15 @@ body {
 }
 .admission-block h4 { margin: 0 0 6px; font-family: var(--display); font-size: 0.98rem; }
 .admission-block .sub { color: var(--ink-soft); font-size: 0.82rem; margin: 0 0 10px; }
+.admission-block > summary { cursor: pointer; list-style: none; display: flex; flex-direction: column; gap: 2px; }
+.admission-block > summary::-webkit-details-marker { display: none; }
+.admission-block > summary::before {
+  content: '▶'; display: inline-block; margin-right: 6px; font-size: 0.7rem; color: var(--ink-soft); transition: transform 0.15s;
+}
+.admission-block[open] > summary::before { transform: rotate(90deg); }
+.admission-block > summary .admission-block-title { font-family: var(--display); font-size: 0.98rem; font-weight: 700; color: var(--ink); }
+.admission-block > summary .admission-block-hint { color: var(--ink-soft); font-size: 0.82rem; padding-left: 18px; }
+.admission-block[open] > summary { margin-bottom: 10px; }
 .admission-pending { display: flex; align-items: center; justify-content: space-between; gap: 10px; color: var(--ink-soft); font-size: 0.86rem; }
 .admission-pending .data-report { margin-top: 0; }
 .admission-trend { margin: 12px 0; padding: 12px; border-radius: 12px; background: var(--card); }
