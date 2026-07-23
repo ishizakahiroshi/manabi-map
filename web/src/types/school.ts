@@ -41,6 +41,11 @@ export type DeptUiGroup =
   | 'agriculture_marine'
   | 'home_welfare_nursing'
   | 'other'
+  // 学科情報がそもそも 1 件も無い学校（京都・兵庫等 学科未収集県）を、
+  // 専門学科の分類外 'other' と区別してフィルタ制御するための sentinel。
+  // course_type_master.ui_group には現れず、MapPage 側で school.departments.length === 0
+  // のフォールバックとしてのみ生成される。
+  | 'unknown'
 
 export interface Department {
   id: string

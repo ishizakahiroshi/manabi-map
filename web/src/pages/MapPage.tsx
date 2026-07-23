@@ -53,7 +53,10 @@ const DEPT_KEYS_SPECIALIZED = [
   'home_welfare_nursing',
   'other',
 ] as const
-const DEPT_KEYS = [...DEPT_KEYS_ACADEMIC, ...DEPT_KEYS_SPECIALIZED] as const
+// 学科情報未収集校（京都・兵庫等）を独立 chip として扱う。既定 ON なので
+// 全 chip 選択時の表示件数は従来と変わらない。
+const DEPT_KEYS_META = ['unknown'] as const
+const DEPT_KEYS = [...DEPT_KEYS_ACADEMIC, ...DEPT_KEYS_SPECIALIZED, ...DEPT_KEYS_META] as const
 
 /**
  * 地図タイルソース。env `VITE_TILE_SOURCE`（'osm' | 'protomaps'）で切替。
@@ -312,13 +315,13 @@ export function MapPage({ userData }: Props) {
       const passCourseTime = s.course_times.some((courseTime) => filters.courseTimes.has(courseTime))
       const passInt = !filters.onlyIntegrated || s.is_integrated
       // 学科: 少なくとも 1 学科がグループ（course_type_master.ui_group）にマッチすれば通す。
-      // ui_group が null（master に未登録の code）や、そもそも学科が 1 件も無い校は
-      // 「その他」chip 相当として扱う。10 chip 全選択の既定状態では全学校が通り、
-      // 特定 chip を絞ると未分類・学科なしも 'その他' chip 経由で明示制御できる。
+      // ui_group が null（master に未登録の code）は従来どおり 'other'（専門学科の分類外）。
+      // 学科自体が 1 件も無い校（京都・兵庫等 学科未収集県）は独立 sentinel 'unknown' に
+      // 畳み、「学科情報なし」chip の ON/OFF で明示制御する（既定 ON なので回帰なし）。
       const groups: DeptUiGroup[] =
         s.departments.length > 0
           ? s.departments.map((d) => d.ui_group ?? 'other')
-          : ['other']
+          : ['unknown']
       const passDept = groups.some((g) => filters.depts.has(g))
       return passBounds && passBand && passRatio && passOwn && passGen && passType && passCourseTime && passDept && passInt && passQuery
     })

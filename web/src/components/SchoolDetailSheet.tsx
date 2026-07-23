@@ -720,6 +720,10 @@ export function SchoolDetailSheet({ school, onClose, userData }: Props) {
 
         <div className="depts">
           <h4>🎓 {t('detail.deptDeviation')}</h4>
+          {school.departments.length === 0 ? (
+            <p className="depts-empty">{t('detail.deptDeviationEmpty')}</p>
+          ) : (
+          <>
           <div>
             {school.departments.map((d) => {
               const mv = mineRec?.depts[d.id]
@@ -767,11 +771,15 @@ export function SchoolDetailSheet({ school, onClose, userData }: Props) {
               {t('detail.correction')}
             </a>
           </p>
+          </>
+          )}
         </div>
 
-        <div className="admission-block">
-          <h4>📈 {t('detail.admissionTitle')}</h4>
-          <p className="sub">{t('detail.admissionSub')}</p>
+        <details className="admission-block">
+          <summary>
+            <span className="admission-block-title">📈 {t('detail.admissionTitle')}</span>
+            <span className="admission-block-hint">{t('detail.admissionSub')}</span>
+          </summary>
           {admissionSelections.length > 0 ? (
             <>
               {admissionTrend && (
@@ -821,7 +829,7 @@ export function SchoolDetailSheet({ school, onClose, userData }: Props) {
             </div>
           )}
           <p className="note">{t('detail.disclaimer')}</p>
-        </div>
+        </details>
 
         <div className="mine-block">
           <h4>📊 {t('detail.myBlockTitle')}</h4>
