@@ -9,19 +9,23 @@ export function PressPage() {
   const navigate = useNavigate()
   const { t } = useI18n()
 
-  type KitItem = { label: string; href: string; note: string; ready?: boolean }
+  type KitItem = { label: string; href: string; note: string; ready?: boolean; thumb?: string; thumbAlt?: string }
   const distributionItems: KitItem[] = [
     {
       label: '掲示ポスター（A3 縦・PDF）',
       href: '/press/manabi-map-poster.pdf',
       note: 'ダウンロード',
       ready: true,
+      thumb: '/press/manabi-map-poster-thumb.png',
+      thumbAlt: '掲示ポスターのプレビュー画像（A3 縦）',
     },
     {
       label: '保護者配布・面談用 handout（A4 縦・PDF）',
       href: '/press/manabi-map-handout.pdf',
       note: 'ダウンロード',
       ready: true,
+      thumb: '/press/manabi-map-handout-thumb.png',
+      thumbAlt: '保護者配布 handout のプレビュー画像（A4 縦）',
     },
   ]
   const kitItems: KitItem[] = [
@@ -65,13 +69,40 @@ export function PressPage() {
               gap: 12,
             }}
           >
-            <span>
-              <b>{item.label}</b>
-              <br />
-              <small style={{ color: 'var(--ink-soft)' }}>{item.href}</small>
-            </span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 14, minWidth: 0, flex: 1 }}>
+              {item.thumb && (
+                <a
+                  href={item.href}
+                  download
+                  aria-label={`${item.label} をダウンロード`}
+                  style={{
+                    flex: '0 0 auto',
+                    display: 'block',
+                    width: 88,
+                    height: 124,
+                    borderRadius: 6,
+                    overflow: 'hidden',
+                    border: '1px solid var(--line)',
+                    background: '#fff',
+                    boxShadow: '0 1px 4px rgba(0,0,0,0.08)',
+                  }}
+                >
+                  <img
+                    src={item.thumb}
+                    alt={item.thumbAlt ?? ''}
+                    loading="lazy"
+                    style={{ width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'top center', display: 'block' }}
+                  />
+                </a>
+              )}
+              <span style={{ minWidth: 0 }}>
+                <b>{item.label}</b>
+                <br />
+                <small style={{ color: 'var(--ink-soft)', wordBreak: 'break-all' }}>{item.href}</small>
+              </span>
+            </div>
             {item.ready ? (
-              <a href={item.href} download style={{ textDecoration: 'none' }}>
+              <a href={item.href} download style={{ textDecoration: 'none', flex: '0 0 auto' }}>
                 {badge}
               </a>
             ) : (
