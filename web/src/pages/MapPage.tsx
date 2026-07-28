@@ -21,6 +21,7 @@ import {
 } from '../lib/geo'
 import type { HomeLocation } from '../types/school'
 import { ACTIVE_REGION } from '../lib/region'
+import { departmentUiGroups } from '../lib/school-filter'
 import { OSM_ATTRIBUTION_HTML, PROTOMAPS_ATTRIBUTION_HTML } from '../lib/attribution'
 import { useApp } from '../contexts/AppContext'
 import { useSchools } from '../hooks/useSchools'
@@ -314,14 +315,8 @@ export function MapPage({ userData }: Props) {
       const passType = filters.types.has(s.type)
       const passCourseTime = s.course_times.some((courseTime) => filters.courseTimes.has(courseTime))
       const passInt = !filters.onlyIntegrated || s.is_integrated
-      // 学科: 少なくとも 1 学科がグループ（course_type_master.ui_group）にマッチすれば通す。
-      // ui_group が null（master に未登録の code）は従来どおり 'other'（専門学科の分類外）。
-      // 学科自体が 1 件も無い校（京都・兵庫等 学科未収集県）は独立 sentinel 'unknown' に
-      // 畳み、「学科情報なし」chip の ON/OFF で明示制御する（既定 ON なので回帰なし）。
-      const groups: DeptUiGroup[] =
-        s.departments.length > 0
-          ? s.departments.map((d) => d.ui_group ?? 'other')
-          : ['unknown']
+      // 学科なしは 'other'（分類外）と分け、「学科情報なし」chip で制御する。
+      const groups: DeptUiGroup[] = departmentUiGroups(s)
       const passDept = groups.some((g) => filters.depts.has(g))
       return passBounds && passBand && passRatio && passOwn && passGen && passType && passCourseTime && passDept && passInt && passQuery
     })
