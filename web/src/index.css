@@ -203,6 +203,10 @@ body {
   font-family: var(--body); font-size: 0.92rem; cursor: pointer; color: var(--ink);
   box-shadow: 2px 2px 0 var(--line); width: 100%;
 }
+@media (hover: hover) {
+  .q-results .cand:hover { background: #fff9ef; border-color: var(--accent); box-shadow: 2px 2px 0 var(--accent); }
+  .q-results .cand.on:hover { background: var(--accent); }
+}
 .q-results .cand.on { background: var(--accent); color: #fff; }
 .q-results .cand .cand-icon { font-family: var(--display); font-weight: 800; color: var(--accent); flex: 0 0 auto; }
 .q-results .cand.on .cand-icon { color: #fff; }
