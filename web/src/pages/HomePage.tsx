@@ -121,10 +121,12 @@ export function HomePage() {
     )
   }
 
-  const goToMap = () => {
-    if (selected) {
-      trackEvent('search', { source: selected.source, result_count: candidates?.length })
-      setHome({ label: selected.label, lat: selected.lat, lng: selected.lng })
+  // 候補クリックからは state 更新を待たず override で直接渡す（setSelected は非同期のため）
+  const goToMap = (override?: HomeLocation & { source: string }) => {
+    const target = override ?? selected
+    if (target) {
+      trackEvent('search', { source: target.source, result_count: candidates?.length })
+      setHome({ label: target.label, lat: target.lat, lng: target.lng })
       navigate('/map')
       return
     }
@@ -201,7 +203,10 @@ export function HomePage() {
               role="option"
               aria-selected={selected?.label === c.label}
               className={`cand ${selected?.label === c.label ? 'on' : ''}`}
-              onClick={() => pick(c)}
+              onClick={() => {
+                pick(c)
+                goToMap({ label: c.label, lat: c.lat, lng: c.lng, source: ACTIVE_GEOCODER })
+              }}
             >
               <span className="cand-icon" aria-hidden="true">{c.icon}</span>
               <span className="cand-body">
@@ -216,7 +221,7 @@ export function HomePage() {
         <span className="geo-icon" aria-hidden="true">📍</span> {t('home.geo')}
       </button>
 
-      <button className="cta" onClick={goToMap}>
+      <button className="cta" onClick={() => goToMap()}>
         {t('home.viewMap')}
       </button>
 

@@ -80,6 +80,13 @@ export async function verifyStaticOutput({
     throw new Error('manifest declares gzip but payload does not have gzip magic bytes')
   }
 
+  // gen-seo-pages.mjs が og:description の収録範囲を差し替え損ねると、
+  // 本番の OGP カードにプレースホルダがそのまま出る。dist 全体で 0 件であることを保証する。
+  const topHtml = await readFile(join(absoluteDist, 'index.html'), 'utf8')
+  if (topHtml.includes('__COVERAGE__')) {
+    throw new Error('dist/index.html に未置換の __COVERAGE__ が残っている（gen-seo-pages が走っていない可能性）')
+  }
+
   const targets = schools.filter((school) => school?.latitude != null && school?.longitude != null)
   const expectedLocations = new Set([
     `${SITE_ORIGIN}/`,

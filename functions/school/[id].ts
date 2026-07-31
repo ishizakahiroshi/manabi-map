@@ -90,8 +90,19 @@ async function fetchSchool(env: Env, id: string): Promise<SchoolRow | null> {
   return row && row.is_active ? row : null;
 }
 
+/**
+ * 「都道府県 + 市区町村」を組み立てる。city 側に県名の接頭辞が入っている行があると
+ * 「京都府京都府京都市」のように二重になるため、連結時に落とす
+ * （2026-07-31 に 222 行で発生。gen-seo-pages.mjs の placeLabel と同じ考え方）。
+ */
+function placeLabel(prefecture: string | null, city: string | null): string {
+  const pref = prefecture ?? "";
+  const raw = city ?? "";
+  return `${pref}${raw.startsWith(pref) ? raw.slice(pref.length) : raw}`;
+}
+
 function buildDescription(s: SchoolRow): string {
-  const loc = `${s.prefecture ?? ""}${s.city ?? ""}`;
+  const loc = placeLabel(s.prefecture ?? null, s.city ?? null);
   const own = s.ownership ? (OWNERSHIP_LABEL[s.ownership] ?? "") : "";
   const kind = s.type === "kosen" ? "高専" : "高校";
   const depts = (s.school_departments ?? [])

@@ -2,6 +2,8 @@ import type { MessageTree } from './types'
 
 export const en: MessageTree = {
   common: {
+    // 仮名表記は日本語 UI でのみ意味を持つため、英語では英字名のみ。
+    brand: 'Manabi Map',
     close: 'Close',
     menu: 'Menu',
     back: 'Back',
@@ -122,17 +124,7 @@ export const en: MessageTree = {
     zoomIn: 'Zoom in',
     zoomOut: 'Zoom out',
     recenter: 'Recenter on home',
-    toggleSheet: 'Toggle bottom sheet',
     loadingSchools: 'Loading school data…',
-    favCount: '{count} favorites',
-    listLink: 'List ›',
-    favEmpty: 'Tap a pin to add a school to favorites',
-    filterOwn: 'Operator',
-    filterType: 'School type',
-    filterCourse: 'Schedule',
-    filterGender: 'Gender',
-    filterDept: 'Department',
-    deptSpecialized: 'Specialized',
     filterOther: 'Other',
     integratedOnly: 'Integrated JHS–HS only',
     schoolList: 'School list',
@@ -143,6 +135,7 @@ export const en: MessageTree = {
     filterAll: 'All',
     filterCategory: {
       own: 'Type',
+      types: 'School kind',
       bands: 'Deviation',
       ratios: 'Ratio',
       gen: 'Gender',
@@ -198,6 +191,7 @@ export const en: MessageTree = {
       agriculture_marine: 'Agri & Marine',
       home_welfare_nursing: 'Home / Welfare / Nursing',
       other: 'Other',
+      unknown: 'No department data',
     },
   },
   labels: {
@@ -347,9 +341,11 @@ export const en: MessageTree = {
     priority: 'Priority',
     priorityN: 'Priority {n}',
     official: 'Official site',
-    officialSoon: 'Official site URL is not available yet',
+    officialSoon: 'Official site URL — help wanted. Let us know if you have it.',
     googleMaps: 'Google Maps',
     deptDeviation: 'Reference deviation by department',
+    deptDeviationEmpty: 'Department data — help wanted. If you know the departments and reference deviations, please let us know.',
+    kanaEmpty: 'Reading (kana) — help wanted',
     refValue: 'Ref.',
     myRecord: 'My record',
     sourceNote: 'Source: Manabi Map estimate (from public data)',
