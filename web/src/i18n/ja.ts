@@ -2,6 +2,8 @@ import type { MessageTree } from './types'
 
 export const ja: MessageTree = {
   common: {
+    // 画面ヘッダー / サイドバーのブランド表記。head メタの <title> と同じ正式表記に揃える。
+    brand: 'Manabi Map（まなびマップ）',
     close: '閉じる',
     menu: 'メニュー',
     back: '戻る',
@@ -122,17 +124,7 @@ export const ja: MessageTree = {
     zoomIn: 'ズームイン',
     zoomOut: 'ズームアウト',
     recenter: '自宅に戻す',
-    toggleSheet: 'シートを開閉',
     loadingSchools: '学校データを読み込み中…',
-    favCount: 'お気に入り {count}件',
-    listLink: '一覧 ›',
-    favEmpty: 'ピンをタップして志望校を追加してください',
-    filterOwn: '運営',
-    filterType: '学校種別',
-    filterCourse: '課程',
-    filterGender: '性別',
-    filterDept: '学科',
-    deptSpecialized: '専門学科',
     filterOther: 'その他',
     integratedOnly: '中高一貫のみ',
     schoolList: '学校リスト',
@@ -143,6 +135,7 @@ export const ja: MessageTree = {
     filterAll: '全',
     filterCategory: {
       own: '種別',
+      types: '学校種',
       bands: '偏差値',
       ratios: '倍率',
       gen: '性別',
@@ -198,6 +191,7 @@ export const ja: MessageTree = {
       agriculture_marine: '農業・水産',
       home_welfare_nursing: '家庭・福祉・看護',
       other: 'その他',
+      unknown: '学科情報なし',
     },
   },
   labels: {
@@ -347,9 +341,11 @@ export const ja: MessageTree = {
     priority: '志望度',
     priorityN: '志望度 {n}',
     official: '公式サイト',
-    officialSoon: '公式サイト情報は準備中です',
+    officialSoon: '公式サイト 情報提供募集中 — URL をご存知の方はお知らせください',
     googleMaps: 'Google Maps',
     deptDeviation: '学科別 参考偏差値',
+    deptDeviationEmpty: '学科情報 情報提供募集中 — 学科・偏差値を知っている方は、こちらからお知らせください',
+    kanaEmpty: 'かな 情報提供募集中',
     refValue: '参考値',
     myRecord: '私の記録',
     sourceNote: '出典: Manabi Map 独自推計（公的資料に基づく）',

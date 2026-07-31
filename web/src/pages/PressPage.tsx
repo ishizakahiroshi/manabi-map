@@ -9,16 +9,116 @@ export function PressPage() {
   const navigate = useNavigate()
   const { t } = useI18n()
 
-  const kitItems: Array<{ label: string; href: string; note: string }> = [
+  type KitItem = { label: string; href: string; note: string; ready?: boolean; thumb?: string; thumbAlt?: string }
+  const distributionItems: KitItem[] = [
+    {
+      label: '掲示ポスター（A3 縦・PDF）',
+      href: '/press/manabi-map-poster.pdf',
+      note: 'ダウンロード',
+      ready: true,
+      thumb: '/press/manabi-map-poster-thumb.png',
+      thumbAlt: '掲示ポスターのプレビュー画像（A3 縦）',
+    },
+    {
+      label: '保護者配布・面談用 handout（A4 縦・PDF）',
+      href: '/press/manabi-map-handout.pdf',
+      note: 'ダウンロード',
+      ready: true,
+      thumb: '/press/manabi-map-handout-thumb.png',
+      thumbAlt: '保護者配布 handout のプレビュー画像（A4 縦）',
+    },
+  ]
+  const kitItems: KitItem[] = [
     { label: 'プレスリリース PDF', href: '/press/press-release.pdf', note: '準備中' },
     { label: 'ロゴ一式（SVG / PNG）', href: '/press/logo-pack.zip', note: '準備中' },
     { label: 'スクリーンショット集', href: '/press/screenshots.zip', note: '準備中' },
   ]
 
+  const renderKitList = (items: KitItem[]) => (
+    <ul style={{ listStyle: 'none', padding: 0 }}>
+      {items.map((item) => {
+        const badge = (
+          <span
+            aria-disabled={item.ready ? undefined : 'true'}
+            style={{
+              padding: '4px 10px',
+              borderRadius: 999,
+              background: item.ready ? 'var(--accent)' : 'var(--line)',
+              color: item.ready ? '#fff' : 'var(--ink-soft)',
+              fontSize: '0.85em',
+              whiteSpace: 'nowrap',
+              fontWeight: item.ready ? 700 : 400,
+              textDecoration: 'none',
+            }}
+          >
+            {item.note}
+          </span>
+        )
+        return (
+          <li
+            key={item.href}
+            style={{
+              padding: '12px 14px',
+              marginBottom: 8,
+              border: '1px solid var(--line)',
+              borderRadius: 10,
+              background: 'var(--card)',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              gap: 12,
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 14, minWidth: 0, flex: 1 }}>
+              {item.thumb && (
+                <a
+                  href={item.href}
+                  download
+                  aria-label={`${item.label} をダウンロード`}
+                  style={{
+                    flex: '0 0 auto',
+                    display: 'block',
+                    width: 88,
+                    height: 124,
+                    borderRadius: 6,
+                    overflow: 'hidden',
+                    border: '1px solid var(--line)',
+                    background: '#fff',
+                    boxShadow: '0 1px 4px rgba(0,0,0,0.08)',
+                  }}
+                >
+                  <img
+                    src={item.thumb}
+                    alt={item.thumbAlt ?? ''}
+                    loading="lazy"
+                    style={{ width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'top center', display: 'block' }}
+                  />
+                </a>
+              )}
+              <span style={{ minWidth: 0 }}>
+                <b>{item.label}</b>
+                <br />
+                <small style={{ color: 'var(--ink-soft)', wordBreak: 'break-all' }}>{item.href}</small>
+              </span>
+            </div>
+            {item.ready ? (
+              <a href={item.href} download style={{ textDecoration: 'none', flex: '0 0 auto' }}>
+                {badge}
+              </a>
+            ) : (
+              badge
+            )}
+          </li>
+        )
+      })}
+    </ul>
+  )
+
   const basics: Array<[string, React.ReactNode]> = [
     ['サービス名', 'Manabi Map（まなびマップ）'],
     ['URL', <a key="u" href="https://manabi-map.app" target="_blank" rel="noopener noreferrer">https://manabi-map.app</a>],
-    ['公開日', '2026-07-05（群馬県版 v0.1.0）'],
+    ['現行バージョン', <span key="v">v{__APP_VERSION__}</span>],
+    ['初回公開', '2026-07-05（群馬県版から段階的に全国展開中）'],
     ['開発者', 'ishizakahiroshi（個人 OSS）'],
     ['ライセンス', 'コード AGPL-3.0 / データ CC BY-SA 4.0'],
     ['料金', '無料（広告は進路・教育関連のみ控えめに掲載）'],
@@ -54,7 +154,7 @@ export function PressPage() {
         <button className="icon-btn" onClick={() => navigate(-1)} aria-label={t('common.back')}>
           ←
         </button>
-        <div className="brand">プレスキット</div>
+        <div className="brand">配布素材・プレスキット</div>
       </div>
       <main
         id="main-content"
@@ -74,48 +174,19 @@ export function PressPage() {
           広告は進路・教育関連のみ、無差別アドネットワークは使用しません。
         </p>
 
+        <h2>学校・保護者向け 配布素材</h2>
+        <p style={{ color: 'var(--ink-soft)', fontSize: '0.9em' }}>
+          進路指導部の先生や保護者へ紹介いただく際に、ご自由にダウンロード・印刷・配布いただけます（改変は不可）。
+          A3 掲示ポスターは職員室・進路指導室の掲示に、A4 handout は面談・保護者会での手渡しに使えます。
+        </p>
+        {renderKitList(distributionItems)}
+
         <h2>プレスキット ダウンロード</h2>
         <p style={{ color: 'var(--ink-soft)', fontSize: '0.9em' }}>
-          各素材は準備中です。公開まで少々お待ちください。急ぎの場合は
+          記者・行政関係者向けの素材は準備中です。公開まで少々お待ちください。急ぎの場合は
           <a href="mailto:hello@manabi-map.app">hello@manabi-map.app</a> までご連絡ください。
         </p>
-        <ul style={{ listStyle: 'none', padding: 0 }}>
-          {kitItems.map((item) => (
-            <li
-              key={item.href}
-              style={{
-                padding: '12px 14px',
-                marginBottom: 8,
-                border: '1px solid var(--line)',
-                borderRadius: 10,
-                background: 'var(--card)',
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                gap: 12,
-              }}
-            >
-              <span>
-                <b>{item.label}</b>
-                <br />
-                <small style={{ color: 'var(--ink-soft)' }}>{item.href}</small>
-              </span>
-              <span
-                aria-disabled="true"
-                style={{
-                  padding: '4px 10px',
-                  borderRadius: 999,
-                  background: 'var(--line)',
-                  color: 'var(--ink-soft)',
-                  fontSize: '0.85em',
-                  whiteSpace: 'nowrap',
-                }}
-              >
-                {item.note}
-              </span>
-            </li>
-          ))}
-        </ul>
+        {renderKitList(kitItems)}
 
         <h2>サービス基礎情報</h2>
         <table style={{ width: '100%', borderCollapse: 'collapse', margin: '8px 0 16px' }}>
