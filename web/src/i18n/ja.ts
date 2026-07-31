@@ -2,6 +2,8 @@ import type { MessageTree } from './types'
 
 export const ja: MessageTree = {
   common: {
+    // 画面ヘッダー / サイドバーのブランド表記。head メタの <title> と同じ正式表記に揃える。
+    brand: 'Manabi Map（まなびマップ）',
     close: '閉じる',
     menu: 'メニュー',
     back: '戻る',

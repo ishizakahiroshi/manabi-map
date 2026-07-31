@@ -2,6 +2,8 @@ import type { MessageTree } from './types'
 
 export const en: MessageTree = {
   common: {
+    // 仮名表記は日本語 UI でのみ意味を持つため、英語では英字名のみ。
+    brand: 'Manabi Map',
     close: 'Close',
     menu: 'Menu',
     back: 'Back',
