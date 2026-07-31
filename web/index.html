@@ -4,28 +4,31 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="theme-color" content="#ff7a3d" />
-    <meta name="description" content="住所を入れると通える高校が地図に出る。親子で使う、学校選びの地図ノート。" />
+    <meta name="description" content="Manabi Map（まなびマップ）は、住所を入れると通える高校が地図に出る、親子で使う学校選びの地図ノートです。" />
 
     <link rel="canonical" href="https://manabi-map.app/" />
 
     <!-- OGP -->
     <meta property="og:type" content="website" />
-    <meta property="og:title" content="Manabi Map — 親子で使う、学校選びの地図ノート" />
-    <meta property="og:description" content="住所を入れると通える高校が地図に出る。気になる学校をお気に入り保存、見学メモや通学メモを残せます。東日本 20 都道県・2,591 校に対応。" />
+    <meta property="og:title" content="Manabi Map（まなびマップ）｜親子で使う、学校選びの地図ノート" />
+    <!-- 収録範囲（__COVERAGE__）は scripts/gen-seo-pages.mjs がビルド時に実データから差し替える。
+         手書きすると県追加のたびに版ずれする（旧: 「東日本 20 都道県・2,591 校に対応。」が
+         全国展開後も残る事故）。置換に失敗した場合はビルドを落とす。 -->
+    <meta property="og:description" content="住所を入れると通える高校が地図に出る。気になる学校をお気に入り保存、見学メモや通学メモを残せます。__COVERAGE__" />
     <meta property="og:url" content="https://manabi-map.app/" />
     <meta property="og:image" content="https://manabi-map.app/og-hero.png" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
-    <meta property="og:image:alt" content="Manabi Map — 親子で使う、学校選びの地図ノート" />
+    <meta property="og:image:alt" content="Manabi Map（まなびマップ）｜親子で使う、学校選びの地図ノート" />
     <meta property="og:site_name" content="Manabi Map" />
     <meta property="og:locale" content="ja_JP" />
 
     <!-- Twitter Card -->
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="Manabi Map — 親子で使う、学校選びの地図ノート" />
+    <meta name="twitter:title" content="Manabi Map（まなびマップ）｜親子で使う、学校選びの地図ノート" />
     <meta name="twitter:description" content="住所を入れると通える高校が地図に出る。気になる学校をお気に入り保存、見学メモや通学メモを残せます。" />
     <meta name="twitter:image" content="https://manabi-map.app/og-hero.png" />
-    <meta name="twitter:image:alt" content="Manabi Map — 親子で使う、学校選びの地図ノート" />
+    <meta name="twitter:image:alt" content="Manabi Map（まなびマップ）｜親子で使う、学校選びの地図ノート" />
 
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="icon" type="image/x-icon" sizes="48x48" href="/favicon.ico" />
@@ -34,7 +37,23 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;700;800&family=Zen+Maru+Gothic:wght@400;500;700&display=swap" rel="stylesheet" />
-    <title>Manabi Map — 親子で使う、学校選びの地図ノート</title>
+    <title>Manabi Map（まなびマップ）｜親子で使う、学校選びの地図ノート</title>
+    <!-- サイト名の正典（検索結果のサイト名判定と仮名表記の紐づけ）。
+         学校個別ページの JSON-LD は gen-seo-pages.mjs が head 閉じタグの直前に追記するため、
+         同一 head 内に 2 つの ld+json が並ぶが仕様上問題ない。
+         注意: 同スクリプトは head 閉じタグの文字列一致で挿入位置を決めるので、
+         この head 内にその閉じタグをリテラルで書かないこと（挿入先がずれる）。 -->
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "WebSite",
+        "name": "Manabi Map",
+        "alternateName": "まなびマップ",
+        "url": "https://manabi-map.app/",
+        "inLanguage": "ja",
+        "description": "住所を入れると通える高校が地図に出る、親子で使う学校選びの地図ノート。"
+      }
+    </script>
   </head>
   <body>
     <div id="root"></div>
