@@ -104,6 +104,23 @@ function ownershipLabel(school) {
 const GENDER_LABELS = { coed: '共学', boys: '男子校', girls: '女子校' }
 const COURSE_LABELS = { fulltime: '全日制', parttime: '定時制', correspondence: '通信制' }
 
+// SchoolDetailSheet.tsx の lifecycleLabel / recruitmentLabel と同じ文言（i18n/ja.ts 準拠）。
+// プリレンダー HTML と mount 後 DOM の内容を一致させるため、React 側に無い項目
+// （status_note / status_official_url）はここにも入れない。
+const LIFECYCLE_LABELS = { planned: '開校予定', active: '在校', closing: '在校生のみ', closed: '閉校' }
+const RECRUITMENT_LABELS = {
+  unknown: '未確認',
+  not_started: '募集開始前',
+  recruiting: '募集中',
+  no_external_high_school_intake: '高校段階の外部募集なし',
+  stopped: '募集終了',
+}
+
+/** javascript: 等のスキームを href に通さない（DB 由来 URL の多層防御）。 */
+function safeUrl(url) {
+  return typeof url === 'string' && /^https?:\/\//i.test(url) ? url : null
+}
+
 /** テンプレートの head 部を学校固有の値に置き換える。 */
 function renderHead(html, { title, description, url }) {
   const t = escapeHtml(title)
@@ -164,11 +181,59 @@ function renderSchoolPage(school) {
     ? `<p><a href="${escapeHtml(school.official_url)}" rel="noopener">公式サイト</a></p>`
     : ''
 
+  // SchoolDetailSheet.tsx の showLifecycle と同じ条件。閉校予定・募集停止校が
+  // 現役校と同じ体裁で出るのを防ぐ（進路検討サービスとしての信頼に直結するため）。
+  const lifecycleLabel = LIFECYCLE_LABELS[school.lifecycle_status_code]
+  const recruitmentLabel = RECRUITMENT_LABELS[school.recruitment_status_code]
+  const predecessors = school.predecessor_relationships ?? []
+  const nameHistory = school.school_name_history ?? []
+  const showLifecycle =
+    school.lifecycle_status_code !== 'active' ||
+    school.recruitment_status_code !== 'recruiting' ||
+    predecessors.length > 0 ||
+    nameHistory.length > 0 ||
+    school.legally_established_on != null ||
+    school.opened_on != null
+
+  let lifecycleSection = ''
+  if (showLifecycle) {
+    const lifecycleRows = [['学校状態', lifecycleLabel], ['募集状態', recruitmentLabel]]
+    if (school.legally_established_on) lifecycleRows.push(['法的設置日', school.legally_established_on])
+    if (school.opened_on) lifecycleRows.push(['開校日', school.opened_on])
+    const lifecycleDl = lifecycleRows
+      .filter(([, v]) => v)
+      .map(([k, v]) => `<dt>${escapeHtml(k)}</dt><dd>${escapeHtml(v)}</dd>`)
+      .join('')
+    const predecessorList = predecessors.length
+      ? '<p>前身校</p><ul>' +
+        predecessors
+          .map((r) => {
+            const link = safeUrl(r.official_url)
+            return (
+              `<li>${escapeHtml(r.predecessor?.name ?? '')}` +
+              (r.effective_on ? `（${escapeHtml(r.effective_on)}から）` : '') +
+              (link ? ` <a href="${escapeHtml(link)}" rel="noopener">公式根拠</a>` : '') +
+              `</li>`
+            )
+          })
+          .join('') +
+        '</ul>'
+      : ''
+    const nameHistoryList = nameHistory.length
+      ? '<p>旧名称</p><ul>' +
+        nameHistory
+          .map((h) => `<li>${escapeHtml(h.name)}${h.valid_to ? `（〜${escapeHtml(h.valid_to)}）` : ''}</li>`)
+          .join('') +
+        '</ul>'
+      : ''
+    lifecycleSection = `<section><dl>${lifecycleDl}</dl>${predecessorList}${nameHistoryList}</section>`
+  }
+
   // #root の中身はアプリ mount 時に置き換わる（クローラー向けの初期 HTML）。
   const staticContent =
     `<main><h1>${escapeHtml(school.name)}</h1>` +
     (school.name_kana ? `<p>${escapeHtml(school.name_kana)}</p>` : '') +
-    `<dl>${dl}</dl>${officialLink}` +
+    `<dl>${dl}</dl>${officialLink}${lifecycleSection}` +
     `<p>Manabi Map（まなびマップ）は、住所を入れると通える${typeLabel}が地図に表示される無料の学校選びサービスです。` +
     `お気に入り保存・見学メモ・家族での共有ができます。</p>` +
     `<p><a href="/">地図で通える学校をさがす</a></p></main>`
