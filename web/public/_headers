@@ -15,5 +15,5 @@
 # - hash 付き JSON は内容が URL に紐づくので永久キャッシュ可
 /schools-manifest.json
   Cache-Control: no-store
-/schools-*.json
+/schools-*.json.gz
   Cache-Control: public, max-age=31536000, immutable
