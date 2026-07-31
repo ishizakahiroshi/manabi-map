@@ -22,16 +22,15 @@ async function syntheticDist() {
   await writeFile(join(dir, 'index.html'), '<div id="root"></div>')
   await writeFile(join(dir, 'sitemap.xml'), [
     '<loc>https://manabi-map.app/</loc>',
-    '<loc>https://manabi-map.app/search</loc>',
-    '<loc>https://manabi-map.app/school/synthetic-a</loc>',
-    '<loc>https://manabi-map.app/school/synthetic-b</loc>',
+    '<loc>https://manabi-map.app/school/synthetic-a/</loc>',
+    '<loc>https://manabi-map.app/school/synthetic-b/</loc>',
   ].join('\n'))
   for (const school of schools) {
     const schoolDir = join(dir, 'school', school.id)
     await mkdir(schoolDir, { recursive: true })
     await writeFile(
       join(schoolDir, 'index.html'),
-      `<link rel="canonical" href="https://manabi-map.app/school/${school.id}"><h1>${school.name}</h1>`,
+      `<link rel="canonical" href="https://manabi-map.app/school/${school.id}/"><h1>${school.name}</h1>`,
     )
   }
   return dir
@@ -44,8 +43,8 @@ test('gzip magic, manifest, sitemap, SEO page and size gate pass together', asyn
   assert.equal(result.schoolsPayloadGzip, true)
   assert.equal(result.schoolCount, 2)
   assert.equal(result.seoSchoolCount, 2)
-  assert.equal(result.sitemapUrlCount, 4)
-  assert.equal(result.sitemapUniqueUrlCount, 4)
+  assert.equal(result.sitemapUrlCount, 3)
+  assert.equal(result.sitemapUniqueUrlCount, 3)
 })
 
 test('a file exactly at the limit is rejected because the contract is strictly under 25 MiB', async (t) => {
@@ -73,9 +72,8 @@ test('a duplicate allowed sitemap URL cannot replace a required school URL', asy
   t.after(() => rm(dir, { recursive: true, force: true }))
   await writeFile(join(dir, 'sitemap.xml'), [
     '<loc>https://manabi-map.app/</loc>',
-    '<loc>https://manabi-map.app/search</loc>',
-    '<loc>https://manabi-map.app/school/synthetic-a</loc>',
-    '<loc>https://manabi-map.app/school/synthetic-a</loc>',
+    '<loc>https://manabi-map.app/school/synthetic-a/</loc>',
+    '<loc>https://manabi-map.app/school/synthetic-a/</loc>',
   ].join('\n'))
   await assert.rejects(
     verifyStaticOutput({ distDir: dir, maxFileBytes: 1024 * 1024 }),
