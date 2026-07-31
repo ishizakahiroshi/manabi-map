@@ -118,7 +118,9 @@ export function PressPage() {
     ['サービス名', 'Manabi Map（まなびマップ）'],
     ['URL', <a key="u" href="https://manabi-map.app" target="_blank" rel="noopener noreferrer">https://manabi-map.app</a>],
     ['現行バージョン', <span key="v">v{__APP_VERSION__}</span>],
-    ['初回公開', '2026-07-05（群馬県版から段階的に全国展開中）'],
+    // 校数はデータ追加で変わるのでここには書かない（トップの og:description が
+    // ビルド時に実データから生成している）。都道府県数は 47 で頭打ちなので固定でよい。
+    ['初回公開', '2026-07-05（群馬県版）。2026-07-31 に全国 47 都道府県へ拡大'],
     ['開発者', 'ishizakahiroshi（個人 OSS）'],
     ['ライセンス', 'コード AGPL-3.0 / データ CC BY-SA 4.0'],
     ['料金', '無料（広告は進路・教育関連のみ控えめに掲載）'],
