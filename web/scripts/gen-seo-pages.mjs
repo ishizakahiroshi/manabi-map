@@ -133,7 +133,7 @@ function placeLabel(prefecture, city) {
 }
 
 function renderSchoolPage(school) {
-  const url = `${SITE_ORIGIN}/school/${school.id}`
+  const url = `${SITE_ORIGIN}/school/${school.id}/`
   const place = placeLabel(school.prefecture, school.city)
   const typeLabel = school.type === 'kosen' ? '高等専門学校' : '高校'
   const title = `${school.name}（${place}）の地図・アクセス・学科 | Manabi Map`
@@ -230,13 +230,24 @@ for (const school of targets) {
   await writeFile(join(outDir, 'index.html'), renderSchoolPage(school))
 }
 
-const today = new Date().toISOString().slice(0, 10)
-const urls = ['/', '/search', ...targets.map((s) => `/school/${s.id}`)]
+// sitemap には '/search' を含めない（実体は SPA フォールバックで canonical がトップを指し、
+// sitemap 掲載と自己矛盾するため）。lastmod は school.updated_at を使い、無い URL（トップ）は
+// 要素ごと省略する（sitemap プロトコルで lastmod は任意要素。ビルド日で埋めると Google が
+// sitemap の lastmod を丸ごと無視するようになる）。
+const urls = [
+  { path: '/' },
+  ...targets.map((s) => ({ path: `/school/${s.id}/`, lastmod: s.updated_at?.slice(0, 10) })),
+]
 const sitemap =
   '<?xml version="1.0" encoding="UTF-8"?>\n' +
   '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n' +
   urls
-    .map((p) => `  <url><loc>${SITE_ORIGIN}${escapeHtml(p)}</loc><lastmod>${today}</lastmod></url>`)
+    .map(
+      ({ path, lastmod }) =>
+        `  <url><loc>${SITE_ORIGIN}${escapeHtml(path)}</loc>` +
+        (lastmod ? `<lastmod>${lastmod}</lastmod>` : '') +
+        `</url>`,
+    )
     .join('\n') +
   '\n</urlset>\n'
 await writeFile(join(distDir, 'sitemap.xml'), sitemap)
