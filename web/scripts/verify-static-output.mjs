@@ -90,8 +90,7 @@ export async function verifyStaticOutput({
   const targets = schools.filter((school) => school?.latitude != null && school?.longitude != null)
   const expectedLocations = new Set([
     `${SITE_ORIGIN}/`,
-    `${SITE_ORIGIN}/search`,
-    ...targets.map((school) => `${SITE_ORIGIN}/school/${school.id}`),
+    ...targets.map((school) => `${SITE_ORIGIN}/school/${school.id}/`),
   ])
   const locations = sitemapLocations(await readFile(join(absoluteDist, 'sitemap.xml'), 'utf8'))
   const actualLocations = new Set(locations)
@@ -134,7 +133,7 @@ export async function verifyStaticOutput({
     if (!html.includes(`<h1>${escapeHtml(representative.name)}</h1>`)) {
       throw new Error(`representative View Source is missing school heading: ${representative.id}`)
     }
-    if (!html.includes(`href="${SITE_ORIGIN}/school/${representative.id}"`)) {
+    if (!html.includes(`href="${SITE_ORIGIN}/school/${representative.id}/"`)) {
       throw new Error(`representative View Source is missing canonical URL: ${representative.id}`)
     }
   }
