@@ -68,7 +68,7 @@ export function Sidebar({ favCount, noteCount, isAdmin }: SidebarProps) {
           <button className="icon-btn" onClick={close} aria-label={t('common.close')}>
             ×
           </button>
-          <div className="brand">Manabi Map</div>
+          <div className="brand">{t('common.brand')}</div>
         </div>
         <div className="sb-body">
           <div className="sb-user">
