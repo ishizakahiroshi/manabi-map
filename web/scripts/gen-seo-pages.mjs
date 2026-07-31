@@ -120,9 +120,21 @@ function renderHead(html, { title, description, url }) {
     .replace(/(<meta name="twitter:description" content=")[^"]*(")/, `$1${d}$2`)
 }
 
+/**
+ * 「都道府県 + 市区町村」を組み立てる。
+ * city 側に県名の接頭辞が入っている行があると「京都府京都府京都市」のように二重になるため、
+ * 連結時に落とす（2026-07-31 に 222 行で実際に発生。データ側も是正済みだが、
+ * 府県追加のたびに同じ形で入ってくるのでここでも防ぐ）。
+ */
+function placeLabel(prefecture, city) {
+  const pref = prefecture ?? ''
+  const rest = (city ?? '').startsWith(pref) ? (city ?? '').slice(pref.length) : (city ?? '')
+  return `${pref}${rest}`
+}
+
 function renderSchoolPage(school) {
   const url = `${SITE_ORIGIN}/school/${school.id}`
-  const place = `${school.prefecture}${school.city ?? ''}`
+  const place = placeLabel(school.prefecture, school.city)
   const typeLabel = school.type === 'kosen' ? '高等専門学校' : '高校'
   const title = `${school.name}（${place}）の地図・アクセス・学科 | Manabi Map`
   const description =
@@ -132,7 +144,7 @@ function renderSchoolPage(school) {
   const rows = []
   // address は既に prefecture + city を含む完全表記が入っている想定。
   // 未設定のときだけ prefecture + city を組み立てて代替する。
-  const addressText = school.address ?? `${school.prefecture}${school.city ?? ''}`
+  const addressText = school.address ?? placeLabel(school.prefecture, school.city)
   const addressWithPostal = school.postal_code ? `〒${school.postal_code} ${addressText}` : addressText
   rows.push(['所在地', addressWithPostal])
   const ownership = ownershipLabel(school)
