@@ -1,6 +1,16 @@
 import { describe, it, expect } from 'vitest'
-import { shortSchoolName, escapeHtml, band, topDev, botDev, devLabel } from './format'
-import type { School } from '../types/school'
+import {
+  shortSchoolName,
+  escapeHtml,
+  band,
+  topDev,
+  botDev,
+  devLabel,
+  gradeCapacity,
+  scaleBand,
+  enrollmentLabel,
+} from './format'
+import type { AdmissionStat, School } from '../types/school'
 
 function makeSchool(devs: (number | null)[]): School {
   return {
@@ -14,6 +24,7 @@ function makeSchool(devs: (number | null)[]): School {
     longitude: 0,
     prefecture: '群馬県',
     departments: devs.map((d, i) => ({ id: `d${i}`, name: `学科${i}`, deviation: d })),
+    admission_stats: [],
     course_times: ['fulltime'],
     campus_type: 'main',
     main_school_name: null,
@@ -111,5 +122,58 @@ describe('topDev / botDev / devLabel', () => {
   it('単一値は単数表示', () => {
     const s = makeSchool([55])
     expect(devLabel(s)).toBe('55')
+  })
+})
+
+describe('gradeCapacity / scaleBand / enrollmentLabel', () => {
+  const stat = (overrides: Partial<AdmissionStat>): AdmissionStat => ({
+    department_id: null,
+    year: 2026,
+    capacity: 100,
+    applicants: null,
+    examinees: null,
+    admitted: null,
+    note: null,
+    source_url: null,
+    ...overrides,
+  })
+
+  it('最新年度を使い、学科行があれば学校全体行を二重計上しない', () => {
+    const s = makeSchool([])
+    s.admission_stats = [
+      stat({ year: 2025, capacity: 300 }),
+      stat({ year: 2026, capacity: 500 }),
+      stat({ year: 2026, department_id: 'general', capacity: 100 }),
+      stat({ year: 2026, department_id: 'commercial', capacity: 140 }),
+    ]
+
+    expect(gradeCapacity(s)).toBe(240)
+    expect(scaleBand(s)).toBe('medium')
+  })
+
+  it.each([
+    [120, 'small'],
+    [121, 'medium'],
+    [240, 'medium'],
+    [241, 'large'],
+  ] as const)('capacity %s を %s に分類する', (capacity, expected) => {
+    const s = makeSchool([])
+    s.admission_stats = [stat({ capacity })]
+    expect(scaleBand(s)).toBe(expected)
+  })
+
+  it('capacity が無い学校は情報募集中に戻す', () => {
+    const s = makeSchool([])
+    expect(gradeCapacity(s)).toBeNull()
+    expect(scaleBand(s)).toBeNull()
+    expect(enrollmentLabel(s)).toBe('情報募集中')
+  })
+
+  it('実数の在籍数を募集定員バンドより優先する', () => {
+    const s = makeSchool([])
+    s.total_students = 148
+    s.enrollment_year = 2025
+    s.admission_stats = [stat({ capacity: 300 })]
+    expect(enrollmentLabel(s)).toBe('約 148 人（2025 年）')
   })
 })

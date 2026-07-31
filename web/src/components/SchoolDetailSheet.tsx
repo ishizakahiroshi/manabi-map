@@ -545,6 +545,18 @@ export function SchoolDetailSheet({ school, onClose, userData }: Props) {
       <div className="head">
         <span className="grow">
           <h3 className="detail-title">{fmt.displayName(school)}</h3>
+          {school.name_kana ? (
+            <span className="school-kana">{school.name_kana}</span>
+          ) : (
+            <span className="school-kana kana-empty">
+              {t('detail.kanaEmpty')}
+              <DataReportForm
+                schoolId={school.id}
+                field="other"
+                targetLabel={t('detail.kanaEmpty')}
+              />
+            </span>
+          )}
         </span>
       </div>
       <div className="body">
@@ -720,6 +732,17 @@ export function SchoolDetailSheet({ school, onClose, userData }: Props) {
 
         <div className="depts">
           <h4>🎓 {t('detail.deptDeviation')}</h4>
+          {school.departments.length === 0 ? (
+            <div className="depts-empty">
+              <p>{t('detail.deptDeviationEmpty')}</p>
+              <DataReportForm
+                schoolId={school.id}
+                field="other"
+                targetLabel={t('detail.deptDeviation')}
+              />
+            </div>
+          ) : (
+          <>
           <div>
             {school.departments.map((d) => {
               const mv = mineRec?.depts[d.id]
@@ -767,11 +790,15 @@ export function SchoolDetailSheet({ school, onClose, userData }: Props) {
               {t('detail.correction')}
             </a>
           </p>
+          </>
+          )}
         </div>
 
-        <div className="admission-block">
-          <h4>📈 {t('detail.admissionTitle')}</h4>
-          <p className="sub">{t('detail.admissionSub')}</p>
+        <details className="admission-block">
+          <summary>
+            <span className="admission-block-title">📈 {t('detail.admissionTitle')}</span>
+            <span className="admission-block-hint">{t('detail.admissionSub')}</span>
+          </summary>
           {admissionSelections.length > 0 ? (
             <>
               {admissionTrend && (
@@ -821,7 +848,7 @@ export function SchoolDetailSheet({ school, onClose, userData }: Props) {
             </div>
           )}
           <p className="note">{t('detail.disclaimer')}</p>
-        </div>
+        </details>
 
         <div className="mine-block">
           <h4>📊 {t('detail.myBlockTitle')}</h4>

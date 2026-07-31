@@ -66,7 +66,7 @@ export default function App() {
               ≡
             </button>
             <img className="brand-icon" src="/brand-mark.svg" alt="" aria-hidden="true" />
-            <div className="brand">Manabi Map</div>
+            <div className="brand">{t('common.brand')}</div>
             <button
               className="icon-btn"
               onClick={() => (session && kind !== 'anon' ? navigate('/favorites') : setLoginOpen(true))}

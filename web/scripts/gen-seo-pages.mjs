@@ -23,7 +23,11 @@ const webRoot = join(here, '..')
 const distArgIndex = process.argv.indexOf('--dist')
 const distDir = distArgIndex >= 0 ? process.argv[distArgIndex + 1] : join(webRoot, 'dist')
 
-const template = await readFile(join(distDir, 'index.html'), 'utf8')
+const rawTemplate = await readFile(join(distDir, 'index.html'), 'utf8')
+
+// トップの og:description に入る収録範囲プレースホルダ。
+// index.html に手書きすると県追加のたびに版ずれするため、ビルド時に実データから差し替える。
+const COVERAGE_PLACEHOLDER = '__COVERAGE__'
 
 // schools.json は build hash 付き URL 化されている（gen-schools-json.mjs）。
 // manifest → hash 付きファイル名の順で解決する。旧経路との互換として、
@@ -45,12 +49,36 @@ const schoolsPayload = JSON.parse(schoolsText)
 const schools = Array.isArray(schoolsPayload) ? schoolsPayload : schoolsPayload.schools
 if (!Array.isArray(schools)) throw new Error('schools payload has an unsupported format')
 
+// 収録範囲を実データで確定させてからテンプレートにする。
+// String.replace はマッチしなくても元の文字列を返す（＝無言で失敗する）ので、
+// 差し替えが起きたことを明示的に確認する。プレースホルダを消し忘れて
+// 本番の OGP カードに「__COVERAGE__」が出る事故を防ぐ。
+if (!rawTemplate.includes(COVERAGE_PLACEHOLDER)) {
+  throw new Error(
+    `gen-seo-pages: index.html に ${COVERAGE_PLACEHOLDER} が無い。` +
+    'og:description の収録範囲プレースホルダが消えている可能性がある'
+  )
+}
+const template = rawTemplate.replaceAll(COVERAGE_PLACEHOLDER, escapeHtml(coverageText(schools)))
+
 function escapeHtml(value) {
   return String(value)
     .replaceAll('&', '&amp;')
     .replaceAll('<', '&lt;')
     .replaceAll('>', '&gt;')
     .replaceAll('"', '&quot;')
+}
+
+/**
+ * 収録範囲の文言を実データから作る。
+ * 47 都道府県すべて揃ったら「全国」を冠する。それ未満は件数のみ（「東日本」等の
+ * 地域名は県追加で嘘になるので入れない）。
+ */
+function coverageText(schools) {
+  const prefectures = new Set(schools.map((s) => s.prefecture).filter(Boolean))
+  const schoolCount = schools.length.toLocaleString('en-US')
+  const prefix = prefectures.size >= 47 ? '全国 47 都道府県' : `${prefectures.size} 都道府県`
+  return `${prefix}・${schoolCount} 校に対応。`
 }
 
 function ownershipLabel(school) {
@@ -92,9 +120,21 @@ function renderHead(html, { title, description, url }) {
     .replace(/(<meta name="twitter:description" content=")[^"]*(")/, `$1${d}$2`)
 }
 
+/**
+ * 「都道府県 + 市区町村」を組み立てる。
+ * city 側に県名の接頭辞が入っている行があると「京都府京都府京都市」のように二重になるため、
+ * 連結時に落とす（2026-07-31 に 222 行で実際に発生。データ側も是正済みだが、
+ * 府県追加のたびに同じ形で入ってくるのでここでも防ぐ）。
+ */
+function placeLabel(prefecture, city) {
+  const pref = prefecture ?? ''
+  const rest = (city ?? '').startsWith(pref) ? (city ?? '').slice(pref.length) : (city ?? '')
+  return `${pref}${rest}`
+}
+
 function renderSchoolPage(school) {
   const url = `${SITE_ORIGIN}/school/${school.id}`
-  const place = `${school.prefecture}${school.city ?? ''}`
+  const place = placeLabel(school.prefecture, school.city)
   const typeLabel = school.type === 'kosen' ? '高等専門学校' : '高校'
   const title = `${school.name}（${place}）の地図・アクセス・学科 | Manabi Map`
   const description =
@@ -104,7 +144,7 @@ function renderSchoolPage(school) {
   const rows = []
   // address は既に prefecture + city を含む完全表記が入っている想定。
   // 未設定のときだけ prefecture + city を組み立てて代替する。
-  const addressText = school.address ?? `${school.prefecture}${school.city ?? ''}`
+  const addressText = school.address ?? placeLabel(school.prefecture, school.city)
   const addressWithPostal = school.postal_code ? `〒${school.postal_code} ${addressText}` : addressText
   rows.push(['所在地', addressWithPostal])
   const ownership = ownershipLabel(school)
@@ -178,6 +218,11 @@ if (targets.length < MIN_EXPECTED) {
     `gen-seo-pages: 生成 ${targets.length} 件は下限 ${MIN_EXPECTED} 未満。データ大幅欠損の疑い`
   )
 }
+
+// トップの index.html も収録範囲を差し替えた版で上書きする。
+// （template は学校ページの雛形として使うだけで dist には書き戻らないため、
+//   これをやらないとトップだけプレースホルダのまま残る）
+await writeFile(join(distDir, 'index.html'), template)
 
 for (const school of targets) {
   const outDir = join(distDir, 'school', school.id)
