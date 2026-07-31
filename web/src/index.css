@@ -90,7 +90,11 @@ body {
 .header .brand-icon {
   width: 24px; height: 24px; flex: 0 0 auto; display: block;
 }
-.header .brand { flex: 1; letter-spacing: -0.01em; }
+/* 仮名併記でブランド名が長いため、狭い端末でも ★ ボタンを押し出さないよう省略に倒す。 */
+.header .brand {
+  flex: 1; letter-spacing: -0.01em;
+  min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
 .header.compact {
   height: 40px;
   justify-content: center;
@@ -911,7 +915,10 @@ body[data-sheet-open="true"] .leaflet-bottom.leaflet-right { display: none; }
   display: flex; align-items: center; gap: 10px; padding: 12px 14px;
   border-bottom: 2px solid var(--ink);
 }
-.sb-head .brand { flex: 1; font-family: var(--display); font-weight: 800; font-size: 1.05rem; }
+.sb-head .brand {
+  flex: 1; font-family: var(--display); font-weight: 800; font-size: 1.05rem;
+  min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
 .sb-body { flex: 1; overflow-y: auto; padding: 12px 14px 24px; }
 
 .sb-user {
