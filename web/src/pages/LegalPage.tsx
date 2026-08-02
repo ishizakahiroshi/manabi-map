@@ -5,7 +5,7 @@ import remarkGfm from 'remark-gfm'
 import { useI18n } from '../contexts/I18nContext'
 
 interface Props {
-  doc: 'terms' | 'privacy' | 'third-party'
+  doc: 'terms' | 'privacy' | 'third-party' | 'deviation-methodology'
 }
 
 /** /legal/*。本文は web/public/legal/*.md を表示する */
@@ -16,7 +16,13 @@ export function LegalPage({ doc }: Props) {
   const [error, setError] = useState(false)
 
   const title =
-    doc === 'terms' ? t('nav.terms') : doc === 'privacy' ? t('nav.privacy') : t('nav.thirdParty')
+    doc === 'terms'
+      ? t('nav.terms')
+      : doc === 'privacy'
+        ? t('nav.privacy')
+        : doc === 'third-party'
+          ? t('nav.thirdParty')
+          : t('nav.deviationMethodology')
 
   useEffect(() => {
     let cancelled = false

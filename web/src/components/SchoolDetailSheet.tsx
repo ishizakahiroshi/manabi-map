@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type TouchEvent } from 'react'
+import { useNavigate } from 'react-router-dom'
 import type { AdmissionSelection, AdmissionQualityReason, School } from '../types/school'
 import {
   haversine,
@@ -31,6 +32,7 @@ interface Props {
 }
 
 export function SchoolDetailSheet({ school, onClose, userData }: Props) {
+  const navigate = useNavigate()
   const { home, toast, setLoginOpen } = useApp()
   const { session } = useAuth()
   const { t } = useI18n()
@@ -735,6 +737,7 @@ export function SchoolDetailSheet({ school, onClose, userData }: Props) {
           {school.departments.length === 0 ? (
             <div className="depts-empty">
               <p>{t('detail.deptDeviationEmpty')}</p>
+              <p>{t('detail.deptDeviationEvidenceGuide')}</p>
               <DataReportForm
                 schoolId={school.id}
                 field="other"
@@ -779,6 +782,16 @@ export function SchoolDetailSheet({ school, onClose, userData }: Props) {
           </div>
           <p className="note">
             {t('detail.sourceNote')}
+            {' '}
+            <a
+              href="/legal/deviation-methodology"
+              onClick={(e) => {
+                e.preventDefault()
+                navigate('/legal/deviation-methodology')
+              }}
+            >
+              {t('detail.methodologyLink')}
+            </a>
             <br />
             {t('detail.disclaimer')}
             <br />
