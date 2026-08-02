@@ -124,6 +124,7 @@ export function DataReportForm({ schoolId, departmentId = null, field, targetLab
           <strong>{t('report.title')}</strong>
           <p className="data-report-target">{t('report.target', { target: targetLabel })}</p>
           <p className="data-report-fixed-note">{t('report.reviewNote')}</p>
+          {field === 'deviation' && <p className="data-report-fixed-note">{t('report.deviationEvidenceGuide')}</p>}
           <label>
             {t('report.valueLabel')}
             <input

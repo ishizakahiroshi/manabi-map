@@ -90,6 +90,7 @@ export default function App() {
           <Route path="/legal/terms" element={<LegalPage doc="terms" />} />
           <Route path="/legal/privacy" element={<LegalPage doc="privacy" />} />
           <Route path="/legal/third-party" element={<LegalPage doc="third-party" />} />
+          <Route path="/legal/deviation-methodology" element={<LegalPage doc="deviation-methodology" />} />
           <Route path="/press" element={<PressPage />} />
           <Route path="/dashboard" element={<DashboardRoute isAdmin={isAdmin} checking={checkingAdmin} />} />
         </Routes>
