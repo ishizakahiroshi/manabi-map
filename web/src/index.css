@@ -1296,6 +1296,78 @@ button:focus:not(:focus-visible), a:focus:not(:focus-visible), input:focus:not(:
 
 .map-controls button.on { background: var(--accent); color: #fff; }
 
+/* ===== 統合検索の候補グループ / トップの一覧アコーディオン（plan_seo-growth-strategy_c5 C3） ===== */
+.cand-group-label {
+  margin: 6px 2px 0; font-size: 0.78rem; color: var(--ink-soft);
+  font-family: var(--display); font-weight: 700; letter-spacing: 0.04em;
+}
+.q-results .cand.cand-more { border-style: dashed; box-shadow: none; }
+
+.region-accordion { display: flex; flex-direction: column; gap: 8px; width: 100%; max-width: 420px; margin: 8px auto 4px; }
+.region-group {
+  border: 2px solid var(--ink); border-radius: 12px; background: #fff; overflow: hidden;
+}
+.region-group summary {
+  padding: 10px 12px; cursor: pointer; font-family: var(--display); font-weight: 700;
+  list-style: none; display: flex; justify-content: space-between; align-items: center;
+}
+.region-group summary::-webkit-details-marker { display: none; }
+.region-group summary::after { content: "▾"; color: var(--ink-soft); }
+.region-group[open] summary::after { content: "▴"; }
+.region-pref-links { display: flex; flex-wrap: wrap; gap: 8px; padding: 0 12px 12px; }
+.region-pref-links a {
+  padding: 6px 12px; border: 2px solid var(--ink); border-radius: 999px; background: #fff;
+  text-decoration: none; color: var(--ink); font-family: var(--display); font-weight: 700; font-size: 0.88rem;
+}
+.all-schools-link { text-align: center; font-family: var(--display); font-weight: 700; color: var(--ink); }
+
+/* ===== 一覧ハブ（/schools・/pref/:pref） ===== */
+.hub-content { padding-bottom: 24px; }
+.hub-title { font-family: var(--display); font-weight: 800; font-size: 1.3rem; margin: 8px 0; }
+.breadcrumb { font-size: 0.82rem; color: var(--ink-soft); margin: 4px 0 8px; }
+.breadcrumb a { color: var(--ink-soft); }
+.hub-region h2 { font-family: var(--display); font-weight: 700; font-size: 1.05rem; margin: 18px 0 8px; }
+.hub-pref-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.hub-pref-list a {
+  display: block; padding: 10px 12px; border: 2px solid var(--ink); border-radius: 12px;
+  background: #fff; text-decoration: none; color: var(--ink);
+  font-family: var(--display); font-weight: 700; box-shadow: 2px 2px 0 var(--line);
+}
+.chip-row { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0 4px; }
+.city-jump {
+  position: sticky; top: 0; z-index: 40; display: flex; gap: 8px; overflow-x: auto;
+  padding: 8px 2px; margin: 8px -2px; background: var(--bg);
+  border-bottom: 1px solid var(--line); -webkit-overflow-scrolling: touch;
+}
+.city-jump a {
+  flex: 0 0 auto; padding: 6px 12px; border: 2px solid var(--ink); border-radius: 999px;
+  background: #fff; text-decoration: none; color: var(--ink);
+  font-family: var(--display); font-weight: 700; font-size: 0.85rem; white-space: nowrap;
+}
+.city-section {
+  border: 2px solid var(--ink); border-radius: 12px; background: #fff; margin: 8px 0;
+  scroll-margin-top: 56px;
+}
+.city-section summary {
+  padding: 10px 12px; cursor: pointer; font-family: var(--display); font-weight: 700;
+  list-style: none; display: flex; justify-content: space-between; align-items: center; gap: 8px;
+}
+.city-section summary::-webkit-details-marker { display: none; }
+.city-section summary::after { content: "▾"; color: var(--ink-soft); }
+.city-section[open] summary::after { content: "▴"; }
+.city-school-list { list-style: none; margin: 0; padding: 0 12px 12px; display: flex; flex-direction: column; gap: 8px; }
+.city-school-list a { font-family: var(--display); font-weight: 700; color: var(--ink); }
+.city-school-meta { display: block; font-size: 0.78rem; color: #5c5348; margin-top: 2px; }
+
+/* ===== サイト共通フッター ===== */
+.site-footer {
+  margin: 28px auto 8px; padding-top: 12px; border-top: 1px solid var(--line);
+  width: 100%; max-width: 420px; font-size: 0.82rem;
+}
+.site-footer nav { display: flex; flex-wrap: wrap; gap: 8px 14px; justify-content: center; }
+.site-footer a { color: var(--ink-soft); }
+.site-footer-soon { color: var(--ink-soft); opacity: 0.7; }
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.01ms !important;

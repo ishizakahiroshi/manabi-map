@@ -4,6 +4,7 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { gzipSync } from 'node:zlib'
 import { createClient } from '@supabase/supabase-js'
+import { loadCivicData, resolveCityGroup } from './lib/municipalities.mjs'
 
 const here = dirname(fileURLToPath(import.meta.url))
 const webRoot = join(here, '..')
@@ -189,16 +190,72 @@ const hash = createHash('sha256').update(body).digest('hex').slice(0, 10)
 const filename = `schools-${hash}.json.gz`
 const outputPath = join(publicDir, filename)
 
-// 古い schools-*.json / schools.json を掃除（本 build で出力する分だけ残す）。
+// --- 検索用の軽量索引 -------------------------------------------------------
+// トップの統合検索は schools.json 全体を読まない（plan_seo-growth-strategy_c5 C3）。
+// - 市区町村索引: 高校が 1 校以上ある市区町村。ふりがな付き（かな入力対応）で
+//   市区町村コード順。地名候補 → 県ページ（/pref/<slug>/#<市区町村>）への導線に使う。
+// - 校名索引: 全収録校の校名・ふりがな・所在地・座標のみ（検索欄フォーカス時に遅延読込）。
+const { prefectures, muniByPref } = await loadCivicData(webRoot)
+const prefBySlugName = new Map(prefectures.map((p) => [p.name, p]))
+
+const cityGroups = new Map()
+const unresolvedByPref = new Map()
+for (const row of rows) {
+  const resolved = resolveCityGroup(row, muniByPref)
+  if (!resolved) {
+    unresolvedByPref.set(row.prefecture, (unresolvedByPref.get(row.prefecture) ?? 0) + 1)
+    continue
+  }
+  const key = `${row.prefecture}|${resolved.label}`
+  const entry = cityGroups.get(key) ?? {
+    pref: row.prefecture,
+    prefSlug: prefBySlugName.get(row.prefecture)?.slug ?? null,
+    city: resolved.label,
+    kana: resolved.kana,
+    code: resolved.code,
+    count: 0,
+  }
+  entry.count += 1
+  cityGroups.set(key, entry)
+}
+const cityIndex = [...cityGroups.values()]
+  .filter((entry) => entry.prefSlug != null)
+  .sort((a, b) => (a.code < b.code ? -1 : a.code > b.code ? 1 : 0))
+  .map(({ code: _code, ...entry }) => entry)
+
+const nameIndex = rows.map((row) => ({
+  i: row.id,
+  n: row.name,
+  k: row.name_kana ?? null,
+  p: row.prefecture,
+  c: resolveCityGroup(row, muniByPref)?.label ?? row.city ?? null,
+  lat: row.latitude != null ? Number(row.latitude) : null,
+  lng: row.longitude != null ? Number(row.longitude) : null,
+}))
+
+const cityIndexBody = `${JSON.stringify(cityIndex)}\n`
+const cityIndexFilename = `city-index-${createHash('sha256').update(cityIndexBody).digest('hex').slice(0, 10)}.json`
+const nameIndexBody = `${JSON.stringify(nameIndex)}\n`
+const nameIndexFilename = `school-name-index-${createHash('sha256').update(nameIndexBody).digest('hex').slice(0, 10)}.json`
+
+// 古い schools-*.json / 索引を掃除（本 build で出力する分だけ残す）。
+const keep = new Set([filename, cityIndexFilename, nameIndexFilename])
 const existing = await readdir(publicDir)
 for (const name of existing) {
-  if (name === filename) continue
-  if (name === 'schools.json' || /^schools-[0-9a-f]+\.json(?:\.gz)?$/.test(name)) {
+  if (keep.has(name)) continue
+  if (
+    name === 'schools.json' ||
+    /^schools-[0-9a-f]+\.json(?:\.gz)?$/.test(name) ||
+    /^city-index-[0-9a-f]+\.json$/.test(name) ||
+    /^school-name-index-[0-9a-f]+\.json$/.test(name)
+  ) {
     await unlink(join(publicDir, name))
   }
 }
 
 await writeFile(outputPath, gzipSync(body, { level: 9 }))
+await writeFile(join(publicDir, cityIndexFilename), cityIndexBody)
+await writeFile(join(publicDir, nameIndexFilename), nameIndexBody)
 
 const manifest = {
   url: `/${filename}`,
@@ -207,8 +264,25 @@ const manifest = {
   formatVersion: payload.formatVersion,
   compression: 'gzip',
   sourceCatalogCount: sourceCatalog.length,
+  cityIndexUrl: `/${cityIndexFilename}`,
+  cityIndexCount: cityIndex.length,
+  nameIndexUrl: `/${nameIndexFilename}`,
   generatedAt: new Date().toISOString(),
 }
 await writeFile(join(publicDir, 'schools-manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`)
 
-console.log(`wrote ${rows.length} schools to ${outputPath} (manifest url=${manifest.url})`)
+console.log(
+  `wrote ${rows.length} schools to ${outputPath} (manifest url=${manifest.url}, ` +
+  `cityIndex=${cityIndex.length}, nameIndex=${nameIndex.length})`,
+)
+
+// 市区町村を解決できず県ページの「その他」へ落ちる校数。新県データ投入後にここが
+// 跳ねたら city/address の表記異常（県名二重・欠損表記等）を疑うこと。
+if (unresolvedByPref.size > 0) {
+  const detail = [...unresolvedByPref.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .map(([pref, count]) => `${pref}=${count}`)
+    .join(', ')
+  const total = [...unresolvedByPref.values()].reduce((a, b) => a + b, 0)
+  console.warn(`city 未解決（「その他」行き）: ${total} 校 (${detail})`)
+}
