@@ -1,7 +1,19 @@
+// 静的出力（dist/）の検証ゲート。`pnpm build` の末尾で必ず実行される。
+//
+// 全プリレンダー HTML（学校ページ全件 + トップ / 全域ハブ / 県ハブ / press / legal / 404）を
+// ループ検査する。代表 1 校だけの検査では「一部のページだけ壊れる」事故
+// （例: /search の canonical がトップを指したままリリースされた件）を検出できない。
+// 検査は数千ファイルでも数秒で終わる。
+//
+// 禁止語検査は「ランキングサイト化しない」線をビルドで固定するためのもの
+// （docs/local/plan_seo-growth-strategy.md §やらないこと）。文書ページ（/legal/* /press）は
+// 方針説明のために「偏差値」等の語を正当に含むので対象外。
+
 import { lstat, readFile, readdir } from 'node:fs/promises'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { gunzipSync } from 'node:zlib'
+import { loadCivicData } from './lib/municipalities.mjs'
 
 const DEFAULT_MAX_FILE_MIB = 25
 const SITE_ORIGIN = 'https://manabi-map.app'
@@ -43,6 +55,75 @@ function sitemapLocations(xml) {
   return [...xml.matchAll(/<loc>([^<]+)<\/loc>/g)].map((match) => match[1])
 }
 
+function extractCanonical(html) {
+  return html.match(/<link rel="canonical" href="([^"]*)"/)?.[1] ?? null
+}
+
+function extractOgUrl(html) {
+  return html.match(/<meta property="og:url" content="([^"]*)"/)?.[1] ?? null
+}
+
+function extractTitle(html) {
+  return html.match(/<title>([\s\S]*?)<\/title>/)?.[1] ?? null
+}
+
+function extractMain(html) {
+  return html.match(/<main[\s\S]*?<\/main>/)?.[0] ?? null
+}
+
+function extractJsonLdBlocks(html) {
+  return [...html.matchAll(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g)].map(
+    (match) => JSON.parse(match[1]),
+  )
+}
+
+// 一覧・ハブ・学校ページの本文（<main>）に出てはいけない語。
+// 「偏差値」はプリレンダー非掲載の方針（§7.7 運用）を、残りはランキングサイト化の
+// 禁止線を、それぞれビルドで固定する。
+const FORBIDDEN_WORDS = ['ランキング', 'TOP', '狙い目', 'おすすめ', '偏差値']
+// 「◯◯市から通える」型の断定は学区データを保有するまで禁止（/pref/ 配下と全域ハブ）。
+// トップ・学校ページの定型文「住所を入れると通える高校が…」はサービス説明なので対象外。
+const FORBIDDEN_COMMUTE_PHRASE = 'から通える'
+
+function checkForbiddenWords(main, pageLabel, { includeCommutePhrase }) {
+  for (const word of FORBIDDEN_WORDS) {
+    if (main.includes(word)) {
+      throw new Error(`forbidden word "${word}" found in <main> of ${pageLabel}`)
+    }
+  }
+  if (includeCommutePhrase && main.includes(FORBIDDEN_COMMUTE_PHRASE)) {
+    throw new Error(`forbidden phrase "${FORBIDDEN_COMMUTE_PHRASE}" found in <main> of ${pageLabel}`)
+  }
+}
+
+/** canonical / og:url / <main> の存在という全ページ共通の骨格を検査する。 */
+function checkPageSkeleton(html, pageLabel, expectedCanonical) {
+  const canonical = extractCanonical(html)
+  if (canonical !== expectedCanonical) {
+    throw new Error(`canonical mismatch on ${pageLabel}: expected=${expectedCanonical} actual=${canonical}`)
+  }
+  const ogUrl = extractOgUrl(html)
+  if (ogUrl !== expectedCanonical) {
+    throw new Error(`og:url mismatch on ${pageLabel}: expected=${expectedCanonical} actual=${ogUrl}`)
+  }
+  const main = extractMain(html)
+  if (!main) throw new Error(`missing <main> content on ${pageLabel}`)
+  return main
+}
+
+async function readPage(absoluteDist, relativePath, label) {
+  const path = join(absoluteDist, relativePath)
+  let stat
+  try {
+    stat = await lstat(path)
+  } catch (error) {
+    if (error?.code === 'ENOENT') throw new Error(`prerendered page is missing: ${label} (${relativePath})`)
+    throw error
+  }
+  if (!stat.isFile()) throw new Error(`prerendered page is not a regular file: ${label}`)
+  return readFile(path, 'utf8')
+}
+
 export async function verifyStaticOutput({
   distDir,
   maxFileBytes = DEFAULT_MAX_FILE_MIB * 1024 * 1024,
@@ -71,6 +152,20 @@ export async function verifyStaticOutput({
   if (typeof manifest.url !== 'string' || !/^\/schools(?:-[0-9a-f]+)?\.json(?:\.gz)?$/i.test(manifest.url)) {
     throw new Error('schools-manifest.json url is invalid')
   }
+  // 統合検索の軽量索引（市区町村・校名）。manifest から実体まで辿れることを保証する。
+  if (typeof manifest.cityIndexUrl !== 'string' || !/^\/city-index-[0-9a-f]+\.json$/i.test(manifest.cityIndexUrl)) {
+    throw new Error('schools-manifest.json cityIndexUrl is invalid')
+  }
+  if (typeof manifest.nameIndexUrl !== 'string' || !/^\/school-name-index-[0-9a-f]+\.json$/i.test(manifest.nameIndexUrl)) {
+    throw new Error('schools-manifest.json nameIndexUrl is invalid')
+  }
+  const cityIndex = JSON.parse(await readFile(join(absoluteDist, manifest.cityIndexUrl.slice(1)), 'utf8'))
+  if (!Array.isArray(cityIndex)) throw new Error('city index payload is not an array')
+  const nameIndex = JSON.parse(await readFile(join(absoluteDist, manifest.nameIndexUrl.slice(1)), 'utf8'))
+  if (!Array.isArray(nameIndex) || nameIndex.length !== manifest.count) {
+    throw new Error(`name index count mismatch: manifest=${manifest.count} payload=${nameIndex?.length}`)
+  }
+
   const schoolsPath = join(absoluteDist, manifest.url.slice(1))
   const { schools, isGzip } = decodeSchoolsPayload(await readFile(schoolsPath))
   if (schools.length !== manifest.count) {
@@ -88,8 +183,22 @@ export async function verifyStaticOutput({
   }
 
   const targets = schools.filter((school) => school?.latitude != null && school?.longitude != null)
+
+  // 県ハブは prefectures.json（総務省コード表由来）とデータの突き合わせで決まる。
+  const { prefectures } = await loadCivicData(join(dirname(fileURLToPath(import.meta.url)), '..'))
+  const activePrefectures = prefectures.filter((p) => targets.some((s) => s.prefecture === p.name))
+
+  const LEGAL_DOCS = ['terms', 'privacy', 'third-party', 'deviation-methodology']
+  const staticRoutes = [
+    '/schools/',
+    ...activePrefectures.map((p) => `/pref/${p.slug}/`),
+    '/press/',
+    ...LEGAL_DOCS.map((doc) => `/legal/${doc}/`),
+  ]
+
   const expectedLocations = new Set([
     `${SITE_ORIGIN}/`,
+    ...staticRoutes.map((path) => `${SITE_ORIGIN}${path}`),
     ...targets.map((school) => `${SITE_ORIGIN}/school/${school.id}/`),
   ])
   const locations = sitemapLocations(await readFile(join(absoluteDist, 'sitemap.xml'), 'utf8'))
@@ -111,31 +220,100 @@ export async function verifyStaticOutput({
     throw new Error(`SEO school page count mismatch: expected=${targets.length} actual=${generatedIds.size}`)
   }
 
-  const targetPages = new Map()
+  // --- 学校ページ全件検査 ---
   for (const target of targets) {
-    const indexPath = join(schoolRoot, String(target.id), 'index.html')
-    let stat
-    try {
-      stat = await lstat(indexPath)
-    } catch (error) {
-      if (error?.code === 'ENOENT') {
-        throw new Error(`SEO school index.html is missing: ${target.id}`)
-      }
-      throw error
+    const html = await readPage(absoluteDist, join('school', String(target.id), 'index.html'), `school:${target.id}`)
+    const pageLabel = `/school/${target.id}/`
+    const main = checkPageSkeleton(html, pageLabel, `${SITE_ORIGIN}/school/${target.id}/`)
+    const escapedName = escapeHtml(target.name)
+    const title = extractTitle(html)
+    if (!title || !title.includes(escapedName)) {
+      throw new Error(`title is missing school name on ${pageLabel}: ${title}`)
     }
-    if (!stat.isFile()) throw new Error(`SEO school index.html is not a regular file: ${target.id}`)
-    targetPages.set(String(target.id), await readFile(indexPath, 'utf8'))
+    if (!main.includes(`<h1>${escapedName}</h1>`)) {
+      throw new Error(`missing <h1> school heading on ${pageLabel}`)
+    }
+    const jsonLdBlocks = extractJsonLdBlocks(html)
+    if (!jsonLdBlocks.some((block) => block?.name === target.name)) {
+      throw new Error(`JSON-LD with school name is missing or unparsable on ${pageLabel}`)
+    }
+    checkForbiddenWords(main, pageLabel, { includeCommutePhrase: false })
   }
 
-  const representative = targets[0]
-  if (representative) {
-    const html = targetPages.get(String(representative.id))
-    if (!html.includes(`<h1>${escapeHtml(representative.name)}</h1>`)) {
-      throw new Error(`representative View Source is missing school heading: ${representative.id}`)
+  // --- トップ ---
+  {
+    const main = checkPageSkeleton(topHtml, '/', `${SITE_ORIGIN}/`)
+    if (!/<h1[\s>]/.test(main)) throw new Error('missing <h1> on /')
+    checkForbiddenWords(main, '/', { includeCommutePhrase: false })
+    for (const pref of activePrefectures) {
+      if (!main.includes(`href="/pref/${pref.slug}/"`)) {
+        throw new Error(`top page is missing crawl link to /pref/${pref.slug}/`)
+      }
     }
-    if (!html.includes(`href="${SITE_ORIGIN}/school/${representative.id}/"`)) {
-      throw new Error(`representative View Source is missing canonical URL: ${representative.id}`)
+  }
+
+  // --- 全域ハブ / 県ハブ ---
+  {
+    const html = await readPage(absoluteDist, join('schools', 'index.html'), '/schools/')
+    const main = checkPageSkeleton(html, '/schools/', `${SITE_ORIGIN}/schools/`)
+    if (!/<h1[\s>]/.test(main)) throw new Error('missing <h1> on /schools/')
+    checkForbiddenWords(main, '/schools/', { includeCommutePhrase: true })
+    for (const pref of activePrefectures) {
+      if (!main.includes(`href="/pref/${pref.slug}/"`)) {
+        throw new Error(`/schools/ is missing link to /pref/${pref.slug}/`)
+      }
     }
+  }
+  for (const pref of activePrefectures) {
+    const html = await readPage(absoluteDist, join('pref', pref.slug, 'index.html'), `/pref/${pref.slug}/`)
+    const pageLabel = `/pref/${pref.slug}/`
+    const main = checkPageSkeleton(html, pageLabel, `${SITE_ORIGIN}/pref/${pref.slug}/`)
+    if (!main.includes(`<h1>${escapeHtml(pref.name)}の高校一覧`)) {
+      throw new Error(`missing <h1> on ${pageLabel}`)
+    }
+    checkForbiddenWords(main, pageLabel, { includeCommutePhrase: true })
+    // 県内全校へのリンクが 1 校残らず載っていること（内部リンク経路の本体）。
+    for (const school of targets) {
+      if (school.prefecture !== pref.name) continue
+      if (!main.includes(`href="/school/${school.id}/"`)) {
+        throw new Error(`${pageLabel} is missing link to /school/${school.id}/`)
+      }
+    }
+    // ジャンプリンク（#市区町村）の先に対応する id があること。
+    for (const anchorMatch of main.matchAll(/href="#([^"]+)"/g)) {
+      const id = decodeURIComponent(anchorMatch[1])
+      if (!main.includes(`id="${escapeHtml(id)}"`)) {
+        throw new Error(`${pageLabel} has jump link to missing section: #${id}`)
+      }
+    }
+  }
+
+  // --- /press と /legal/* ---
+  {
+    const html = await readPage(absoluteDist, join('press', 'index.html'), '/press/')
+    const main = checkPageSkeleton(html, '/press/', `${SITE_ORIGIN}/press/`)
+    if (!/<h1[\s>]/.test(main)) throw new Error('missing <h1> on /press/')
+    const jsonLdBlocks = extractJsonLdBlocks(html)
+    if (!jsonLdBlocks.some((block) => block?.['@type'] === 'Organization')) {
+      throw new Error('/press/ is missing Organization JSON-LD')
+    }
+  }
+  for (const doc of LEGAL_DOCS) {
+    const html = await readPage(absoluteDist, join('legal', doc, 'index.html'), `/legal/${doc}/`)
+    const main = checkPageSkeleton(html, `/legal/${doc}/`, `${SITE_ORIGIN}/legal/${doc}/`)
+    if (!/<h1[\s>]/.test(main)) throw new Error(`missing <h1> on /legal/${doc}/`)
+  }
+
+  // --- 404.html（ソフト 404 対策の実体） ---
+  {
+    const html = await readPage(absoluteDist, '404.html', '/404.html')
+    if (extractCanonical(html) != null) {
+      throw new Error('404.html must not declare a canonical URL')
+    }
+    if (!html.includes('<meta name="robots" content="noindex"')) {
+      throw new Error('404.html must declare noindex')
+    }
+    if (!extractMain(html)) throw new Error('missing <main> content on 404.html')
   }
 
   return {
@@ -144,6 +322,8 @@ export async function verifyStaticOutput({
     largestFileBytes: largest.bytes,
     schoolCount: schools.length,
     seoSchoolCount: targets.length,
+    prefPageCount: activePrefectures.length,
+    staticRouteCount: staticRoutes.length + 1,
     sitemapUrlCount: locations.length,
     sitemapUniqueUrlCount: actualLocations.size,
     schoolsPayloadGzip: isGzip,
@@ -168,7 +348,8 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1
   const result = await verifyStaticOutput(parseArgs(process.argv.slice(2)))
   console.log(
     `static output verified: files=${result.fileCount} schools=${result.schoolCount} ` +
-    `seo=${result.seoSchoolCount} sitemap=${result.sitemapUrlCount} ` +
-    `largest=${result.largestFile} (${result.largestFileBytes} bytes) gzip=${result.schoolsPayloadGzip}`,
+    `seo=${result.seoSchoolCount} prefHubs=${result.prefPageCount} static=${result.staticRouteCount} ` +
+    `sitemap=${result.sitemapUrlCount} largest=${result.largestFile} (${result.largestFileBytes} bytes) ` +
+    `gzip=${result.schoolsPayloadGzip}`,
   )
 }

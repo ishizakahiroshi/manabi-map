@@ -14,6 +14,9 @@ import { FamilyJoinPage } from './pages/FamilyJoinPage'
 import { LegalPage } from './pages/LegalPage'
 import { PressPage } from './pages/PressPage'
 import { MyPage } from './pages/MyPage'
+import { SchoolsHubPage } from './pages/SchoolsHubPage'
+import { PrefecturePage } from './pages/PrefecturePage'
+import { NotFoundPage } from './pages/NotFoundPage'
 import { Sidebar } from './components/Sidebar'
 import { LoginSheet } from './components/LoginSheet'
 import { Toast } from './components/Toast'
@@ -45,12 +48,15 @@ export default function App() {
     [userData.notes],
   )
 
-  const isHome = location.pathname === '/'
+  // Cloudflare Pages はディレクトリ配信の URL を末尾スラッシュへ 308 する（/press → /press/）ため、
+  // 末尾スラッシュを吸収してから経路判定する
+  const path = location.pathname.replace(/\/+$/, '') || '/'
+  const isHome = path === '/'
   const showBottomTabs = !(
-    location.pathname === '/auth/callback' ||
-    location.pathname === '/family/join' ||
-    location.pathname.startsWith('/legal/') ||
-    location.pathname === '/press'
+    path === '/auth/callback' ||
+    path === '/family/join' ||
+    path.startsWith('/legal/') ||
+    path === '/press'
   )
 
   return (
@@ -92,7 +98,11 @@ export default function App() {
           <Route path="/legal/third-party" element={<LegalPage doc="third-party" />} />
           <Route path="/legal/deviation-methodology" element={<LegalPage doc="deviation-methodology" />} />
           <Route path="/press" element={<PressPage />} />
+          <Route path="/schools" element={<SchoolsHubPage />} />
+          <Route path="/pref/:pref" element={<PrefecturePage />} />
           <Route path="/dashboard" element={<DashboardRoute isAdmin={isAdmin} checking={checkingAdmin} />} />
+          {/* 未知の URL への SPA 内遷移。直リンクは Cloudflare Pages が dist/404.html を返す */}
+          <Route path="*" element={<NotFoundPage />} />
         </Routes>
 
         {showBottomTabs && <BottomTabBar />}
