@@ -17,3 +17,8 @@
   Cache-Control: no-store
 /schools-*.json.gz
   Cache-Control: public, max-age=31536000, immutable
+# 統合検索用の軽量索引（市区町村・校名）も hash 付き URL なので永久キャッシュ可
+/city-index-*.json
+  Cache-Control: public, max-age=31536000, immutable
+/school-name-index-*.json
+  Cache-Control: public, max-age=31536000, immutable
