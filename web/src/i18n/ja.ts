@@ -399,6 +399,8 @@ export const ja: MessageTree = {
     neighborTitle: '近くにある高校',
     neighborNote: '直線距離の近い順に {count} 校。実際の通学経路・所要時間は交通手段により異なります。',
     neighborMeta: '{place}・約 {km} km',
+    neighborMore: '残り {count} 校を見る',
+    neighborLess: '表示を減らす',
     interested: '気になる',
     favorited: '志望校です',
     priority: '志望度',
@@ -648,9 +650,5 @@ export const ja: MessageTree = {
   },
   guide: {
     loadFail: 'ガイドを読み込めませんでした。時間をおいて再度お試しください。',
-  },
-  header: {
-    favList: 'お気に入り一覧',
-    loginBtn: 'ログイン',
   },
 }

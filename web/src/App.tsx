@@ -1,7 +1,5 @@
 import { Suspense, lazy, useMemo } from 'react'
-import { Navigate, Routes, Route, useNavigate, useLocation } from 'react-router-dom'
-import { useApp } from './contexts/AppContext'
-import { useAuth } from './contexts/AuthContext'
+import { Navigate, Routes, Route, useLocation } from 'react-router-dom'
 import { useI18n } from './contexts/I18nContext'
 import { useUserData } from './hooks/useUserData'
 import { HomePage } from './pages/HomePage'
@@ -42,10 +40,7 @@ function DashboardRoute({ isAdmin, checking }: { isAdmin: boolean; checking: boo
 }
 
 export default function App() {
-  const navigate = useNavigate()
   const location = useLocation()
-  const { setSidebarOpen, setLoginOpen } = useApp()
-  const { session, kind } = useAuth()
   const { t } = useI18n()
   const userData = useUserData()
   const { isAdmin, checking: checkingAdmin } = useIsAdmin()
@@ -77,18 +72,8 @@ export default function App() {
 
         {isHome && (
           <div className="header">
-            <button className="icon-btn" onClick={() => setSidebarOpen(true)} aria-label={t('common.menu')}>
-              ≡
-            </button>
             <img className="brand-icon" src="/brand-mark.svg" alt="" aria-hidden="true" />
             <div className="brand">{t('common.brand')}</div>
-            <button
-              className="icon-btn"
-              onClick={() => (session && kind !== 'anon' ? navigate('/favorites') : setLoginOpen(true))}
-              aria-label={session && kind !== 'anon' ? t('header.favList') : t('header.loginBtn')}
-            >
-              <span className="header-fav-icon" aria-hidden="true">★</span>
-            </button>
           </div>
         )}
 

@@ -51,9 +51,6 @@ export function FavoritesPage({ userData }: Props) {
           ←
         </button>
         <div className="brand">{t('nav.favoritesTitle')}</div>
-        <button className="icon-btn" onClick={() => navigate('/')} aria-label={t('common.home')}>
-          🏠
-        </button>
       </div>
       <main id="main-content" className="content favs-content" tabIndex={-1}>
         <div className="favs-toolbar">
