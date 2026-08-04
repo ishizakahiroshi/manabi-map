@@ -139,6 +139,8 @@ export const en: MessageTree = {
     cityHeading: '{city} ({n})',
     cityShown: '{n} shown',
     cityAllFiltered: 'No schools match the current filters',
+    deviationLabel: 'est. {v}',
+    admissionLatest: '{year} primary admission {ratio}',
     backToAll: 'All prefectures',
   },
   notFound: {

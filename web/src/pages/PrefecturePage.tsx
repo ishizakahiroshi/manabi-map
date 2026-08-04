@@ -5,7 +5,8 @@ import { useI18n } from '../contexts/I18nContext'
 import { useSchools } from '../hooks/useSchools'
 import { loadSearchIndexes } from '../lib/searchIndex'
 import { prefectureBySlug } from '../lib/prefecture'
-import { ownershipFull, GEN_FULL, COURSE_TIME_FULL } from '../lib/format'
+import { ownershipFull, devLabel, topDev, GEN_FULL, COURSE_TIME_FULL } from '../lib/format'
+import { primaryAdmissionTrend } from '../lib/admission'
 import { trackEvent } from '../lib/analytics'
 import type { CourseTime, GenderType, School } from '../types/school'
 import { SiteFooter } from '../components/SiteFooter'
@@ -125,6 +126,30 @@ export function PrefecturePage() {
       return { label, schools: list }
     })
   }, [prefSchools, cityBySchool, cityOrder])
+
+  /**
+   * 校名下に添える補足（地図ピンと同じ値: 参考偏差値と最新年度の一次募集倍率）。
+   * 値のある学校だけを持つ Map なので、未収集の学校には行を足さない（「−」の羅列を作らない）。
+   * 数値は地図ピンと同じ devLabel / primaryAdmissionTrend から取り、表示の食い違いを作らない。
+   * chip 切替や市区町村の開閉で再計算しないよう memo 化する（MapPage の ratioBands と同じ方針）。
+   * これは React 描画側だけの表示で、プリレンダー HTML には出さない
+   * （§7.7 表示規約: 偏差値はプリレンダー内容に一切含めない・gen-seo-pages.mjs 冒頭）。
+   */
+  const factsById = useMemo(() => {
+    const facts = new Map<string, string>()
+    for (const school of prefSchools) {
+      const parts: string[] = []
+      if (topDev(school) != null) parts.push(t('prefPage.deviationLabel', { v: devLabel(school) }))
+      const latest = primaryAdmissionTrend(school)?.annual[0]
+      if (latest) {
+        parts.push(
+          t('prefPage.admissionLatest', { year: latest.year, ratio: latest.ratio.toFixed(2) }),
+        )
+      }
+      if (parts.length) facts.set(school.id, parts.join(' ・ '))
+    }
+    return facts
+  }, [prefSchools, t])
 
   // #<市区町村> アンカーで着地・遷移したら該当セクションを自動展開してスクロールする
   useEffect(() => {
@@ -313,6 +338,7 @@ export function PrefecturePage() {
                   <ul className="city-school-list">
                     {visible.map((s) => {
                       const status = statusLabel(s)
+                      const facts = factsById.get(s.id)
                       return (
                         <li key={s.id}>
                           <a
@@ -328,6 +354,7 @@ export function PrefecturePage() {
                             {ownershipFull(s)}・{s.course_times.map((c) => COURSE_TIME_FULL[c]).join('・')}
                             {status ? `〔${status}〕` : ''}
                           </span>
+                          {facts && <span className="city-school-meta">{facts}</span>}
                         </li>
                       )
                     })}
