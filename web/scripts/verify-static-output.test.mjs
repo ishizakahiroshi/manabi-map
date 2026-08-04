@@ -118,6 +118,15 @@ async function syntheticDist() {
       main: `<h1>${doc}</h1>`,
     }))
   }
+  for (const slug of ['commute-time', 'school-visit', 'deviation-with-care']) {
+    await mkdir(join(dir, 'guide', slug), { recursive: true })
+    await writeFile(join(dir, 'guide', slug, 'index.html'), page({
+      title: `${slug} | Manabi Map`,
+      canonical: `${ORIGIN}/guide/${slug}/`,
+      main: `<h1>${slug}</h1><p>学校選びのためのガイドです。</p>`,
+    }))
+  }
+  await writeFile(join(dir, 'llms.txt'), '# Manabi Map\n\nCC BY-SA 4.0\nhttps://manabi-map.app\n')
   await writeFile(join(dir, '404.html'), page({
     title: 'ページが見つかりません | Manabi Map',
     canonical: null,
@@ -150,6 +159,9 @@ async function syntheticDist() {
     `<loc>${ORIGIN}/legal/privacy/</loc>`,
     `<loc>${ORIGIN}/legal/third-party/</loc>`,
     `<loc>${ORIGIN}/legal/deviation-methodology/</loc>`,
+    '<loc>https://manabi-map.app/guide/commute-time/</loc>',
+    '<loc>https://manabi-map.app/guide/school-visit/</loc>',
+    '<loc>https://manabi-map.app/guide/deviation-with-care/</loc>',
     ...SCHOOLS.map((s) => `<loc>${ORIGIN}/school/${s.id}/</loc>`),
   ].join('\n'))
   return dir
@@ -163,8 +175,8 @@ test('gzip magic, manifest, sitemap, all pages and size gate pass together', asy
   assert.equal(result.schoolCount, 2)
   assert.equal(result.seoSchoolCount, 2)
   assert.equal(result.prefPageCount, 1)
-  assert.equal(result.sitemapUrlCount, 10)
-  assert.equal(result.sitemapUniqueUrlCount, 10)
+  assert.equal(result.sitemapUrlCount, 13)
+  assert.equal(result.sitemapUniqueUrlCount, 13)
   assert.equal(result.schoolDataCount, 2)
   assert.equal(result.prefDataCount, 1)
 })
