@@ -26,14 +26,15 @@ import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import Markdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import { loadCivicData, groupSchoolsByCity } from './lib/municipalities.mjs'
-// 近隣校の選定・距離計算と選抜実績の集計は React 側と同一実装を共有する
+import { loadCivicData, groupSchoolsByCity, resolveCityGroup } from './lib/municipalities.mjs'
+// 近隣校の選定・距離計算と選抜実績の集計・後継校の逆引きは React 側と同一実装を共有する
 // （Node 22.18+ の type stripping で .ts を直 import。フォーク禁止 —
 // 静的 HTML と JS mount 後で校名・距離・倍率が食い違う事故を防ぐ。
 // docs/local/plan_seo-growth-strategy_c4 C1 / C3）。
 import { selectNeighbors, neighborPlaceLabel } from '../src/lib/neighbors.ts'
 import { flattenRecruitmentUnits } from '../src/lib/admissionUnits.ts'
 import { primaryAdmissionTrend } from '../src/lib/admission.ts'
+import { successorsByPredecessorId } from '../src/lib/successors.ts'
 
 const SITE_ORIGIN = 'https://manabi-map.app'
 
@@ -84,6 +85,8 @@ for (const row of schools) {
 }
 
 const { prefectures, muniByPref } = await loadCivicData(webRoot)
+/** 都道府県名 → URL slug（BreadcrumbList の県リンク用）。 */
+const prefSlugByName = new Map(prefectures.map((p) => [p.name, p.slug]))
 
 // 収録範囲を実データで確定させてからテンプレートにする。
 // String.replace はマッチしなくても元の文字列を返す（＝無言で失敗する）ので、
@@ -223,6 +226,38 @@ function dedupePrefInAddress(address, prefecture) {
   return `${pref}${rest}`
 }
 
+/** JSON-LD addressLocality 用の市区町村名（県名接頭辞の二重表記を剥がす）。 */
+function localityOf(school) {
+  const pref = school.prefecture ?? ''
+  let city = school.city ?? ''
+  while (pref && city.startsWith(pref)) city = city.slice(pref.length)
+  return city || null
+}
+
+/**
+ * JSON-LD streetAddress 用に、address から都道府県・市区町村の接頭辞を剥がす
+ * （addressRegion / addressLocality と重複させない・plan_seo-growth-strategy_c7 C4）。
+ * 市区町村は city 値と市区町村グループ label（郡付き表記）の最長一致で剥がし、
+ * どちらにも一致しないときは県だけ剥がした残りを返す。
+ */
+function streetAddressOf(school) {
+  const full = dedupePrefInAddress(school.address, school.prefecture)
+  if (!full) return null
+  const pref = school.prefecture ?? ''
+  let rest = full
+  while (pref && rest.startsWith(pref)) rest = rest.slice(pref.length)
+  const candidates = [localityOf(school), resolveCityGroup(school, muniByPref)?.label ?? null]
+    .filter(Boolean)
+    .sort((a, b) => b.length - a.length)
+  for (const candidate of candidates) {
+    if (rest.startsWith(candidate)) {
+      rest = rest.slice(candidate.length)
+      break
+    }
+  }
+  return rest || null
+}
+
 function renderSchoolPage(school) {
   const url = `${SITE_ORIGIN}/school/${school.id}/`
   const place = placeLabel(school.prefecture, school.city)
@@ -279,7 +314,7 @@ function renderSchoolPage(school) {
   const recruitmentLabel = RECRUITMENT_LABELS[school.recruitment_status_code]
   const predecessors = school.predecessor_relationships ?? []
   const nameHistory = school.school_name_history ?? []
-  const successors = successorsByPredecessorId.get(school.id) ?? []
+  const successors = successorsById.get(school.id) ?? []
   const showLifecycle =
     school.lifecycle_status_code !== 'active' ||
     school.recruitment_status_code !== 'recruiting' ||
@@ -435,18 +470,33 @@ function renderSchoolPage(school) {
     `お気に入り保存・見学メモ・家族での共有ができます。</p>` +
     `<p><a href="/">地図で通える学校をさがす</a></p></main>`
 
+  // --- JSON-LD（c7 C4: 実データで埋まるプロパティを拡充。偏差値・倍率は載せない） ---
+  // alternateName: ふりがな + 旧校名（school_name_history）。校名そのものと重複させない。
+  const alternateNames = [
+    ...new Set(
+      [school.name_kana, ...nameHistory.map((h) => h.name)].filter(
+        (name) => name && name !== school.name,
+      ),
+    ),
+  ]
+  const locality = localityOf(school)
+  const streetAddress = streetAddressOf(school)
+  const officialLinkUrl = safeUrl(school.official_url)
   const jsonLd = {
     '@context': 'https://schema.org',
     '@type': school.type === 'kosen' ? 'EducationalOrganization' : 'HighSchool',
+    '@id': url,
     name: school.name,
+    ...(alternateNames.length ? { alternateName: alternateNames } : {}),
     url,
+    description,
+    image: `${SITE_ORIGIN}/og-hero.png`,
     address: {
       '@type': 'PostalAddress',
+      addressCountry: 'JP',
       addressRegion: school.prefecture,
-      ...(school.city ? { addressLocality: school.city } : {}),
-      ...(school.address
-        ? { streetAddress: dedupePrefInAddress(school.address, school.prefecture) }
-        : {}),
+      ...(locality ? { addressLocality: locality } : {}),
+      ...(streetAddress ? { streetAddress } : {}),
       ...(school.postal_code ? { postalCode: school.postal_code } : {}),
     },
     ...(school.latitude != null && school.longitude != null
@@ -458,11 +508,40 @@ function renderSchoolPage(school) {
           },
         }
       : {}),
-    ...(school.official_url ? { sameAs: school.official_url } : {}),
+    ...(school.total_students != null
+      ? { numberOfStudents: Number(school.total_students) }
+      : {}),
+    ...(school.opened_on ? { foundingDate: String(school.opened_on) } : {}),
+    // sameAs は将来 Wikipedia 等を足せるよう配列で出す。
+    ...(officialLinkUrl ? { sameAs: [officialLinkUrl] } : {}),
+  }
+
+  // BreadcrumbList（UUID URL の検索結果表示を救済する唯一の手段・c7 C4）。
+  // 県までは実 URL（/pref/<slug>/）へリンクし、市区町村ハブは存在しないため
+  // item を省略した name のみの ListItem にする（schema.org 的に有効）。
+  // 市区町村名は県ページの見出しと同じ resolveCityGroup の label を使う。
+  const prefSlug = prefSlugByName.get(school.prefecture)
+  const cityGroup = resolveCityGroup(school, muniByPref)
+  const breadcrumbEntries = [
+    { name: 'ホーム', item: `${SITE_ORIGIN}/` },
+    prefSlug
+      ? { name: school.prefecture, item: `${SITE_ORIGIN}/pref/${prefSlug}/` }
+      : { name: school.prefecture },
+    ...(cityGroup ? [{ name: cityGroup.label }] : []),
+    { name: school.name },
+  ]
+  const breadcrumbLd = {
+    '@context': 'https://schema.org',
+    '@type': 'BreadcrumbList',
+    itemListElement: breadcrumbEntries.map((entry, index) => ({
+      '@type': 'ListItem',
+      position: index + 1,
+      ...entry,
+    })),
   }
 
   const withHead = renderHead(template, { title, description, url })
-  return withRootContent(withJsonLd(withHead, jsonLd), staticContent)
+  return withRootContent(withJsonLd(withJsonLd(withHead, jsonLd), breadcrumbLd), staticContent)
 }
 
 const targets = schools.filter((s) => s.latitude != null && s.longitude != null)
@@ -505,16 +584,8 @@ const schoolPageIds = new Set(targets.map((s) => s.id))
 
 // 前身校 id → 後継校の逆引き。前身校側のページに
 // 「この高校の募集は◯◯に引き継がれています」の逆方向リンクを出す。
-const successorsByPredecessorId = new Map()
-for (const s of targets) {
-  for (const rel of s.predecessor_relationships ?? []) {
-    const predecessorId = rel.predecessor?.id
-    if (!predecessorId) continue
-    const list = successorsByPredecessorId.get(predecessorId) ?? []
-    if (!list.some((entry) => entry.id === s.id)) list.push({ id: s.id, name: s.name })
-    successorsByPredecessorId.set(predecessorId, list)
-  }
-}
+// 逆引きは React 側・gen-schools-json.mjs と共有（lib/successors.ts）。
+const successorsById = successorsByPredecessorId(targets)
 
 // SchoolDetailSheet.tsx の admissionTrend 説明文と同じ文言（i18n/ja.ts 準拠）。
 const TREND_DESCRIPTIONS = {
@@ -697,6 +768,38 @@ const LEGAL_DOCS = [
   { doc: 'deviation-methodology', title: '偏差値の方法と限界' },
 ]
 
+// Organization はトップと /press の両方に出し、`@id` で同一実体として紐づける
+// （c7 C4。WebSite JSON-LD は index.html テンプレート側にあり publisher で参照する）。
+const ORGANIZATION_JSON_LD = {
+  '@context': 'https://schema.org',
+  '@type': 'Organization',
+  '@id': `${SITE_ORIGIN}/#organization`,
+  name: 'Manabi Map',
+  alternateName: 'まなびマップ',
+  url: `${SITE_ORIGIN}/`,
+  email: 'hello@manabi-map.app',
+  contactPoint: [
+    {
+      '@type': 'ContactPoint',
+      contactType: 'customer support',
+      email: 'hello@manabi-map.app',
+      availableLanguage: 'ja',
+    },
+    {
+      '@type': 'ContactPoint',
+      contactType: 'content correction',
+      email: 'takedown@manabi-map.app',
+      availableLanguage: 'ja',
+    },
+  ],
+  sameAs: [
+    'https://x.com/manabi_map',
+    'https://note.com/ishizakahiroshi',
+    'https://qiita.com/ishizakahiroshi',
+    'https://github.com/ishizakahiroshi/manabi-map',
+  ],
+}
+
 function renderPressPage() {
   const url = `${SITE_ORIGIN}/press/`
   const title = '配布素材・プレスキット | Manabi Map'
@@ -738,36 +841,8 @@ function renderPressPage() {
     '数値の考え方と限界は <a href="/legal/deviation-methodology/">偏差値の方法と限界</a> で公開しています。' +
     'コードは <a href="https://github.com/ishizakahiroshi/manabi-map" rel="noopener">GitHub</a> で公開中です。</p>' +
     '</main>'
-  const jsonLd = {
-    '@context': 'https://schema.org',
-    '@type': 'Organization',
-    name: 'Manabi Map',
-    alternateName: 'まなびマップ',
-    url: `${SITE_ORIGIN}/`,
-    email: 'hello@manabi-map.app',
-    contactPoint: [
-      {
-        '@type': 'ContactPoint',
-        contactType: 'customer support',
-        email: 'hello@manabi-map.app',
-        availableLanguage: 'ja',
-      },
-      {
-        '@type': 'ContactPoint',
-        contactType: 'content correction',
-        email: 'takedown@manabi-map.app',
-        availableLanguage: 'ja',
-      },
-    ],
-    sameAs: [
-      'https://x.com/manabi_map',
-      'https://note.com/ishizakahiroshi',
-      'https://qiita.com/ishizakahiroshi',
-      'https://github.com/ishizakahiroshi/manabi-map',
-    ],
-  }
   const withHead = renderHead(template, { title, description, url })
-  return withRootContent(withJsonLd(withHead, jsonLd), main + FOOTER_HTML)
+  return withRootContent(withJsonLd(withHead, ORGANIZATION_JSON_LD), main + FOOTER_HTML)
 }
 
 // --- トップへの静的ブロック注入 ---------------------------------------------
@@ -824,7 +899,12 @@ function render404Page() {
 // トップの index.html は収録範囲を差し替え、一覧導線とフッターの静的ブロックを注入した版で上書きする。
 // （template は各ページの雛形として使うだけで dist には書き戻らないため、
 //   これをやらないとトップだけプレースホルダのまま残る）
-await writeFile(join(distDir, 'index.html'), withRootContent(template, renderTopContent()))
+// WebSite JSON-LD はテンプレート（index.html）由来。Organization をトップにも注入し、
+// /press と `@id` で同一実体として紐づける（c7 C4）。
+await writeFile(
+  join(distDir, 'index.html'),
+  withRootContent(withJsonLd(template, ORGANIZATION_JSON_LD), renderTopContent()),
+)
 
 for (const school of targets) {
   const outDir = join(distDir, 'school', school.id)

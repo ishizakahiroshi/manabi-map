@@ -160,6 +160,17 @@ export async function verifyStaticOutput({
   if (typeof manifest.nameIndexUrl !== 'string' || !/^\/school-name-index-[0-9a-f]+\.json$/i.test(manifest.nameIndexUrl)) {
     throw new Error('schools-manifest.json nameIndexUrl is invalid')
   }
+  // 学校単体 JSON / 県別分割 JSON（c7 C1）。固定パス + `?v=` バストの前提となる
+  // schoolDataVersion と、単体 JSON の枚数・県別台帳を manifest で保証する。
+  if (typeof manifest.schoolDataVersion !== 'string' || !/^[0-9a-f]{6,64}$/i.test(manifest.schoolDataVersion)) {
+    throw new Error('schools-manifest.json schoolDataVersion is invalid')
+  }
+  if (!Number.isInteger(manifest.schoolDataCount) || manifest.schoolDataCount < 0) {
+    throw new Error('schools-manifest.json schoolDataCount is invalid')
+  }
+  if (manifest.prefDataUrls == null || typeof manifest.prefDataUrls !== 'object') {
+    throw new Error('schools-manifest.json prefDataUrls is invalid')
+  }
   const cityIndex = JSON.parse(await readFile(join(absoluteDist, manifest.cityIndexUrl.slice(1)), 'utf8'))
   if (!Array.isArray(cityIndex)) throw new Error('city index payload is not an array')
   const nameIndex = JSON.parse(await readFile(join(absoluteDist, manifest.nameIndexUrl.slice(1)), 'utf8'))
@@ -221,10 +232,73 @@ export async function verifyStaticOutput({
     throw new Error(`SEO school page count mismatch: expected=${targets.length} actual=${generatedIds.size}`)
   }
 
-  // --- 学校ページ全件検査 ---
   // 近隣校リストの最低リンク数。過疎地フォールバック（c4 C1）で最低 3 校出るが、
   // 収録校数がそれ未満のとき（テスト fixture 等）は「他の全校」が下限。
   const minNeighborLinks = Math.min(3, targets.length - 1)
+
+  // --- 学校単体 JSON / 県別分割 JSON（c7 C1） ---
+  // 学校詳細ページの初期描画が依存する単体 JSON が、個別ページと同じ集合で
+  // 1 枚残らず存在し、自校 + 近隣校 + 出典 catalog を持つことを保証する。
+  const schoolDataRoot = join(absoluteDist, 'school-data')
+  let schoolDataNames
+  try {
+    schoolDataNames = await readdir(schoolDataRoot)
+  } catch (error) {
+    if (error?.code === 'ENOENT') throw new Error('school-data directory is missing in static output')
+    throw error
+  }
+  const perSchoolFiles = schoolDataNames.filter((name) => !name.startsWith('pref-'))
+  if (perSchoolFiles.length !== targets.length || manifest.schoolDataCount !== targets.length) {
+    throw new Error(
+      `school-data count mismatch: files=${perSchoolFiles.length} ` +
+      `manifest=${manifest.schoolDataCount} expected=${targets.length}`,
+    )
+  }
+  for (const target of targets) {
+    let singleText
+    try {
+      singleText = await readFile(join(schoolDataRoot, `${target.id}.json`), 'utf8')
+    } catch (error) {
+      if (error?.code === 'ENOENT') {
+        throw new Error(`school-data JSON is missing: /school-data/${target.id}.json`)
+      }
+      throw error
+    }
+    const single = JSON.parse(singleText)
+    if (!Array.isArray(single?.schools) || single.schools.length !== 1 || single.schools[0]?.id !== target.id) {
+      throw new Error(`school-data JSON does not contain the school itself: /school-data/${target.id}.json`)
+    }
+    if (!Array.isArray(single.sourceCatalog)) {
+      throw new Error(`school-data JSON has no sourceCatalog: /school-data/${target.id}.json`)
+    }
+    if (!Array.isArray(single.neighbors) || single.neighbors.length < minNeighborLinks) {
+      throw new Error(`school-data JSON has too few neighbors: /school-data/${target.id}.json`)
+    }
+  }
+  // 県別分割: 全県ぶん存在し、合計が全件 JSON と一致する（分割の取りこぼし検出）。
+  let prefRowTotal = 0
+  for (const pref of activePrefectures) {
+    const prefUrl = manifest.prefDataUrls[pref.slug]
+    if (prefUrl !== `/school-data/pref-${pref.slug}.json`) {
+      throw new Error(`schools-manifest.json prefDataUrls is wrong for ${pref.slug}: ${prefUrl}`)
+    }
+    const prefPayload = JSON.parse(
+      await readFile(join(schoolDataRoot, `pref-${pref.slug}.json`), 'utf8'),
+    )
+    const expectedPrefCount = schools.filter((school) => school.prefecture === pref.name).length
+    if (!Array.isArray(prefPayload?.schools) || prefPayload.schools.length !== expectedPrefCount) {
+      throw new Error(
+        `pref split count mismatch on ${pref.slug}: ` +
+        `expected=${expectedPrefCount} actual=${prefPayload?.schools?.length}`,
+      )
+    }
+    prefRowTotal += prefPayload.schools.length
+  }
+  if (prefRowTotal !== schools.length) {
+    throw new Error(`pref split total mismatch: prefTotal=${prefRowTotal} schools=${schools.length}`)
+  }
+
+  // --- 学校ページ全件検査 ---
   let neighborLinkTotal = 0
   for (const target of targets) {
     const html = await readPage(absoluteDist, join('school', String(target.id), 'index.html'), `school:${target.id}`)
@@ -241,6 +315,15 @@ export async function verifyStaticOutput({
     const jsonLdBlocks = extractJsonLdBlocks(html)
     if (!jsonLdBlocks.some((block) => block?.name === target.name)) {
       throw new Error(`JSON-LD with school name is missing or unparsable on ${pageLabel}`)
+    }
+    // BreadcrumbList（UUID URL の検索結果表示の救済・c7 C4）: ホーム › 県 ›（市区町村）› 校名。
+    const breadcrumb = jsonLdBlocks.find((block) => block?.['@type'] === 'BreadcrumbList')
+    if (!breadcrumb || !Array.isArray(breadcrumb.itemListElement) || breadcrumb.itemListElement.length < 3) {
+      throw new Error(`BreadcrumbList JSON-LD is missing or too short on ${pageLabel}`)
+    }
+    const breadcrumbLast = breadcrumb.itemListElement[breadcrumb.itemListElement.length - 1]
+    if (breadcrumbLast?.name !== target.name) {
+      throw new Error(`BreadcrumbList last item must be the school name on ${pageLabel}`)
     }
     checkForbiddenWords(main, pageLabel, { includeCommutePhrase: false })
     // 近隣校節（内部リンク網の本体・c4 C1）: 見出しと「直線距離」の明記、
@@ -277,6 +360,14 @@ export async function verifyStaticOutput({
       if (!main.includes(`href="/pref/${pref.slug}/"`)) {
         throw new Error(`top page is missing crawl link to /pref/${pref.slug}/`)
       }
+    }
+    // WebSite（テンプレート由来）+ Organization（gen-seo-pages 注入・/press と @id で同一実体）。
+    const topJsonLd = extractJsonLdBlocks(topHtml)
+    if (!topJsonLd.some((block) => block?.['@type'] === 'WebSite')) {
+      throw new Error('top page is missing WebSite JSON-LD')
+    }
+    if (!topJsonLd.some((block) => block?.['@type'] === 'Organization')) {
+      throw new Error('top page is missing Organization JSON-LD')
     }
   }
 
@@ -356,6 +447,8 @@ export async function verifyStaticOutput({
     sitemapUniqueUrlCount: actualLocations.size,
     schoolsPayloadGzip: isGzip,
     neighborLinkTotal,
+    schoolDataCount: perSchoolFiles.length,
+    prefDataCount: activePrefectures.length,
   }
 }
 
@@ -379,6 +472,7 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1
     `static output verified: files=${result.fileCount} schools=${result.schoolCount} ` +
     `seo=${result.seoSchoolCount} prefHubs=${result.prefPageCount} static=${result.staticRouteCount} ` +
     `sitemap=${result.sitemapUrlCount} neighborLinks=${result.neighborLinkTotal} ` +
+    `schoolData=${result.schoolDataCount} prefData=${result.prefDataCount} ` +
     `largest=${result.largestFile} (${result.largestFileBytes} bytes) ` +
     `gzip=${result.schoolsPayloadGzip}`,
   )

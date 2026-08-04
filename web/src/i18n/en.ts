@@ -397,6 +397,7 @@ export const en: MessageTree = {
     official: 'Official site',
     officialSoon: 'Official site URL — help wanted. Let us know if you have it.',
     googleMaps: 'Google Maps',
+    viewOnMap: 'View on map',
     deptDeviation: 'Reference deviation by department',
     deptDeviationEmpty: 'Department data — help wanted. If you know the departments and reference deviations, please let us know.',
     deptDeviationEvidenceGuide: 'Please include a verifiable source, such as an official school admission document or board of education material.',

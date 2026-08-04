@@ -11,7 +11,8 @@ import {
 } from '../lib/geo'
 import { primaryAdmissionTrend } from '../lib/admission'
 import { neighborPlaceLabel, selectNeighbors } from '../lib/neighbors'
-import { useSchools } from '../hooks/useSchools'
+import { successorsByPredecessorId, type SuccessorRef } from '../lib/successors'
+import { useSchoolsCache } from '../hooks/useSchools'
 import { useApp } from '../contexts/AppContext'
 import { useAuth } from '../contexts/AuthContext'
 import { useI18n } from '../contexts/I18nContext'
@@ -27,13 +28,34 @@ import { slotsForPlacement } from '../data/ad-slots'
 import { DataReportForm } from './DataReportForm'
 import { scaleBand } from '../lib/format'
 
+/** 近隣校リストの 1 項目（school は表示に必要な最小形。School 全体でもよい）。 */
+interface NeighborEntry {
+  school: { id: string; name: string; prefecture: string; city: string | null }
+  distanceKm: number
+}
+
+/**
+ * 学校単体 JSON（/school-data/<id>.json）に同梱された事前計算値。
+ * /school/:id 直リンク着地時は全件データが無いため、近隣校・後継校・前身校リンク可否を
+ * ビルド時計算（gen-schools-json.mjs・選定ロジックは lib/neighbors.ts を共有）で受け取る。
+ * 未指定時は全件キャッシュ（useSchoolsCache）から同じ共有ロジックで算出する。
+ */
+export interface SchoolDetailExtras {
+  neighbors: NeighborEntry[]
+  successors: SuccessorRef[]
+  linkableSchoolIds: ReadonlySet<string>
+}
+
 interface Props {
   school: School | null
   onClose: () => void
   userData: ReturnType<typeof useUserData>
+  extras?: SchoolDetailExtras | null
+  /** 単独ページ（/school/:id）として表示中。「地図で見る」導線を出す。 */
+  standalone?: boolean
 }
 
-export function SchoolDetailSheet({ school, onClose, userData }: Props) {
+export function SchoolDetailSheet({ school, onClose, userData, extras, standalone }: Props) {
   const navigate = useNavigate()
   const { home, toast, setLoginOpen } = useApp()
   const { session } = useAuth()
@@ -78,25 +100,27 @@ export function SchoolDetailSheet({ school, onClose, userData }: Props) {
   const schoolId = school?.id ?? null
   const open = school != null
 
-  // 近隣校・後継校の算出用。モジュールキャッシュ共有なので再フェッチは起きない。
-  const { schools } = useSchools()
-  // 選定ロジックは静的生成（gen-seo-pages.mjs）と共有（lib/neighbors.ts）。
-  // 距離順のみ。偏差値順・倍率順のソートは実装しない（ランキングサイト化の禁止線）。
-  const neighbors = useMemo(
+  // 近隣校・後継校の算出用。受動購読（キャッシュがあれば使う・無くても全件 fetch を
+  // 起動しない）。/school/:id 直リンク着地時は extras（単体 JSON 同梱の事前計算値）が
+  // 渡され、地図・お気に入り等の全件ロード済み画面では下の共有ロジック計算が使われる。
+  const { schools } = useSchoolsCache()
+  // 選定ロジックは静的生成（gen-seo-pages.mjs）・単体 JSON 生成（gen-schools-json.mjs）と
+  // 共有（lib/neighbors.ts）。距離順のみ。偏差値順・倍率順のソートは実装しない
+  // （ランキングサイト化の禁止線）。
+  const computedNeighbors = useMemo(
     () => (school ? selectNeighbors(school, schools) : []),
     [school, schools],
   )
+  const neighbors: NeighborEntry[] = extras?.neighbors ?? computedNeighbors
   const schoolIdSet = useMemo(() => new Set(schools.map((s) => s.id)), [schools])
-  // この学校を前身校とする後継校（沿革の逆方向リンク）。
-  const successors = useMemo(
-    () =>
-      school
-        ? schools.filter((s) =>
-            s.predecessor_relationships.some((r) => r.predecessor.id === school.id),
-          )
-        : [],
-    [school, schools],
-  )
+  /** 前身校リンクを張ってよいか（= 個別ページが存在するか）。 */
+  const isLinkableSchool = (id: string): boolean =>
+    extras ? extras.linkableSchoolIds.has(id) : schoolIdSet.has(id)
+  // この学校を前身校とする後継校（沿革の逆方向リンク）。逆引きは lib/successors.ts を
+  // ビルドスクリプトと共有する。
+  const successorsById = useMemo(() => successorsByPredecessorId(schools), [schools])
+  const successors: SuccessorRef[] =
+    extras?.successors ?? (school ? (successorsById.get(school.id) ?? []) : [])
 
   useFocusTrap(sheetRef, open)
   useEscapeKey(onClose, open)
@@ -675,7 +699,7 @@ export function SchoolDetailSheet({ school, onClose, userData }: Props) {
                   {school.predecessor_relationships.map((relationship) => (
                     <li key={relationship.id}>
                       <div>
-                        {schoolIdSet.has(relationship.predecessor.id) ? (
+                        {isLinkableSchool(relationship.predecessor.id) ? (
                           <a
                             href={`/school/${relationship.predecessor.id}`}
                             onClick={schoolLinkClick(relationship.predecessor.id)}
@@ -772,6 +796,18 @@ export function SchoolDetailSheet({ school, onClose, userData }: Props) {
         </div>
 
         <div className="ext-links">
+          {standalone && (
+            <a
+              href={`/map?school=${school.id}`}
+              onClick={(e) => {
+                if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return
+                e.preventDefault()
+                navigate(`/map?school=${school.id}`)
+              }}
+            >
+              🗺 {t('detail.viewOnMap')}
+            </a>
+          )}
           {officialUrl ? (
             <a href={officialUrl} target="_blank" rel="noreferrer">
               🌐 {t('detail.official')}

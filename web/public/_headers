@@ -22,3 +22,8 @@
   Cache-Control: public, max-age=31536000, immutable
 /school-name-index-*.json
   Cache-Control: public, max-age=31536000, immutable
+# 学校単体 JSON / 県別分割 JSON（c7 C1）。パスは固定だが、フロントは manifest の
+# schoolDataVersion を `?v=` に付けて取得する（クエリ込みでキャッシュキーが変わる）ので
+# 永久キャッシュ可
+/school-data/*
+  Cache-Control: public, max-age=31536000, immutable
