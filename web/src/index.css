@@ -431,6 +431,7 @@ body {
   display: flex; align-items: center; gap: 8px; padding: 4px 16px 10px;
   font-family: var(--display); font-weight: 700;
 }
+.sheet .head .icon-btn { flex: 0 0 auto; }
 .sheet .head .grow { flex: 1; }
 .sheet .body {
   overflow: auto; padding: 6px 16px 22px;

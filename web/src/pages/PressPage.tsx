@@ -1,5 +1,6 @@
 import { useNavigate } from 'react-router-dom'
 import { useI18n } from '../contexts/I18nContext'
+import { useGoBack } from '../hooks/useGoBack'
 
 /**
  * /press — メディア関係者・教育関係者向けのプレスキット / 基礎情報ページ。
@@ -7,6 +8,7 @@ import { useI18n } from '../contexts/I18nContext'
  */
 export function PressPage() {
   const navigate = useNavigate()
+  const goBack = useGoBack('/')
   const { t } = useI18n()
 
   type KitItem = { label: string; href: string; note: string; ready?: boolean; thumb?: string; thumbAlt?: string }
@@ -152,7 +154,7 @@ export function PressPage() {
   return (
     <div className="screen">
       <div className="header">
-        <button className="icon-btn" onClick={() => navigate(-1)} aria-label={t('common.back')}>
+        <button className="icon-btn" onClick={goBack} aria-label={t('common.back')}>
           ←
         </button>
         <div className="brand">配布素材・プレスキット</div>
