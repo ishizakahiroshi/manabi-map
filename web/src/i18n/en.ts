@@ -399,6 +399,8 @@ export const en: MessageTree = {
     neighborTitle: 'Nearby high schools',
     neighborNote: '{count} schools in order of straight-line distance. Actual routes and travel times depend on transportation.',
     neighborMeta: '{place} / approx. {km} km',
+    neighborMore: 'Show {count} more',
+    neighborLess: 'Show fewer',
     interested: 'Interested',
     favorited: 'On your list',
     priority: 'Priority',
@@ -648,9 +650,5 @@ export const en: MessageTree = {
   },
   guide: {
     loadFail: 'Could not load the guide. Please try again later.',
-  },
-  header: {
-    favList: 'Favorites',
-    loginBtn: 'Log in',
   },
 }

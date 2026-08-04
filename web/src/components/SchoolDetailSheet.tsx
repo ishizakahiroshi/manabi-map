@@ -55,6 +55,12 @@ interface Props {
   standalone?: boolean
 }
 
+/**
+ * 近隣校リストの初期表示件数。距離順で上位ほど価値が高いため先頭のみ見せる。
+ * index.css の .neighbor-block.collapsed 側の nth-child(n + 6) と対（変えるときは両方）。
+ */
+const NEIGHBOR_PREVIEW_COUNT = 5
+
 export function SchoolDetailSheet({ school, onClose, userData, extras, standalone }: Props) {
   const navigate = useNavigate()
   const { home, toast, setLoginOpen } = useApp()
@@ -112,6 +118,7 @@ export function SchoolDetailSheet({ school, onClose, userData, extras, standalon
     [school, schools],
   )
   const neighbors: NeighborEntry[] = extras?.neighbors ?? computedNeighbors
+  const [neighborsExpanded, setNeighborsExpanded] = useState(false)
   const schoolIdSet = useMemo(() => new Set(schools.map((s) => s.id)), [schools])
   /** 前身校リンクを張ってよいか（= 個別ページが存在するか）。 */
   const isLinkableSchool = (id: string): boolean =>
@@ -132,6 +139,7 @@ export function SchoolDetailSheet({ school, onClose, userData, extras, standalon
     // 近隣校リンク等でシート内から別の学校へ切り替わったとき、本文を先頭へ戻す
     sheetRef.current?.querySelector('.body')?.scrollTo({ top: 0 })
     dirtyRef.current = { memo: false, commute: false, mineNote: false, depts: false }
+    setNeighborsExpanded(false)
     const n = notes[schoolId]
     setMemo(n?.note ?? '')
     setCommuteNote(n?.commute_note ?? '')
@@ -906,7 +914,8 @@ export function SchoolDetailSheet({ school, onClose, userData, extras, standalon
           )}
         </div>
 
-        <details className="admission-block">
+        {/* key: 近隣校リンク等での学校切替時に、非制御の open 状態を初期値（閉）へ戻す */}
+        <details className="admission-block" key={school.id}>
           <summary>
             <span className="admission-block-title">📈 {t('detail.admissionTitle')}</span>
             <span className="admission-block-hint">{t('detail.admissionSub')}</span>
@@ -982,7 +991,9 @@ export function SchoolDetailSheet({ school, onClose, userData, extras, standalon
         </details>
 
         {neighbors.length > 0 && (
-          <div className="neighbor-block">
+          /* 畳み中も li は DOM に残し CSS で隠す（条件レンダーにしない）。静的 HTML
+             （gen-seo-pages.mjs）の全件掲載とレンダリング後 DOM の内部リンク網を一致させるため */
+          <div className={`neighbor-block${neighborsExpanded ? '' : ' collapsed'}`}>
             <h4>📍 {t('detail.neighborTitle')}</h4>
             <p className="sub">{t('detail.neighborNote', { count: neighbors.length })}</p>
             <ul>
@@ -1000,6 +1011,18 @@ export function SchoolDetailSheet({ school, onClose, userData, extras, standalon
                 </li>
               ))}
             </ul>
+            {neighbors.length > NEIGHBOR_PREVIEW_COUNT && (
+              <button
+                type="button"
+                className="chip neighbor-more"
+                aria-expanded={neighborsExpanded}
+                onClick={() => setNeighborsExpanded((v) => !v)}
+              >
+                {neighborsExpanded
+                  ? t('detail.neighborLess')
+                  : t('detail.neighborMore', { count: neighbors.length - NEIGHBOR_PREVIEW_COUNT })}
+              </button>
+            )}
           </div>
         )}
 
