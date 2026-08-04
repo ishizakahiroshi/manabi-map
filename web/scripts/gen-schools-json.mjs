@@ -156,6 +156,12 @@ function compactUnitSources(units) {
   for (const unit of units ?? []) {
     for (const stat of unit.school_admission_selection_stats ?? []) {
       stat.school_admission_stat_sources = (stat.school_admission_stat_sources ?? []).map((source) => {
+        // 前身校が現行校としても収録されている場合、admissionsBySchool の unit 配列は
+        // 両者で同一オブジェクトを共有しており、この関数が同じ stat を 2 回踏む。
+        // 2 回目は source が既に index（数値）なので、再圧縮せずそのまま返す
+        // （再圧縮すると catalog に数値が入り、復元側の object filter で出典が消える。
+        // 2026-08-04 に閉校予定 27 校の出典欠落として実際に発生）。
+        if (typeof source === 'number') return source
         const key = JSON.stringify(source)
         let index = sourceIndex.get(key)
         if (index == null) {

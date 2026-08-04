@@ -79,8 +79,9 @@ function extractJsonLdBlocks(html) {
 
 // 一覧・ハブ・学校ページの本文（<main>）に出てはいけない語。
 // 「偏差値」はプリレンダー非掲載の方針（§7.7 運用）を、残りはランキングサイト化の
-// 禁止線を、それぞれビルドで固定する。
-const FORBIDDEN_WORDS = ['ランキング', 'TOP', '狙い目', 'おすすめ', '偏差値']
+// 禁止線を、それぞれビルドで固定する。「通学時間」は実乗換データを持たないため
+// プリレンダーに書かない（c4 C1。距離は「直線距離」と明記する）。
+const FORBIDDEN_WORDS = ['ランキング', 'TOP', '狙い目', 'おすすめ', '偏差値', '通学時間']
 // 「◯◯市から通える」型の断定は学区データを保有するまで禁止（/pref/ 配下と全域ハブ）。
 // トップ・学校ページの定型文「住所を入れると通える高校が…」はサービス説明なので対象外。
 const FORBIDDEN_COMMUTE_PHRASE = 'から通える'
@@ -221,6 +222,10 @@ export async function verifyStaticOutput({
   }
 
   // --- 学校ページ全件検査 ---
+  // 近隣校リストの最低リンク数。過疎地フォールバック（c4 C1）で最低 3 校出るが、
+  // 収録校数がそれ未満のとき（テスト fixture 等）は「他の全校」が下限。
+  const minNeighborLinks = Math.min(3, targets.length - 1)
+  let neighborLinkTotal = 0
   for (const target of targets) {
     const html = await readPage(absoluteDist, join('school', String(target.id), 'index.html'), `school:${target.id}`)
     const pageLabel = `/school/${target.id}/`
@@ -238,6 +243,29 @@ export async function verifyStaticOutput({
       throw new Error(`JSON-LD with school name is missing or unparsable on ${pageLabel}`)
     }
     checkForbiddenWords(main, pageLabel, { includeCommutePhrase: false })
+    // 近隣校節（内部リンク網の本体・c4 C1）: 見出しと「直線距離」の明記、
+    // 自分以外の学校ページへの最低リンク数を全件で保証する。
+    if (!main.includes('の近くにある高校')) {
+      throw new Error(`missing neighbor section heading on ${pageLabel}`)
+    }
+    if (!main.includes('直線距離')) {
+      throw new Error(`neighbor section must state 直線距離 on ${pageLabel}`)
+    }
+    const schoolLinks = new Set(
+      [...main.matchAll(/href="\/school\/([^"]+)\/"/g)]
+        .map((match) => match[1])
+        .filter((id) => id !== String(target.id)),
+    )
+    if (schoolLinks.size < minNeighborLinks) {
+      throw new Error(
+        `too few school links on ${pageLabel}: expected>=${minNeighborLinks} actual=${schoolLinks.size}`,
+      )
+    }
+    neighborLinkTotal += schoolLinks.size
+    // 選抜実績の年度表を出すページには公式出典が必須（c4 C3 完了条件）。
+    if (main.includes('年度別志願状況') && !main.includes('出典:')) {
+      throw new Error(`admission table without 出典 on ${pageLabel}`)
+    }
   }
 
   // --- トップ ---
@@ -327,6 +355,7 @@ export async function verifyStaticOutput({
     sitemapUrlCount: locations.length,
     sitemapUniqueUrlCount: actualLocations.size,
     schoolsPayloadGzip: isGzip,
+    neighborLinkTotal,
   }
 }
 
@@ -349,7 +378,8 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1
   console.log(
     `static output verified: files=${result.fileCount} schools=${result.schoolCount} ` +
     `seo=${result.seoSchoolCount} prefHubs=${result.prefPageCount} static=${result.staticRouteCount} ` +
-    `sitemap=${result.sitemapUrlCount} largest=${result.largestFile} (${result.largestFileBytes} bytes) ` +
+    `sitemap=${result.sitemapUrlCount} neighborLinks=${result.neighborLinkTotal} ` +
+    `largest=${result.largestFile} (${result.largestFileBytes} bytes) ` +
     `gzip=${result.schoolsPayloadGzip}`,
   )
 }

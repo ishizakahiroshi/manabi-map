@@ -469,6 +469,17 @@ body {
 .lifecycle-list ul { margin: 4px 0 0; padding-left: 1.25rem; }
 .lifecycle-list li + li { margin-top: 3px; }
 .lifecycle-list small { color: var(--ink-soft); }
+.successor-note { margin: 9px 0 0; font-size: 0.86rem; font-weight: 700; }
+.successor-note a { color: var(--accent); }
+
+/* --- 近くにある高校（詳細シート） --- */
+.neighbor-block { margin-top: 16px; padding: 12px 14px; border: 2px solid var(--ink); border-radius: 14px; background: var(--card); }
+.neighbor-block h4 { margin: 0 0 4px; font-family: var(--display); font-size: 0.98rem; display: flex; align-items: center; gap: 6px; }
+.neighbor-block .sub { margin: 0 0 8px; color: var(--ink-soft); font-size: 0.78rem; line-height: 1.5; }
+.neighbor-block ul { margin: 0; padding-left: 1.25rem; font-size: 0.9rem; }
+.neighbor-block li + li { margin-top: 5px; }
+.neighbor-block a { color: var(--accent); font-weight: 700; }
+.neighbor-block .neighbor-meta { color: var(--ink-soft); font-size: 0.8rem; }
 .predecessor-admissions { margin-top: 4px; }
 .predecessor-admissions summary { cursor: pointer; color: var(--primary-dark); font-weight: 650; }
 .predecessor-admissions > ul { margin-top: 5px; font-size: 0.78rem; }

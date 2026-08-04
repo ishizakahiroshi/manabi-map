@@ -195,7 +195,8 @@ interface Props {
 export function MapPage({ userData }: Props) {
   const navigate = useNavigate()
   const { id: sharedSchoolId } = useParams<{ id: string }>()
-  const sharedOpenedRef = useRef(false)
+  /** 最後に URL から開いた school id。近隣校リンク等での /school/:id 切替に追随する */
+  const sharedOpenedRef = useRef<string | null>(null)
   const { home } = useApp()
   const { t } = useI18n()
   const fmt = useFormat()
@@ -429,10 +430,11 @@ export function MapPage({ userData }: Props) {
     mapRef.fitBounds(homeViewBounds(home, schools))
   }, [home, schools, mapRef])
 
-  // 共有 URL で開かれたら、学校データ到着後に 1 回だけ該当校の詳細シートを開いて寄せる
+  // 共有 URL・シート内の近隣校リンクで /school/:id が変わったら、
+  // 該当校の詳細シートを開いて地図を寄せる（同じ id の再実行はしない）
   useEffect(() => {
-    if (!sharedSchoolId || sharedOpenedRef.current || !mapRef || schools.length === 0) return
-    sharedOpenedRef.current = true
+    if (!sharedSchoolId || sharedOpenedRef.current === sharedSchoolId || !mapRef || schools.length === 0) return
+    sharedOpenedRef.current = sharedSchoolId
     const school = schools.find((s) => s.id === sharedSchoolId)
     if (school) {
       setDetail(school)
@@ -754,7 +756,9 @@ export function MapPage({ userData }: Props) {
           school={detail}
           onClose={() => {
             setDetail(null)
-            // 共有 URL 経由なら、シートを閉じた時点で通常の地図 URL に戻す
+            // 共有 URL 経由なら、シートを閉じた時点で通常の地図 URL に戻す。
+            // 同じ学校へ再度リンクで来たとき開き直せるよう、開封記録もリセットする
+            sharedOpenedRef.current = null
             if (sharedSchoolId) navigate('/map', { replace: true })
           }}
           userData={userData}
