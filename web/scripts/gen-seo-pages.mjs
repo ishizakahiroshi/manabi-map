@@ -28,7 +28,7 @@ import Markdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { loadCivicData, groupSchoolsByCity, resolveCityGroup } from './lib/municipalities.mjs'
 // 近隣校の選定・距離計算と選抜実績の集計・後継校の逆引きは React 側と同一実装を共有する
-// （Node 22.18+ の type stripping で .ts を直 import。フォーク禁止 —
+// （tsx 経由で .ts を直 import（package.json の scripts が tsx で起動する。Node の type stripping には依存しない — Cloudflare Pages のビルドイメージは pnpm 同梱の preinstall Node しか使えないため）。フォーク禁止 —
 // 静的 HTML と JS mount 後で校名・距離・倍率が食い違う事故を防ぐ。
 // docs/local/plan_seo-growth-strategy_c4 C1 / C3）。
 import { selectNeighbors, neighborPlaceLabel } from '../src/lib/neighbors.ts'
