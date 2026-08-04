@@ -35,6 +35,7 @@ import { selectNeighbors, neighborPlaceLabel } from '../src/lib/neighbors.ts'
 import { flattenRecruitmentUnits } from '../src/lib/admissionUnits.ts'
 import { primaryAdmissionTrend } from '../src/lib/admission.ts'
 import { successorsByPredecessorId } from '../src/lib/successors.ts'
+import { GUIDES } from '../src/lib/guides.ts'
 
 const SITE_ORIGIN = 'https://manabi-map.app'
 
@@ -623,7 +624,7 @@ const REGION_LABELS = {
   'kyushu-okinawa': '九州・沖縄',
 }
 
-/** サイト共通フッター（プリレンダー用）。/guide/ は公開まで枠のみ（リンクにしない）。 */
+/** サイト共通フッター（プリレンダー用）。React の SiteFooter と項目を一致させる。 */
 const FOOTER_HTML =
   '<footer><nav aria-label="サイト情報">' +
   '<a href="/press/">プレスキット</a> ' +
@@ -631,7 +632,7 @@ const FOOTER_HTML =
   '<a href="/legal/privacy/">プライバシーポリシー</a> ' +
   '<a href="/legal/deviation-methodology/">偏差値の方法と限界</a> ' +
   '<a href="/legal/third-party/">サードパーティライセンス</a> ' +
-  '<span>ガイド（準備中）</span>' +
+  '<a href="/guide/school-visit/">学校選びガイド</a>' +
   '</nav></footer>'
 
 /** 設置区分・課程・共学別学の内訳（県ハブの事実の集計。序列は作らない）。 */
@@ -761,6 +762,12 @@ async function renderLegalHtml(doc) {
   return renderToStaticMarkup(createElement(Markdown, { remarkPlugins: [remarkGfm] }, md))
 }
 
+/** public/guide/*.md を React 側 GuidePage と同じ Markdown 実装で HTML 化する。 */
+async function renderGuideHtml(slug) {
+  const md = await readFile(join(distDir, 'guide', `${slug}.md`), 'utf8')
+  return renderToStaticMarkup(createElement(Markdown, { remarkPlugins: [remarkGfm] }, md))
+}
+
 const LEGAL_DOCS = [
   { doc: 'terms', title: '利用規約' },
   { doc: 'privacy', title: 'プライバシーポリシー' },
@@ -864,6 +871,9 @@ function renderTopContent() {
     '<p>住所を入れると、通える高校が地図に表示されます。気になる学校を保存して、家族でメモを残せます。</p>' +
     `<p>${escapeHtml(coverageText(schools))}</p>` +
     `<nav aria-label="一覧から探す"><h2><a href="/schools/">一覧から探す（都道府県）</a></h2>${regions}</nav>` +
+    '<section><h2>学校選びガイド</h2><ul>' +
+    GUIDES.map((guide) => `<li><a href="/guide/${guide.slug}/">${escapeHtml(guide.navLabel)}</a></li>`).join('') +
+    '</ul></section>' +
     '</main>' +
     FOOTER_HTML
   )
@@ -937,6 +947,19 @@ for (const { doc, title } of LEGAL_DOCS) {
   await writeFile(join(outDir, 'index.html'), withRootContent(withHead, `<main>${body}</main>${FOOTER_HTML}`))
 }
 
+for (const guide of GUIDES) {
+  const url = `${SITE_ORIGIN}/guide/${guide.slug}/`
+  const body = await renderGuideHtml(guide.slug)
+  const withHead = renderHead(template, {
+    title: `${guide.title} | Manabi Map`,
+    description: guide.description,
+    url,
+  })
+  const outDir = join(distDir, 'guide', guide.slug)
+  await mkdir(outDir, { recursive: true })
+  await writeFile(join(outDir, 'index.html'), withRootContent(withHead, `<main>${body}</main>${FOOTER_HTML}`))
+}
+
 await writeFile(join(distDir, '404.html'), render404Page())
 
 // sitemap には '/search' を含めない（サイト内検索結果はインデックスさせないのが Google の案内）。
@@ -949,6 +972,7 @@ const urls = [
   ...prefPages.map((path) => ({ path })),
   { path: '/press/' },
   ...LEGAL_DOCS.map(({ doc }) => ({ path: `/legal/${doc}/` })),
+  ...GUIDES.map((guide) => ({ path: `/guide/${guide.slug}/` })),
   ...targets.map((s) => ({ path: `/school/${s.id}/`, lastmod: s.updated_at?.slice(0, 10) })),
 ]
 const sitemap =
@@ -974,8 +998,39 @@ if (pageStats.admissionTablesWithoutSource > 0) {
 
 console.log(
   `wrote ${targets.length} school pages, ${prefPages.length} pref hubs, ` +
-  `${LEGAL_DOCS.length} legal pages, press, 404 and sitemap.xml (${urls.length} urls) to ${distDir}`,
+  `${LEGAL_DOCS.length} legal pages, ${GUIDES.length} guides, press, 404 and sitemap.xml (${urls.length} urls) to ${distDir}`,
 )
+
+const llms = [
+  '# Manabi Map（まなびマップ）',
+  '',
+  '> 親子で使う、学校選びの地図ノート。学校を序列化せず、地図、見学、家族の対話を通じた進路検討を支援します。',
+  '',
+  `- 収録範囲: ${coverageText(schools)}`,
+  '- 公式サイト: https://manabi-map.app/',
+  '',
+  '## 主要ページ',
+  '',
+  '- [トップ](https://manabi-map.app/): 地図と学校検索',
+  '- [プレスキット](https://manabi-map.app/press/): サービスの基礎情報と配布素材',
+  '- [編集推計の方法と限界](https://manabi-map.app/legal/deviation-methodology/): 根拠と限界',
+  '- [利用規約](https://manabi-map.app/legal/terms/)',
+  '- [プライバシーポリシー](https://manabi-map.app/legal/privacy/)',
+  '',
+  '## データとライセンス',
+  '',
+  '- コード: AGPL-3.0-or-later',
+  '- 学校基本情報: CC BY-SA 4.0',
+  '- 出典表記: 出典: Manabi Map（まなびマップ） https://manabi-map.app （CC BY-SA 4.0）',
+  '- データセットの説明: https://github.com/ishizakahiroshi/manabi-map/blob/main/DATA.md',
+  '',
+  '## お問い合わせ',
+  '',
+  '- 一般のお問い合わせ・取材: hello@manabi-map.app',
+  '- 掲載情報の削除・訂正: takedown@manabi-map.app',
+  '',
+].join('\n')
+await writeFile(join(distDir, 'llms.txt'), llms)
 console.log(
   `school page blocks: neighborLinks=${pageStats.neighborLinks} ` +
   `admissionTables=${pageStats.admissionTables} admissionGuidance=${pageStats.admissionGuidance} ` +

@@ -4,7 +4,6 @@ import { useI18n } from '../contexts/I18nContext'
 /**
  * サイト共通フッター（トップ・一覧ハブ・404 用）。
  * プリレンダー版（scripts/gen-seo-pages.mjs の FOOTER_HTML）と項目を一致させること。
- * /guide/ はガイド公開（plan_seo-citation-assets C3）まで枠のみ確保し、リンクにしない。
  */
 export function SiteFooter() {
   const navigate = useNavigate()
@@ -15,6 +14,7 @@ export function SiteFooter() {
     ['/legal/privacy', t('footer.privacy')],
     ['/legal/deviation-methodology', t('nav.deviationMethodology')],
     ['/legal/third-party', t('nav.thirdParty')],
+    ['/guide/school-visit', t('footer.guide')],
   ]
   return (
     <footer className="site-footer">
@@ -31,7 +31,6 @@ export function SiteFooter() {
             {label}
           </a>
         ))}
-        <span className="site-footer-soon">{t('footer.guidePreparing')}</span>
       </nav>
     </footer>
   )

@@ -40,6 +40,10 @@
 - GitHub Issue（`data-correction` ラベル）
 - メール: takedown@manabi-map.app
 
+## データセット
+
+学校基本情報の公開データセットは [DATA.md](DATA.md) に説明しています。CC BY-SA 4.0 のライセンス、出典表記、偏差値の編集推計を含めない理由、リリース添付用 JSON / CSV の生成方法を確認できます。
+
 ## ライセンス
 
 - **著作権**: Copyright (c) 2026 Hiroshi Ishizaka (ishizakahiroshi)
