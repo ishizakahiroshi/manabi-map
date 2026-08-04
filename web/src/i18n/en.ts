@@ -56,6 +56,7 @@ export const en: MessageTree = {
   },
   tabs: {
     label: 'Primary navigation',
+    home: 'Home',
     map: 'Map',
     favorites: 'Favorites',
     mypage: 'My page',
