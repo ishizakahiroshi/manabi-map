@@ -7,9 +7,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "pnpm fetch:tags && pnpm gen:schools-json && vite build && node scripts/gen-seo-pages.mjs && pnpm verify:static",
+    "build": "pnpm fetch:tags && pnpm gen:schools-json && vite build && tsx scripts/gen-seo-pages.mjs && pnpm verify:static",
     "fetch:tags": "git fetch --unshallow --tags 2>/dev/null || git fetch --deepen=200 --tags 2>/dev/null || git fetch --tags || true",
-    "gen:schools-json": "node scripts/gen-schools-json.mjs",
+    "gen:schools-json": "tsx scripts/gen-schools-json.mjs",
     "typecheck": "tsc --noEmit -p tsconfig.app.json",
     "lint": "oxlint",
     "test": "vitest run && pnpm test:static",
@@ -40,6 +40,7 @@
     "@vitejs/plugin-react": "^6.0.3",
     "oxlint": "^1.71.0",
     "tailwindcss": "^4.3.2",
+    "tsx": "^4.23.5",
     "typescript": "~6.0.2",
     "vite": "^8.1.1",
     "vitest": "^3.2.4"
