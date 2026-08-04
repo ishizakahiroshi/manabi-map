@@ -252,7 +252,7 @@ function streetAddressOf(school) {
     .sort((a, b) => b.length - a.length)
   for (const candidate of candidates) {
     if (rest.startsWith(candidate)) {
-      rest = rest.slice(candidate.length)
+      while (rest.startsWith(candidate)) rest = rest.slice(candidate.length)
       break
     }
   }
@@ -410,6 +410,7 @@ function renderSchoolPage(school) {
     // 出典（重複除去）。全ての数値に公式出典リンクを付ける（c4 C3 完了条件）。
     const seenSources = new Set()
     const sourceParts = []
+    let sourceLinkCount = 0
     for (const source of trend.annual.flatMap((annual) => annual.sources)) {
       const key = `${source.official_url}|${source.doc_title}`
       if (seenSources.has(key)) continue
@@ -417,11 +418,12 @@ function renderSchoolPage(school) {
       const href = safeUrl(source.official_url)
       const label = escapeHtml(source.doc_title || '公式資料')
       const published = source.published_at ? `（公表日: ${escapeHtml(source.published_at)}）` : ''
+      if (href) sourceLinkCount += 1
       sourceParts.push(
         href ? `<a href="${escapeHtml(href)}" rel="noopener">${label}</a>${published}` : `${label}${published}`,
       )
     }
-    if (sourceParts.length === 0) pageStats.admissionTablesWithoutSource += 1
+    if (sourceLinkCount === 0) pageStats.admissionTablesWithoutSource += 1
     const sourceLine = sourceParts.length ? `<p>出典: ${sourceParts.join(' ／ ')}</p>` : ''
     admissionSection =
       `<section><h2>${escapeHtml(school.name)}の年度別志願状況（一次募集）</h2>` +
