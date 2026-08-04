@@ -837,6 +837,13 @@ function renderPressPage() {
     '<li><a href="/press/manabi-map-handout.pdf">保護者配布・面談用 handout（A4 縦・PDF）</a></li>' +
     '</ul>' +
     '<p>進路指導部の先生や保護者へ紹介いただく際に、ご自由にダウンロード・印刷・配布いただけます（改変は不可）。</p>' +
+    '<h2>プレスキット</h2>' +
+    '<ul>' +
+    '<li><a href="/press/press-release.pdf">プレスリリース（PDF）</a></li>' +
+    '<li><a href="/press/logo-pack.zip">ロゴ一式（SVG / PNG・ZIP）</a></li>' +
+    '</ul>' +
+    '<h2>学校・教育委員会向け</h2>' +
+    '<p><a href="/press/listing-checklist.html">掲載可否チェックシート（印刷用 HTML）</a>を、校内・保護者向けの紹介前確認にご利用いただけます。</p>' +
     '<h2>取材・お問い合わせ</h2>' +
     '<ul>' +
     '<li>一般のお問い合わせ・取材依頼: <a href="mailto:hello@manabi-map.app">hello@manabi-map.app</a></li>' +

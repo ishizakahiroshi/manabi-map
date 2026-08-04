@@ -29,9 +29,8 @@ export function PressPage() {
     },
   ]
   const kitItems: KitItem[] = [
-    { label: 'プレスリリース PDF', href: '/press/press-release.pdf', note: '準備中' },
-    { label: 'ロゴ一式（SVG / PNG）', href: '/press/logo-pack.zip', note: '準備中' },
-    { label: 'スクリーンショット集', href: '/press/screenshots.zip', note: '準備中' },
+    { label: 'プレスリリース PDF', href: '/press/press-release.pdf', note: 'ダウンロード', ready: true },
+    { label: 'ロゴ一式（SVG / PNG）', href: '/press/logo-pack.zip', note: 'ダウンロード', ready: true },
   ]
 
   const renderKitList = (items: KitItem[]) => (
@@ -185,10 +184,18 @@ export function PressPage() {
 
         <h2>プレスキット ダウンロード</h2>
         <p style={{ color: 'var(--ink-soft)', fontSize: '0.9em' }}>
-          記者・行政関係者向けの素材は準備中です。公開まで少々お待ちください。急ぎの場合は
+          記者・行政関係者向けに、サービスの概要とロゴ素材をダウンロードいただけます。追加素材が必要な場合は
           <a href="mailto:hello@manabi-map.app">hello@manabi-map.app</a> までご連絡ください。
         </p>
         {renderKitList(kitItems)}
+
+        <h2>学校・教育委員会向け</h2>
+        <p style={{ color: 'var(--ink-soft)', fontSize: '0.9em' }}>
+          校内・保護者向けに紹介する前の確認用として、印刷可能な掲載可否チェックシートをご用意しています。
+        </p>
+        {renderKitList([
+          { label: '掲載可否チェックシート（印刷用 HTML）', href: '/press/listing-checklist.html', note: '開く', ready: true },
+        ])}
 
         <h2>サービス基礎情報</h2>
         <table style={{ width: '100%', borderCollapse: 'collapse', margin: '8px 0 16px' }}>

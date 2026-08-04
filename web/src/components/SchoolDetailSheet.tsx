@@ -533,13 +533,15 @@ export function SchoolDetailSheet({ school, onClose, userData, extras, standalon
     }
     setAdminSavingDept(departmentId)
     try {
-      const { error } = await supabase.rpc('correct_school_deviation', {
+      const { data, error } = await supabase.rpc('correct_school_deviation', {
         p_department_id: departmentId,
         p_new_value: nextValue,
         p_reason: adminReason,
         p_pin: adminPin,
       })
-      if (error) throw error
+      // PIN 失敗・一時ロックは DB が失敗回数を残すため 0 行で返す。
+      // Supabase の RPC 自体は成功扱いになるので、ここで UI 上の失敗に戻す。
+      if (error || !data?.length) throw error ?? new Error('admin pin verification failed')
       setAdminOverride((cur) => ({ ...cur, [departmentId]: nextValue }))
       setAdminPin('')
       toast(t('detail.adminCorrectionDone'))
