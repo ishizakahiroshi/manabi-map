@@ -27,6 +27,13 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import Markdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { loadCivicData, groupSchoolsByCity } from './lib/municipalities.mjs'
+// 近隣校の選定・距離計算と選抜実績の集計は React 側と同一実装を共有する
+// （Node 22.18+ の type stripping で .ts を直 import。フォーク禁止 —
+// 静的 HTML と JS mount 後で校名・距離・倍率が食い違う事故を防ぐ。
+// docs/local/plan_seo-growth-strategy_c4 C1 / C3）。
+import { selectNeighbors, neighborPlaceLabel } from '../src/lib/neighbors.ts'
+import { flattenRecruitmentUnits } from '../src/lib/admissionUnits.ts'
+import { primaryAdmissionTrend } from '../src/lib/admission.ts'
 
 const SITE_ORIGIN = 'https://manabi-map.app'
 
@@ -61,6 +68,20 @@ const schoolsText = schoolsPath.endsWith('.gz') ? gunzipSync(schoolsFile).toStri
 const schoolsPayload = JSON.parse(schoolsText)
 const schools = Array.isArray(schoolsPayload) ? schoolsPayload : schoolsPayload.schools
 if (!Array.isArray(schools)) throw new Error('schools payload has an unsupported format')
+
+// gen-schools-json.mjs は出典 object を sourceCatalog の index へ圧縮している。
+// 選抜実績の出典脚注に使うため、useSchools.ts の hydrateUnitSources と同様に
+// index → object へ復元してから集計へ流す。
+const sourceCatalog = Array.isArray(schoolsPayload?.sourceCatalog) ? schoolsPayload.sourceCatalog : []
+for (const row of schools) {
+  for (const unit of row.admission_recruitment_units ?? []) {
+    for (const stat of unit.school_admission_selection_stats ?? []) {
+      stat.school_admission_stat_sources = (stat.school_admission_stat_sources ?? [])
+        .map((ref) => (typeof ref === 'number' ? sourceCatalog[ref] : ref))
+        .filter((source) => source != null && typeof source === 'object')
+    }
+  }
+}
 
 const { prefectures, muniByPref } = await loadCivicData(webRoot)
 
@@ -229,6 +250,21 @@ function renderSchoolPage(school) {
   const departments = (school.school_departments ?? []).map((d) => d.name).filter(Boolean)
   if (departments.length) rows.push(['学科', departments.join('、')])
 
+  // 学校規模（c4 C4）: 事実の数値のみを出す。「大規模校」等のラベル付けはしない
+  // （plan_school-scale-band.md の分類方針と衝突させない）。文言は
+  // format.ts の enrollmentLabel / genderRatioLabel（i18n/ja.ts 準拠）と同一にする。
+  if (school.total_students != null && school.enrollment_year != null) {
+    rows.push(['生徒数', `約 ${Number(school.total_students).toLocaleString('en-US')} 人（${school.enrollment_year} 年）`])
+  }
+  // 男子校・女子校には男女比を出さない（自明で冗長）。
+  if (school.male_ratio != null && school.gender_type === 'coed') {
+    const male = Number(school.male_ratio)
+    const ratioSource =
+      school.enrollment_year != null ? `${school.enrollment_year} 年・学校基本調査ベース` : '学校公表情報ベース'
+    rows.push(['男女比', `男 ${male}% / 女 ${100 - male}%（${ratioSource}）`])
+  }
+  if (school.is_integrated) rows.push(['中高一貫', 'あり'])
+
   const dl = rows
     .map(([k, v]) => `<dt>${escapeHtml(k)}</dt><dd>${escapeHtml(v)}</dd>`)
     .join('')
@@ -236,22 +272,26 @@ function renderSchoolPage(school) {
     ? `<p><a href="${escapeHtml(school.official_url)}" rel="noopener">公式サイト</a></p>`
     : ''
 
-  // SchoolDetailSheet.tsx の showLifecycle と同じ条件。閉校予定・募集停止校が
-  // 現役校と同じ体裁で出るのを防ぐ（進路検討サービスとしての信頼に直結するため）。
+  // SchoolDetailSheet.tsx の showLifecycle と同じ条件（+ 後継校の逆引き）。
+  // 閉校予定・募集停止校が現役校と同じ体裁で出るのを防ぎ、沿革データを持つ学校には
+  // 固有の沿革ブロックを出す（plan_seo-growth-strategy_c4 C2）。
   const lifecycleLabel = LIFECYCLE_LABELS[school.lifecycle_status_code]
   const recruitmentLabel = RECRUITMENT_LABELS[school.recruitment_status_code]
   const predecessors = school.predecessor_relationships ?? []
   const nameHistory = school.school_name_history ?? []
+  const successors = successorsByPredecessorId.get(school.id) ?? []
   const showLifecycle =
     school.lifecycle_status_code !== 'active' ||
     school.recruitment_status_code !== 'recruiting' ||
     predecessors.length > 0 ||
     nameHistory.length > 0 ||
     school.legally_established_on != null ||
-    school.opened_on != null
+    school.opened_on != null ||
+    successors.length > 0
 
   let lifecycleSection = ''
   if (showLifecycle) {
+    pageStats.historySections += 1
     const lifecycleRows = [['学校状態', lifecycleLabel], ['募集状態', recruitmentLabel]]
     if (school.legally_established_on) lifecycleRows.push(['法的設置日', school.legally_established_on])
     if (school.opened_on) lifecycleRows.push(['開校日', school.opened_on])
@@ -259,21 +299,45 @@ function renderSchoolPage(school) {
       .filter(([, v]) => v)
       .map(([k, v]) => `<dt>${escapeHtml(k)}</dt><dd>${escapeHtml(v)}</dd>`)
       .join('')
+    // 開校年月の 1 文（データが無い学校には出さない）。時計に依存させず、
+    // lifecycle_status_code=planned のときだけ「開校予定です」にする。
+    let openedSentence = ''
+    const openedMatch = school.opened_on ? String(school.opened_on).match(/^(\d{4})-(\d{2})/) : null
+    if (openedMatch) {
+      const verb = school.lifecycle_status_code === 'planned' ? '開校予定です' : '開校しました'
+      openedSentence = `<p>この高校は ${Number(openedMatch[1])} 年 ${Number(openedMatch[2])} 月に${verb}。</p>`
+    }
     const predecessorList = predecessors.length
       ? '<p>前身校</p><ul>' +
         predecessors
           .map((r) => {
             const link = safeUrl(r.official_url)
+            const predecessorId = r.predecessor?.id
+            const predecessorName = escapeHtml(r.predecessor?.name ?? '')
+            // 前身校が収録済みならページ間の内部リンクにする（沿革の相互リンク網）。
+            const nameHtml =
+              predecessorId && schoolPageIds.has(predecessorId)
+                ? `<a href="/school/${escapeHtml(predecessorId)}/">${predecessorName}</a>`
+                : predecessorName
             return (
-              `<li>${escapeHtml(r.predecessor?.name ?? '')}` +
+              `<li>${nameHtml}` +
               (r.effective_on ? `（${escapeHtml(r.effective_on)}から）` : '') +
               (link ? ` <a href="${escapeHtml(link)}" rel="noopener">公式根拠</a>` : '') +
+              (r.notes ? ` — ${escapeHtml(r.notes)}` : '') +
               `</li>`
             )
           })
           .join('') +
         '</ul>'
       : ''
+    const successorLine = successors.length
+      ? '<p>この高校の募集は ' +
+        successors
+          .map((entry) => `<a href="/school/${escapeHtml(entry.id)}/">${escapeHtml(entry.name)}</a>`)
+          .join('、') +
+        ' に引き継がれています。</p>'
+      : ''
+    if (successors.length) pageStats.successorLinks += successors.length
     const nameHistoryList = nameHistory.length
       ? '<p>旧名称</p><ul>' +
         nameHistory
@@ -281,14 +345,92 @@ function renderSchoolPage(school) {
           .join('') +
         '</ul>'
       : ''
-    lifecycleSection = `<section><dl>${lifecycleDl}</dl>${predecessorList}${nameHistoryList}</section>`
+    lifecycleSection =
+      `<section><h2>${escapeHtml(school.name)}の沿革・募集状態</h2>` +
+      `<dl>${lifecycleDl}</dl>${openedSentence}${predecessorList}${successorLine}${nameHistoryList}</section>`
   }
+
+  // --- 選抜実績の年度表（c4 C3）。集計は React 側と共有の primaryAdmissionTrend。 ---
+  // 倍率は表内の 1 列にとどめ、単独で大きく見せない。一覧の倍率順ソートは実装しない
+  // （ランキングサイト化の禁止線・docs/local/plan_seo-growth-strategy.md §やらないこと）。
+  const trend = primaryAdmissionTrend({
+    admission_selections: flattenRecruitmentUnits(school.admission_recruitment_units),
+  })
+  let admissionSection = ''
+  if (trend) {
+    pageStats.admissionTables += 1
+    const numCell = (value) => (value == null ? '—' : Number(value).toLocaleString('en-US'))
+    const tableRows = trend.annual
+      .map(
+        (annual) =>
+          `<tr><th scope="row">${annual.year}年度</th>` +
+          `<td>${numCell(annual.capacity)}</td><td>${numCell(annual.applicants)}</td>` +
+          `<td>${numCell(annual.examinees)}</td><td>${numCell(annual.admitted)}</td>` +
+          `<td>${annual.ratio.toFixed(2)}</td></tr>`,
+      )
+      .join('')
+    const averageLine =
+      trend.average != null ? `<p>3年平均（補助値）: ${trend.average.toFixed(2)}</p>` : ''
+    // 出典（重複除去）。全ての数値に公式出典リンクを付ける（c4 C3 完了条件）。
+    const seenSources = new Set()
+    const sourceParts = []
+    for (const source of trend.annual.flatMap((annual) => annual.sources)) {
+      const key = `${source.official_url}|${source.doc_title}`
+      if (seenSources.has(key)) continue
+      seenSources.add(key)
+      const href = safeUrl(source.official_url)
+      const label = escapeHtml(source.doc_title || '公式資料')
+      const published = source.published_at ? `（公表日: ${escapeHtml(source.published_at)}）` : ''
+      sourceParts.push(
+        href ? `<a href="${escapeHtml(href)}" rel="noopener">${label}</a>${published}` : `${label}${published}`,
+      )
+    }
+    if (sourceParts.length === 0) pageStats.admissionTablesWithoutSource += 1
+    const sourceLine = sourceParts.length ? `<p>出典: ${sourceParts.join(' ／ ')}</p>` : ''
+    admissionSection =
+      `<section><h2>${escapeHtml(school.name)}の年度別志願状況（一次募集）</h2>` +
+      '<table><thead><tr><th>年度</th><th>募集人員</th><th>志願者数</th><th>受検者数</th><th>合格者数</th><th>倍率</th></tr></thead>' +
+      `<tbody>${tableRows}</tbody></table>` +
+      `<p>${escapeHtml(TREND_DESCRIPTIONS[trend.continuity] ?? '')}</p>` +
+      averageLine +
+      sourceLine +
+      '</section>'
+  } else {
+    // 選抜実績が公立にしか無い非対称を「情報が無い＝劣る」と見せないため、
+    // 空の表ではなく v0.4.0 の「情報提供募集中」原則の案内を出す（c4 C3）。
+    pageStats.admissionGuidance += 1
+    const officialHref = safeUrl(school.official_url)
+    const guidance = officialHref
+      ? `入試の実施状況は<a href="${escapeHtml(officialHref)}" rel="noopener">公式サイト</a>の募集要項をご確認ください。`
+      : '入試の実施状況は学校の公表資料をご確認ください。'
+    admissionSection =
+      `<section><h2>${escapeHtml(school.name)}の入試情報</h2>` +
+      `<p>選抜実績 情報提供募集中 — ${guidance}</p></section>`
+  }
+
+  // --- 近隣校リスト（c4 C1）。距離は「直線距離」と明記し、「通える」「通学時間」は書かない。 ---
+  const neighbors = neighborIndex.get(school.id) ?? []
+  pageStats.neighborLinks += neighbors.length
+  const neighborItems = neighbors
+    .map(
+      ({ school: neighbor, distanceKm }) =>
+        `<li><a href="/school/${escapeHtml(neighbor.id)}/">${escapeHtml(neighbor.name)}</a>` +
+        `（${escapeHtml(neighborPlaceLabel(school, neighbor))}・約 ${distanceKm.toFixed(1)} km）</li>`,
+    )
+    .join('')
+  const neighborSection = neighbors.length
+    ? `<section><h2>${escapeHtml(school.name)}の近くにある高校</h2>` +
+      `<p>直線距離の近い順に ${neighbors.length} 校。実際の通学経路・所要時間は交通手段により異なります。</p>` +
+      `<ul>${neighborItems}</ul></section>`
+    : ''
 
   // #root の中身はアプリ mount 時に置き換わる（クローラー向けの初期 HTML）。
   const staticContent =
     `<main><h1>${escapeHtml(school.name)}</h1>` +
     (school.name_kana ? `<p>${escapeHtml(school.name_kana)}</p>` : '') +
     `<dl>${dl}</dl>${officialLink}${lifecycleSection}` +
+    admissionSection +
+    neighborSection +
     `<p>Manabi Map（まなびマップ）は、住所を入れると通える${typeLabel}が地図に表示される無料の学校選びサービスです。` +
     `お気に入り保存・見学メモ・家族での共有ができます。</p>` +
     `<p><a href="/">地図で通える学校をさがす</a></p></main>`
@@ -336,6 +478,60 @@ if (targets.length < MIN_EXPECTED) {
   throw new Error(
     `gen-seo-pages: 生成 ${targets.length} 件は下限 ${MIN_EXPECTED} 未満。データ大幅欠損の疑い`
   )
+}
+
+// --- 近隣校インデックス / 沿革の逆引き（plan_seo-growth-strategy_c4 C1 / C2） ----
+
+// 全校の緯度経度から、各校の近隣校を 1 回だけ計算する（2026-08-04 実測:
+// 5,095 校の総当たり ≒ 2,600 万回でも Node で数秒）。空間索引は不要。
+// 選定・並び順のロジックは src/lib/neighbors.ts（React 側と共有）にあり、
+// 距離順ソートのみ。偏差値順・倍率順は実装しない（ランキングサイト化の禁止線・
+// docs/local/plan_seo-growth-strategy.md §やらないこと）。
+const neighborUniverse = targets.map((s) => ({
+  id: s.id,
+  name: s.name,
+  prefecture: s.prefecture,
+  city: s.city ?? null,
+  latitude: Number(s.latitude),
+  longitude: Number(s.longitude),
+}))
+const neighborIndex = new Map()
+for (const subject of neighborUniverse) {
+  neighborIndex.set(subject.id, selectNeighbors(subject, neighborUniverse))
+}
+
+/** 生成対象に個別ページがある学校 id（前身校・後継校リンクの張り先判定用）。 */
+const schoolPageIds = new Set(targets.map((s) => s.id))
+
+// 前身校 id → 後継校の逆引き。前身校側のページに
+// 「この高校の募集は◯◯に引き継がれています」の逆方向リンクを出す。
+const successorsByPredecessorId = new Map()
+for (const s of targets) {
+  for (const rel of s.predecessor_relationships ?? []) {
+    const predecessorId = rel.predecessor?.id
+    if (!predecessorId) continue
+    const list = successorsByPredecessorId.get(predecessorId) ?? []
+    if (!list.some((entry) => entry.id === s.id)) list.push({ id: s.id, name: s.name })
+    successorsByPredecessorId.set(predecessorId, list)
+  }
+}
+
+// SchoolDetailSheet.tsx の admissionTrend 説明文と同じ文言（i18n/ja.ts 準拠）。
+const TREND_DESCRIPTIONS = {
+  three: '3年連続で確認できます。年度別の数値を主に見てください。',
+  two: '2年連続で確認できます。平均は出さず、各年度を表示しています。',
+  gapped: '隔年のデータです。飛び飛びの年を平均せず、確認できる年度だけを表示しています。',
+  one: '1年分を確認できます。他の年度は推測で補っていません。',
+}
+
+// 実測レポート用の集計（生成ログに出す）。
+const pageStats = {
+  neighborLinks: 0,
+  admissionTables: 0,
+  admissionGuidance: 0,
+  admissionTablesWithoutSource: 0,
+  historySections: 0,
+  successorLinks: 0,
 }
 
 // --- 県ハブ / 全域ハブ ------------------------------------------------------
@@ -689,7 +885,19 @@ const sitemap =
   '\n</urlset>\n'
 await writeFile(join(distDir, 'sitemap.xml'), sitemap)
 
+// 出典なしの年度表は c4 C3 完了条件（全数値に出典）に反するのでビルドを落とす。
+if (pageStats.admissionTablesWithoutSource > 0) {
+  throw new Error(
+    `gen-seo-pages: 出典リンクの無い選抜実績表が ${pageStats.admissionTablesWithoutSource} 校ある`,
+  )
+}
+
 console.log(
   `wrote ${targets.length} school pages, ${prefPages.length} pref hubs, ` +
   `${LEGAL_DOCS.length} legal pages, press, 404 and sitemap.xml (${urls.length} urls) to ${distDir}`,
+)
+console.log(
+  `school page blocks: neighborLinks=${pageStats.neighborLinks} ` +
+  `admissionTables=${pageStats.admissionTables} admissionGuidance=${pageStats.admissionGuidance} ` +
+  `historySections=${pageStats.historySections} successorLinks=${pageStats.successorLinks}`,
 )
