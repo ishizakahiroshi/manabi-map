@@ -105,6 +105,7 @@ Supabase / LINE の接続情報はリポジトリ外に保管する。`web/.env.
 |---|---|---|
 | バージョンリリース全体（backup → migration → データ投入 → 検証 → プレビュー → main マージ → タグ） | `manabi-map-deploy` | 「manabi-map リリース」「v0.x.y 出して」「関東の次のリリース」 |
 | 新県データ投入（schools SQL + deviation SQL + 校パターン再分類 + course_type_master 確認） | `manabi-map-add-prefecture` | 「◯◯県 追加」「manabi-map に◯◯県入れて」「新県 データ投入」 |
+| nullable な学校情報を「情報提供募集中」型で追加（テンプレ・i18n・CSS・実装メモ生成） | `manabi-map-info-wanted-field` | 「情報提供募集中 field 追加」「空欄可能フィールド」「manabi-map-info-wanted-field」 |
 | Supabase 本番へ migration 適用（Docker 不要・psql 直叩き・backup + schema_migrations 記録） | `supabase-migrate` | 「Supabase migration 適用」「本番 DB に SQL 流して」「pg_dump backup 取って」 |
 | フリーテキスト分類列 → master + FK + trigger 化（表記ゆれ・分類漏れ対策） | `taxonomy-refactor` | 「分類を master 化」「course_type refactor」「表記ゆれ対策」 |
 

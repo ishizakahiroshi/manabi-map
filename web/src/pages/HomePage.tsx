@@ -10,6 +10,7 @@ import {
   type SearchIndexes,
 } from '../lib/searchIndex'
 import { PREFECTURES, REGION_KEYS } from '../lib/prefecture'
+import { GUIDES } from '../lib/guides'
 import { trackEvent } from '../lib/analytics'
 import type { HomeLocation } from '../types/school'
 import { AdSlot } from './../components/AdSlot'
@@ -364,6 +365,17 @@ export function HomePage() {
           {t('home.allSchools')}
         </a>
       </nav>
+
+      <section aria-labelledby="school-guide-heading">
+        <div className="divider" id="school-guide-heading">学校選びガイド</div>
+        <nav className="demo-links" aria-label="学校選びガイド">
+          {GUIDES.map((guide) => (
+            <a key={guide.slug} href={`/guide/${guide.slug}/`}>
+              {guide.navLabel}
+            </a>
+          ))}
+        </nav>
+      </section>
 
       <div className="divider">{t('home.demo')}</div>
       <div className="demo-links">
