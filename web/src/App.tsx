@@ -110,7 +110,7 @@ export default function App() {
           <Route path="/guide/:slug" element={<GuideRoute />} />
           <Route path="/press" element={<PressPage />} />
           <Route path="/schools" element={<SchoolsHubPage />} />
-          <Route path="/pref/:pref" element={<PrefecturePage />} />
+          <Route path="/pref/:pref" element={<PrefecturePage userData={userData} />} />
           <Route path="/dashboard" element={<DashboardRoute isAdmin={isAdmin} checking={checkingAdmin} />} />
           {/* 未知の URL への SPA 内遷移。直リンクは Cloudflare Pages が dist/404.html を返す */}
           <Route path="*" element={<NotFoundPage />} />
