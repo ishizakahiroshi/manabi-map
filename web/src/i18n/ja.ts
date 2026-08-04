@@ -56,6 +56,7 @@ export const ja: MessageTree = {
   },
   tabs: {
     label: '主要ナビゲーション',
+    home: 'ホーム',
     map: '地図',
     favorites: 'お気に入り',
     mypage: 'マイページ',
