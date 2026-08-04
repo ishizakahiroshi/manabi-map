@@ -39,8 +39,8 @@ function breadcrumbLd(schoolName) {
 // 合成データは実在校ではなく架空校（fixture は合成データで書く）。
 // prefecture は prefectures.json との突き合わせを検査するため実在県名を使う。
 const SCHOOLS = [
-  { id: 'synthetic-a', name: '合成第一高等学校', prefecture: '群馬県', latitude: 36.4, longitude: 139.1 },
-  { id: 'synthetic-b', name: '合成第二高等学校', prefecture: '群馬県', latitude: 36.5, longitude: 139.2 },
+  { id: 'synthetic-a', name: '合成第一高等学校', prefecture: '群馬県', city: '前橋市', latitude: 36.4, longitude: 139.1 },
+  { id: 'synthetic-b', name: '合成第二高等学校', prefecture: '群馬県', city: '前橋市', latitude: 36.5, longitude: 139.2 },
 ]
 
 async function syntheticDist() {
@@ -320,6 +320,29 @@ test('an admission year table without 出典 is rejected', async (t) => {
   await assert.rejects(
     verifyStaticOutput({ distDir: dir, maxFileBytes: 1024 * 1024 }),
     /admission table without 出典/,
+  )
+})
+
+test('an admission year table with only a source label is rejected', async (t) => {
+  const dir = await syntheticDist()
+  t.after(() => rm(dir, { recursive: true, force: true }))
+  await writeFile(join(dir, 'school', 'synthetic-b', 'index.html'), page({
+    title: '合成第二高等学校（群馬県前橋市）の地図・アクセス・学科 | Manabi Map',
+    canonical: `${ORIGIN}/school/synthetic-b/`,
+    main: '<h1>合成第二高等学校</h1>' +
+      '<section><h2>合成第二高等学校の年度別志願状況（一次募集）</h2><table></table>' +
+      '<p>出典: 合成資料</p></section>' +
+      '<section><h2>合成第二高等学校の近くにある高校</h2>' +
+      '<p>直線距離の近い順に 1 校。</p>' +
+      '<ul><li><a href="/school/synthetic-a/">合成第一高等学校</a>（前橋市・約 1.0 km）</li></ul></section>',
+    jsonLd: [
+      { '@context': 'https://schema.org', '@type': 'HighSchool', name: '合成第二高等学校' },
+      breadcrumbLd('合成第二高等学校'),
+    ],
+  }))
+  await assert.rejects(
+    verifyStaticOutput({ distDir: dir, maxFileBytes: 1024 * 1024 }),
+    /admission table without 出典 URL/,
   )
 })
 
