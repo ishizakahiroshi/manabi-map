@@ -6,7 +6,7 @@ import { gzipSync } from 'node:zlib'
 import { createClient } from '@supabase/supabase-js'
 import { loadCivicData, resolveCityGroup } from './lib/municipalities.mjs'
 // 近隣校の選定と後継校の逆引きは React 側・gen-seo-pages.mjs と同一実装を共有する
-// （Node 22.18+ の type stripping で .ts を直 import。フォーク禁止 —
+// （tsx 経由で .ts を直 import（package.json の scripts が tsx で起動する。Node の type stripping には依存しない — Cloudflare Pages のビルドイメージは pnpm 同梱の preinstall Node しか使えないため）。フォーク禁止 —
 // 学校単体 JSON と静的 HTML・JS mount 後で校名・距離が食い違う事故を防ぐ。
 // docs/local/plan_seo-growth-strategy_c7 C1）。
 import { selectNeighbors } from '../src/lib/neighbors.ts'
