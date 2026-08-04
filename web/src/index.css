@@ -96,7 +96,7 @@ body {
 .header .brand-icon {
   width: 24px; height: 24px; flex: 0 0 auto; display: block;
 }
-/* 仮名併記でブランド名が長いため、狭い端末でも ★ ボタンを押し出さないよう省略に倒す。 */
+/* 仮名併記でブランド名が長いため、狭い端末では省略に倒す。 */
 .header .brand {
   flex: 1; letter-spacing: -0.01em;
   min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
@@ -120,7 +120,6 @@ body {
   font-family: var(--display); font-size: 1rem; cursor: pointer;
 }
 .icon-btn:active { transform: translate(1px, 1px); }
-.header-fav-icon { color: var(--fav-yellow); font-size: 1.25rem; line-height: 1; }
 
 .screen {
   position: absolute; inset: 0;
@@ -488,6 +487,12 @@ body {
 .neighbor-block li + li { margin-top: 5px; }
 .neighbor-block a { color: var(--accent); font-weight: 700; }
 .neighbor-block .neighbor-meta { color: var(--ink-soft); font-size: 0.8rem; }
+/* 初期は先頭のみ表示（6 = NEIGHBOR_PREVIEW_COUNT + 1。SchoolDetailSheet.tsx と対） */
+.neighbor-block.collapsed li:nth-child(n + 6) { display: none; }
+.neighbor-block .neighbor-more {
+  margin-top: 8px; padding: 5px 12px; font-size: 0.8rem;
+  border-style: dashed; box-shadow: none; background: transparent; color: var(--accent);
+}
 .predecessor-admissions { margin-top: 4px; }
 .predecessor-admissions summary { cursor: pointer; color: var(--primary-dark); font-weight: 650; }
 .predecessor-admissions > ul { margin-top: 5px; font-size: 0.78rem; }
