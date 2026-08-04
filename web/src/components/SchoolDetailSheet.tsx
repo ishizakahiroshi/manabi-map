@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type TouchEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type MouseEvent, type TouchEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import type { AdmissionSelection, AdmissionQualityReason, School } from '../types/school'
 import {
@@ -10,6 +10,8 @@ import {
   googleMapsRoute,
 } from '../lib/geo'
 import { primaryAdmissionTrend } from '../lib/admission'
+import { neighborPlaceLabel, selectNeighbors } from '../lib/neighbors'
+import { useSchools } from '../hooks/useSchools'
 import { useApp } from '../contexts/AppContext'
 import { useAuth } from '../contexts/AuthContext'
 import { useI18n } from '../contexts/I18nContext'
@@ -76,6 +78,26 @@ export function SchoolDetailSheet({ school, onClose, userData }: Props) {
   const schoolId = school?.id ?? null
   const open = school != null
 
+  // 近隣校・後継校の算出用。モジュールキャッシュ共有なので再フェッチは起きない。
+  const { schools } = useSchools()
+  // 選定ロジックは静的生成（gen-seo-pages.mjs）と共有（lib/neighbors.ts）。
+  // 距離順のみ。偏差値順・倍率順のソートは実装しない（ランキングサイト化の禁止線）。
+  const neighbors = useMemo(
+    () => (school ? selectNeighbors(school, schools) : []),
+    [school, schools],
+  )
+  const schoolIdSet = useMemo(() => new Set(schools.map((s) => s.id)), [schools])
+  // この学校を前身校とする後継校（沿革の逆方向リンク）。
+  const successors = useMemo(
+    () =>
+      school
+        ? schools.filter((s) =>
+            s.predecessor_relationships.some((r) => r.predecessor.id === school.id),
+          )
+        : [],
+    [school, schools],
+  )
+
   useFocusTrap(sheetRef, open)
   useEscapeKey(onClose, open)
 
@@ -83,6 +105,8 @@ export function SchoolDetailSheet({ school, onClose, userData }: Props) {
     if (!schoolId) return
     // 詳細シート開封（school 切替時に 1 回）。PII は載せない（school_id / prefecture のみ）
     trackEvent('detail_open', { school_id: schoolId, prefecture: school?.prefecture })
+    // 近隣校リンク等でシート内から別の学校へ切り替わったとき、本文を先頭へ戻す
+    sheetRef.current?.querySelector('.body')?.scrollTo({ top: 0 })
     dirtyRef.current = { memo: false, commute: false, mineNote: false, depts: false }
     const n = notes[schoolId]
     setMemo(n?.note ?? '')
@@ -187,7 +211,15 @@ export function SchoolDetailSheet({ school, onClose, userData }: Props) {
     school.predecessor_relationships.length > 0 ||
     school.name_history.length > 0 ||
     school.legally_established_on != null ||
-    school.opened_on != null
+    school.opened_on != null ||
+    successors.length > 0
+
+  /** シート内から別の学校ページへ SPA 遷移する（<a href> はクローラー・新規タブ用に残す） */
+  const schoolLinkClick = (id: string) => (e: MouseEvent<HTMLAnchorElement>) => {
+    if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return
+    e.preventDefault()
+    navigate(`/school/${id}`)
+  }
 
   const admissionSelections = school.admission_selections
     .slice()
@@ -643,11 +675,21 @@ export function SchoolDetailSheet({ school, onClose, userData }: Props) {
                   {school.predecessor_relationships.map((relationship) => (
                     <li key={relationship.id}>
                       <div>
-                        {relationship.predecessor.name}{' '}
+                        {schoolIdSet.has(relationship.predecessor.id) ? (
+                          <a
+                            href={`/school/${relationship.predecessor.id}`}
+                            onClick={schoolLinkClick(relationship.predecessor.id)}
+                          >
+                            {relationship.predecessor.name}
+                          </a>
+                        ) : (
+                          relationship.predecessor.name
+                        )}{' '}
                         <small>{t('detail.effectiveOn', { date: relationship.effective_on })}</small>{' '}
                         <a href={relationship.official_url} target="_blank" rel="noreferrer">
                           {t('detail.officialEvidence')}
                         </a>
+                        {relationship.notes && <small> — {relationship.notes}</small>}
                       </div>
                       <details className="predecessor-admissions">
                         <summary>
@@ -682,6 +724,20 @@ export function SchoolDetailSheet({ school, onClose, userData }: Props) {
                   ))}
                 </ul>
               </div>
+            )}
+            {successors.length > 0 && (
+              <p className="successor-note">
+                {t('detail.successorPrefix')}
+                {successors.map((s, i) => (
+                  <span key={s.id}>
+                    {i > 0 && '、'}
+                    <a href={`/school/${s.id}`} onClick={schoolLinkClick(s.id)}>
+                      {s.name}
+                    </a>
+                  </span>
+                ))}
+                {t('detail.successorSuffix')}
+              </p>
             )}
             {school.name_history.length > 0 && (
               <div className="lifecycle-list">
@@ -817,13 +873,32 @@ export function SchoolDetailSheet({ school, onClose, userData }: Props) {
               {admissionTrend && (
                 <section className="admission-trend">
                   <h5>{t('detail.admissionTrendTitle')}</h5>
-                  <div className="admission-trend-years">
-                    {admissionTrend.annual.map((annual) => (
-                      <span key={annual.year}>
-                        {annual.year}{t('detail.admissionYearSuffix')} {annual.ratio.toFixed(2)}
-                        <small> ({annual.applicants.toLocaleString()} / {annual.capacity.toLocaleString()})</small>
-                      </span>
-                    ))}
+                  {/* 静的生成（gen-seo-pages.mjs）の年度表と同じ集計値を出す（内容一致・c4 C5） */}
+                  <div className="admission-scroll">
+                    <table className="admission-table">
+                      <thead>
+                        <tr>
+                          <th>{t('detail.admissionYear')}</th>
+                          <th>{t('detail.admissionCapacity')}</th>
+                          <th>{t('detail.admissionApplicants')}</th>
+                          <th>{t('detail.admissionExaminees')}</th>
+                          <th>{t('detail.admissionAdmitted')}</th>
+                          <th>{t('detail.admissionRatio')}</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {admissionTrend.annual.map((annual) => (
+                          <tr key={annual.year}>
+                            <th scope="row">{annual.year}{t('detail.admissionYearSuffix')}</th>
+                            <td>{admissionValue(annual.capacity)}</td>
+                            <td>{admissionValue(annual.applicants)}</td>
+                            <td>{admissionValue(annual.examinees)}</td>
+                            <td>{admissionValue(annual.admitted)}</td>
+                            <td>{annual.ratio.toFixed(2)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
                   {trendDescription && <p>{trendDescription}</p>}
                   {admissionTrend.average != null && (
@@ -862,6 +937,28 @@ export function SchoolDetailSheet({ school, onClose, userData }: Props) {
           )}
           <p className="note">{t('detail.disclaimer')}</p>
         </details>
+
+        {neighbors.length > 0 && (
+          <div className="neighbor-block">
+            <h4>📍 {t('detail.neighborTitle')}</h4>
+            <p className="sub">{t('detail.neighborNote', { count: neighbors.length })}</p>
+            <ul>
+              {neighbors.map(({ school: neighbor, distanceKm }) => (
+                <li key={neighbor.id}>
+                  <a href={`/school/${neighbor.id}`} onClick={schoolLinkClick(neighbor.id)}>
+                    {neighbor.name}
+                  </a>
+                  <span className="neighbor-meta">
+                    （{t('detail.neighborMeta', {
+                      place: neighborPlaceLabel(school, neighbor),
+                      km: distanceKm.toFixed(1),
+                    })}）
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
 
         <div className="mine-block">
           <h4>📊 {t('detail.myBlockTitle')}</h4>

@@ -89,10 +89,14 @@ async function syntheticDist() {
   for (const school of SCHOOLS) {
     const schoolDir = join(dir, 'school', school.id)
     await mkdir(schoolDir, { recursive: true })
+    const neighbor = SCHOOLS.find((s) => s.id !== school.id)
     await writeFile(join(schoolDir, 'index.html'), page({
       title: `${school.name}（${school.prefecture}前橋市）の地図・アクセス・学科 | Manabi Map`,
       canonical: `${ORIGIN}/school/${school.id}/`,
-      main: `<h1>${school.name}</h1>`,
+      main: `<h1>${school.name}</h1>` +
+        `<section><h2>${school.name}の近くにある高校</h2>` +
+        '<p>直線距離の近い順に 1 校。実際の通学経路・所要時間は交通手段により異なります。</p>' +
+        `<ul><li><a href="/school/${neighbor.id}/">${neighbor.name}</a>（前橋市・約 1.0 km）</li></ul></section>`,
       jsonLd: { '@context': 'https://schema.org', '@type': 'HighSchool', name: school.name },
     }))
   }
@@ -193,6 +197,40 @@ test('a forbidden ranking word in a pref hub is rejected', async (t) => {
   await assert.rejects(
     verifyStaticOutput({ distDir: dir, maxFileBytes: 1024 * 1024 }),
     /forbidden word/,
+  )
+})
+
+test('a school page without the neighbor section is rejected', async (t) => {
+  const dir = await syntheticDist()
+  t.after(() => rm(dir, { recursive: true, force: true }))
+  await writeFile(join(dir, 'school', 'synthetic-b', 'index.html'), page({
+    title: '合成第二高等学校（群馬県前橋市）の地図・アクセス・学科 | Manabi Map',
+    canonical: `${ORIGIN}/school/synthetic-b/`,
+    main: '<h1>合成第二高等学校</h1>',
+    jsonLd: { '@context': 'https://schema.org', '@type': 'HighSchool', name: '合成第二高等学校' },
+  }))
+  await assert.rejects(
+    verifyStaticOutput({ distDir: dir, maxFileBytes: 1024 * 1024 }),
+    /missing neighbor section heading/,
+  )
+})
+
+test('an admission year table without 出典 is rejected', async (t) => {
+  const dir = await syntheticDist()
+  t.after(() => rm(dir, { recursive: true, force: true }))
+  await writeFile(join(dir, 'school', 'synthetic-b', 'index.html'), page({
+    title: '合成第二高等学校（群馬県前橋市）の地図・アクセス・学科 | Manabi Map',
+    canonical: `${ORIGIN}/school/synthetic-b/`,
+    main: '<h1>合成第二高等学校</h1>' +
+      '<section><h2>合成第二高等学校の年度別志願状況（一次募集）</h2><table></table></section>' +
+      '<section><h2>合成第二高等学校の近くにある高校</h2>' +
+      '<p>直線距離の近い順に 1 校。</p>' +
+      '<ul><li><a href="/school/synthetic-a/">合成第一高等学校</a>（前橋市・約 1.0 km）</li></ul></section>',
+    jsonLd: { '@context': 'https://schema.org', '@type': 'HighSchool', name: '合成第二高等学校' },
+  }))
+  await assert.rejects(
+    verifyStaticOutput({ distDir: dir, maxFileBytes: 1024 * 1024 }),
+    /admission table without 出典/,
   )
 })
 

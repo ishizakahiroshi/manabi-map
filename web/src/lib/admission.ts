@@ -1,10 +1,15 @@
-import type { AdmissionSelection, School } from '../types/school'
+import type { AdmissionSelection, AdmissionSelectionSource, School } from '../types/school'
 
 export interface AnnualAdmissionRatio {
   year: number
   capacity: number
   applicants: number
+  /** 年度内の全採用行が公表している場合のみ合算値。1 行でも未公表なら null（推測合算しない）。 */
+  examinees: number | null
+  admitted: number | null
   ratio: number
+  /** この年度の採用行に付いていた公式出典（プリレンダーの脚注用。重複除去は表示側で行う）。 */
+  sources: AdmissionSelectionSource[]
 }
 
 export type AdmissionContinuity = 'three' | 'two' | 'gapped' | 'one'
@@ -68,6 +73,16 @@ function aggregateYear(year: number, selections: AdmissionSelection[]): AnnualWi
   const applicants = selections.reduce((sum, selection) => sum + selection.applicants!, 0)
   if (capacity <= 0) return null
 
+  // 受検者数・合格者数は任意公表。年度内の全行が公表している場合だけ合算し、
+  // 1 行でも欠けたら null（部分合算は誤った数字になるため出さない）。
+  const sumIfComplete = (pick: (selection: AdmissionSelection) => number | null): number | null =>
+    selections.every((selection) => pick(selection) != null)
+      ? selections.reduce((sum, selection) => sum + pick(selection)!, 0)
+      : null
+  const examinees = sumIfComplete((selection) => selection.examinees)
+  const admitted = sumIfComplete((selection) => selection.admitted)
+  const sources = selections.flatMap((selection) => selection.sources)
+
   const scopeSignature = selections
     .map((selection) =>
       [
@@ -82,7 +97,7 @@ function aggregateYear(year: number, selections: AdmissionSelection[]): AnnualWi
     .sort()
     .join('\u001e')
 
-  return { year, capacity, applicants, ratio: applicants / capacity, scopeSignature }
+  return { year, capacity, applicants, examinees, admitted, ratio: applicants / capacity, sources, scopeSignature }
 }
 
 function continuityOf(annual: AnnualWithScope[]): AdmissionContinuity {

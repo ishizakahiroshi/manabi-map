@@ -90,9 +90,9 @@ describe('primaryAdmissionTrend', () => {
 
     expect(trend).toEqual({
       annual: [
-        { year: 2026, capacity: 100, applicants: 120, ratio: 1.2 },
-        { year: 2025, capacity: 100, applicants: 150, ratio: 1.5 },
-        { year: 2024, capacity: 100, applicants: 90, ratio: 0.9 },
+        { year: 2026, capacity: 100, applicants: 120, examinees: null, admitted: null, ratio: 1.2, sources: [] },
+        { year: 2025, capacity: 100, applicants: 150, examinees: null, admitted: null, ratio: 1.5, sources: [] },
+        { year: 2024, capacity: 100, applicants: 90, examinees: null, admitted: null, ratio: 0.9, sources: [] },
       ],
       continuity: 'three',
       average: 1.2,
@@ -151,7 +151,10 @@ describe('primaryAdmissionTrend', () => {
       year: 2026,
       capacity: 120,
       applicants: 150,
+      examinees: null,
+      admitted: null,
       ratio: 1.25,
+      sources: [],
     })
   })
 
@@ -201,7 +204,10 @@ describe('primaryAdmissionTrend', () => {
       year: 2026,
       capacity: 100,
       applicants: 120,
+      examinees: null,
+      admitted: null,
       ratio: 1.2,
+      sources: [],
     })
   })
 
@@ -212,6 +218,30 @@ describe('primaryAdmissionTrend', () => {
       unit_label: '定時制',
     })
     expect(primaryAdmissionTrend(school([parttime]))?.annual[0].ratio).toBe(0.5)
+  })
+
+  it('受検者・合格者は全行公表の指標だけ合算し、欠けがあれば null にする', () => {
+    const selections = [
+      selection(2026, 40, 50, {
+        recruitment_unit_id: 'group-a',
+        unit_key: 'group-a',
+        unit_kind_code: 'department_group',
+        department_ids: ['general'],
+        examinees: 48,
+        admitted: 40,
+      }),
+      selection(2026, 40, 60, {
+        recruitment_unit_id: 'group-b',
+        unit_key: 'group-b',
+        unit_kind_code: 'department_group',
+        department_ids: ['science'],
+        examinees: null,
+        admitted: 38,
+      }),
+    ]
+    const annual = primaryAdmissionTrend(school(selections))?.annual[0]
+    expect(annual?.examinees).toBeNull()
+    expect(annual?.admitted).toBe(78)
   })
 
   it('対象外stage/role/comparable行と旧admission_statsを地図集計に使わない', () => {
