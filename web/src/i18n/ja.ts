@@ -139,6 +139,8 @@ export const ja: MessageTree = {
     cityHeading: '{city}（{n} 校）',
     cityShown: '表示 {n} 校',
     cityAllFiltered: '絞り込み条件に合う学校がありません',
+    deviationLabel: '目安 {v}',
+    admissionLatest: '{year}年度 一次募集 {ratio}',
     backToAll: '都道府県一覧へ',
   },
   notFound: {
