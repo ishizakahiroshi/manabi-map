@@ -9,16 +9,31 @@ import { verifyStaticOutput } from './verify-static-output.mjs'
 
 const ORIGIN = 'https://manabi-map.app'
 
-/** 検証対象の骨格（canonical / og:url / title / main）を持つ最小ページを合成する。 */
+/** 検証対象の骨格（canonical / og:url / title / main）を持つ最小ページを合成する。
+ * jsonLd は単体 object でも配列でもよい（配列は本番同様に script タグを分けて出す）。 */
 function page({ title, canonical, main, jsonLd, noindex = false }) {
   const canonicalTag = canonical ? `<link rel="canonical" href="${canonical}">` : ''
   const ogUrl = canonical ? `<meta property="og:url" content="${canonical}">` : ''
   const robots = noindex ? '<meta name="robots" content="noindex" />' : ''
-  const jsonLdTag = jsonLd
-    ? `<script type="application/ld+json">${JSON.stringify(jsonLd)}</script>`
-    : ''
+  const jsonLdTag = (Array.isArray(jsonLd) ? jsonLd : jsonLd ? [jsonLd] : [])
+    .map((block) => `<script type="application/ld+json">${JSON.stringify(block)}</script>`)
+    .join('')
   return `<!doctype html><html><head><title>${title}</title>${robots}${canonicalTag}${ogUrl}${jsonLdTag}</head>` +
     `<body><div id="root"><main>${main}</main></div></body></html>`
+}
+
+/** 学校ページの BreadcrumbList JSON-LD（本番: ホーム › 県 › 市区町村 › 校名）。 */
+function breadcrumbLd(schoolName) {
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'BreadcrumbList',
+    itemListElement: [
+      { '@type': 'ListItem', position: 1, name: 'ホーム', item: `${ORIGIN}/` },
+      { '@type': 'ListItem', position: 2, name: '群馬県', item: `${ORIGIN}/pref/gunma/` },
+      { '@type': 'ListItem', position: 3, name: '前橋市' },
+      { '@type': 'ListItem', position: 4, name: schoolName },
+    ],
+  }
 }
 
 // 合成データは実在校ではなく架空校（fixture は合成データで書く）。
@@ -42,12 +57,35 @@ async function syntheticDist() {
   await writeFile(join(dir, 'schools-manifest.json'), JSON.stringify({
     url: '/schools-a1b2c3d4e5.json', count: SCHOOLS.length, compression: 'gzip',
     cityIndexUrl: '/city-index-0123456789.json', nameIndexUrl: '/school-name-index-0123456789.json',
+    schoolDataVersion: 'a1b2c3d4e5', schoolDataCount: SCHOOLS.length,
+    prefDataUrls: { gunma: '/school-data/pref-gunma.json' },
+  }))
+
+  // 学校単体 JSON / 県別分割 JSON（c7 C1）
+  await mkdir(join(dir, 'school-data'), { recursive: true })
+  for (const school of SCHOOLS) {
+    const neighbor = SCHOOLS.find((s) => s.id !== school.id)
+    await writeFile(join(dir, 'school-data', `${school.id}.json`), JSON.stringify({
+      formatVersion: 2,
+      sourceCatalog: [],
+      schools: [school],
+      neighbors: [{ id: neighbor.id, name: neighbor.name, prefecture: neighbor.prefecture, city: '前橋市', distanceKm: 1.0 }],
+      successors: [],
+      linkableSchoolIds: [],
+    }))
+  }
+  await writeFile(join(dir, 'school-data', 'pref-gunma.json'), JSON.stringify({
+    formatVersion: 2, sourceCatalog: [], schools: SCHOOLS,
   }))
 
   await writeFile(join(dir, 'index.html'), page({
     title: 'Manabi Map',
     canonical: `${ORIGIN}/`,
     main: '<h1>親子で使う、学校選びの地図ノート。</h1><nav><a href="/pref/gunma/">群馬県</a></nav>',
+    jsonLd: [
+      { '@context': 'https://schema.org', '@type': 'WebSite', '@id': `${ORIGIN}/#website`, name: 'Manabi Map' },
+      { '@context': 'https://schema.org', '@type': 'Organization', '@id': `${ORIGIN}/#organization`, name: 'Manabi Map' },
+    ],
   }))
   await mkdir(join(dir, 'schools'), { recursive: true })
   await writeFile(join(dir, 'schools', 'index.html'), page({
@@ -97,7 +135,10 @@ async function syntheticDist() {
         `<section><h2>${school.name}の近くにある高校</h2>` +
         '<p>直線距離の近い順に 1 校。実際の通学経路・所要時間は交通手段により異なります。</p>' +
         `<ul><li><a href="/school/${neighbor.id}/">${neighbor.name}</a>（前橋市・約 1.0 km）</li></ul></section>`,
-      jsonLd: { '@context': 'https://schema.org', '@type': 'HighSchool', name: school.name },
+      jsonLd: [
+        { '@context': 'https://schema.org', '@type': 'HighSchool', name: school.name },
+        breadcrumbLd(school.name),
+      ],
     }))
   }
   await writeFile(join(dir, 'sitemap.xml'), [
@@ -124,6 +165,8 @@ test('gzip magic, manifest, sitemap, all pages and size gate pass together', asy
   assert.equal(result.prefPageCount, 1)
   assert.equal(result.sitemapUrlCount, 10)
   assert.equal(result.sitemapUniqueUrlCount, 10)
+  assert.equal(result.schoolDataCount, 2)
+  assert.equal(result.prefDataCount, 1)
 })
 
 test('a file exactly at the limit is rejected because the contract is strictly under 25 MiB', async (t) => {
@@ -207,11 +250,42 @@ test('a school page without the neighbor section is rejected', async (t) => {
     title: '合成第二高等学校（群馬県前橋市）の地図・アクセス・学科 | Manabi Map',
     canonical: `${ORIGIN}/school/synthetic-b/`,
     main: '<h1>合成第二高等学校</h1>',
-    jsonLd: { '@context': 'https://schema.org', '@type': 'HighSchool', name: '合成第二高等学校' },
+    jsonLd: [
+      { '@context': 'https://schema.org', '@type': 'HighSchool', name: '合成第二高等学校' },
+      breadcrumbLd('合成第二高等学校'),
+    ],
   }))
   await assert.rejects(
     verifyStaticOutput({ distDir: dir, maxFileBytes: 1024 * 1024 }),
     /missing neighbor section heading/,
+  )
+})
+
+test('a school page without BreadcrumbList JSON-LD is rejected', async (t) => {
+  const dir = await syntheticDist()
+  t.after(() => rm(dir, { recursive: true, force: true }))
+  await writeFile(join(dir, 'school', 'synthetic-b', 'index.html'), page({
+    title: '合成第二高等学校（群馬県前橋市）の地図・アクセス・学科 | Manabi Map',
+    canonical: `${ORIGIN}/school/synthetic-b/`,
+    main: '<h1>合成第二高等学校</h1>' +
+      '<section><h2>合成第二高等学校の近くにある高校</h2>' +
+      '<p>直線距離の近い順に 1 校。</p>' +
+      '<ul><li><a href="/school/synthetic-a/">合成第一高等学校</a>（前橋市・約 1.0 km）</li></ul></section>',
+    jsonLd: { '@context': 'https://schema.org', '@type': 'HighSchool', name: '合成第二高等学校' },
+  }))
+  await assert.rejects(
+    verifyStaticOutput({ distDir: dir, maxFileBytes: 1024 * 1024 }),
+    /BreadcrumbList JSON-LD is missing or too short/,
+  )
+})
+
+test('a missing per-school JSON is rejected', async (t) => {
+  const dir = await syntheticDist()
+  t.after(() => rm(dir, { recursive: true, force: true }))
+  await rm(join(dir, 'school-data', 'synthetic-b.json'))
+  await assert.rejects(
+    verifyStaticOutput({ distDir: dir, maxFileBytes: 1024 * 1024 }),
+    /school-data count mismatch|school-data JSON is missing/,
   )
 })
 
@@ -226,7 +300,10 @@ test('an admission year table without 出典 is rejected', async (t) => {
       '<section><h2>合成第二高等学校の近くにある高校</h2>' +
       '<p>直線距離の近い順に 1 校。</p>' +
       '<ul><li><a href="/school/synthetic-a/">合成第一高等学校</a>（前橋市・約 1.0 km）</li></ul></section>',
-    jsonLd: { '@context': 'https://schema.org', '@type': 'HighSchool', name: '合成第二高等学校' },
+    jsonLd: [
+      { '@context': 'https://schema.org', '@type': 'HighSchool', name: '合成第二高等学校' },
+      breadcrumbLd('合成第二高等学校'),
+    ],
   }))
   await assert.rejects(
     verifyStaticOutput({ distDir: dir, maxFileBytes: 1024 * 1024 }),

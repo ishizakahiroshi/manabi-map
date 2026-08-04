@@ -26,7 +26,7 @@ interface DepartmentRow {
   ui_group: Department['ui_group']
 }
 
-interface SchoolRow {
+export interface SchoolRow {
   id: string
   record_key?: string | null
   name: string
@@ -98,7 +98,7 @@ interface SchoolsState {
   reload: () => void
 }
 
-function mapSchoolRows(rows: SchoolRow[]): School[] {
+export function mapSchoolRows(rows: SchoolRow[]): School[] {
   return rows
     .filter((r) => r.latitude != null && r.longitude != null)
     .map((r) => {
@@ -285,14 +285,24 @@ async function fetchSchoolRows(): Promise<SchoolRow[]> {
     schools: SchoolRow[]
     sourceCatalog: AdmissionSelectionSource[]
   }
+  hydrateAdmissionSourceRefs(compact.schools, compact.sourceCatalog)
+  return compact.schools
+}
+
+/**
+ * gen-schools-json.mjs は出典 object を sourceCatalog の index へ圧縮している。
+ * index → object へ復元する（全件 JSON と学校単体 JSON の両経路で共有。フォーク禁止）。
+ */
+export function hydrateAdmissionSourceRefs(
+  rows: SchoolRow[],
+  sourceCatalog: AdmissionSelectionSource[],
+): void {
   const hydrateUnitSources = (units: AdmissionRecruitmentUnitRow[] | null | undefined) => {
     for (const unit of units ?? []) {
       for (const stat of unit.school_admission_selection_stats ?? []) {
         const refs = (stat.school_admission_stat_sources ?? []) as unknown[]
         stat.school_admission_stat_sources = refs
-          .map((ref) =>
-            typeof ref === 'number' ? compact.sourceCatalog[ref] : ref,
-          )
+          .map((ref) => (typeof ref === 'number' ? sourceCatalog[ref] : ref))
           .filter(
             (source): source is AdmissionSelectionSource =>
               source != null && typeof source === 'object',
@@ -300,13 +310,12 @@ async function fetchSchoolRows(): Promise<SchoolRow[]> {
       }
     }
   }
-  for (const row of compact.schools) {
+  for (const row of rows) {
     hydrateUnitSources(row.admission_recruitment_units)
     for (const relationship of row.predecessor_relationships ?? []) {
       hydrateUnitSources(relationship.predecessor?.admission_recruitment_units)
     }
   }
-  return compact.schools
 }
 
 // ---------------------------------------------------------------------------
@@ -388,4 +397,38 @@ export function useSchools(): SchoolsState {
       void loadSchools(true)
     },
   }
+}
+
+// ---------------------------------------------------------------------------
+// 受動購読（fetch を起動しない）
+//
+// 学校詳細ページ（/school/:id）は単体 JSON（school-data/<id>.json）で初期描画を
+// 完結させ、全件 JSON は地図表示時のみ遅延取得する（plan_seo-growth-strategy_c7 C1）。
+// SchoolDetailSheet は「全件キャッシュがあれば使う・無くても取りに行かない」ため、
+// useSchools() ではなくこちらを購読する（useSchools を呼ぶと mount しただけで
+// 全件 fetch が走ってしまう）。
+// ---------------------------------------------------------------------------
+
+/** キャッシュ購読のみの読み取り。データが無くてもロードを開始しない。 */
+export function useSchoolsCache(): { schools: School[]; loading: boolean; error: string | null } {
+  const [, forceRender] = useState(0)
+
+  useEffect(() => {
+    const listener = () => forceRender((n) => n + 1)
+    listeners.add(listener)
+    return () => {
+      listeners.delete(listener)
+    }
+  }, [])
+
+  return {
+    schools: cachedSchools ?? [],
+    loading: cachedSchools == null && cacheError == null,
+    error: cacheError,
+  }
+}
+
+/** 全件データのロードを明示的に開始する（単体 JSON 取得失敗時のフォールバック用）。 */
+export function ensureSchoolsLoaded(): Promise<void> {
+  return loadSchools(false)
 }

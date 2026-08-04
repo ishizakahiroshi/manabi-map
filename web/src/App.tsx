@@ -1,11 +1,11 @@
-import { useMemo } from 'react'
+import { Suspense, lazy, useMemo } from 'react'
 import { Navigate, Routes, Route, useNavigate, useLocation } from 'react-router-dom'
 import { useApp } from './contexts/AppContext'
 import { useAuth } from './contexts/AuthContext'
 import { useI18n } from './contexts/I18nContext'
 import { useUserData } from './hooks/useUserData'
 import { HomePage } from './pages/HomePage'
-import { MapPage } from './pages/MapPage'
+import { SchoolDetailPage } from './pages/SchoolDetailPage'
 import { SchoolSearchPage } from './pages/SchoolSearchPage'
 import { FavoritesPage } from './pages/FavoritesPage'
 import { ComparePage } from './pages/ComparePage'
@@ -25,6 +25,13 @@ import { MaintenanceBanner } from './components/MaintenanceBanner'
 import { BottomTabBar } from './components/BottomTabBar'
 import { DashboardPage } from './pages/DashboardPage'
 import { useIsAdmin } from './hooks/useIsAdmin'
+
+// 地図（Leaflet + markercluster）は初期バンドルから分離し、/map を開いたときだけ
+// 動的 import する（plan_seo-growth-strategy_c7 C3。protomaps-leaflet の動的 import と
+// 同じ手法のルート単位版）。学校詳細ページ（/school/:id）は Leaflet 非依存で初期描画する。
+const MapPage = lazy(() =>
+  import('./pages/MapPage').then((module) => ({ default: module.MapPage })),
+)
 
 function DashboardRoute({ isAdmin, checking }: { isAdmin: boolean; checking: boolean }) {
   // 管理者照会が終わるまで待つ。先に redirect すると、正規管理者が
@@ -83,11 +90,12 @@ export default function App() {
           </div>
         )}
 
+        <Suspense fallback={<main id="main-content" className="page" aria-busy="true" />}>
         <Routes>
           <Route path="/" element={<HomePage />} />
           <Route path="/map" element={<MapPage userData={userData} />} />
           <Route path="/search" element={<SchoolSearchPage />} />
-          <Route path="/school/:id" element={<MapPage userData={userData} />} />
+          <Route path="/school/:id" element={<SchoolDetailPage userData={userData} />} />
           <Route path="/favorites" element={<FavoritesPage userData={userData} />} />
           <Route path="/compare" element={<ComparePage userData={userData} />} />
           <Route path="/mypage" element={<MyPage userData={userData} favCount={favCount} noteCount={noteCount} />} />
@@ -104,6 +112,7 @@ export default function App() {
           {/* 未知の URL への SPA 内遷移。直リンクは Cloudflare Pages が dist/404.html を返す */}
           <Route path="*" element={<NotFoundPage />} />
         </Routes>
+        </Suspense>
 
         {showBottomTabs && <BottomTabBar />}
         <Sidebar favCount={favCount} noteCount={noteCount} isAdmin={isAdmin} />
