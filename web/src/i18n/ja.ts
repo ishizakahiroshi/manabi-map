@@ -397,6 +397,7 @@ export const ja: MessageTree = {
     official: '公式サイト',
     officialSoon: '公式サイト 情報提供募集中 — URL をご存知の方はお知らせください',
     googleMaps: 'Google Maps',
+    viewOnMap: '地図で見る',
     deptDeviation: '学科別 参考偏差値',
     deptDeviationEmpty: '学科情報 情報提供募集中 — 学科・偏差値を知っている方は、こちらからお知らせください',
     deptDeviationEvidenceGuide: '学校公式の入試資料や県教委資料など、確認できる根拠と一緒にお知らせください。',

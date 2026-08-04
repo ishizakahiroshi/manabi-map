@@ -1,10 +1,16 @@
 import { createHash } from 'node:crypto'
-import { mkdir, readdir, readFile, unlink, writeFile } from 'node:fs/promises'
+import { mkdir, readdir, readFile, rm, unlink, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { gzipSync } from 'node:zlib'
 import { createClient } from '@supabase/supabase-js'
 import { loadCivicData, resolveCityGroup } from './lib/municipalities.mjs'
+// 近隣校の選定と後継校の逆引きは React 側・gen-seo-pages.mjs と同一実装を共有する
+// （Node 22.18+ の type stripping で .ts を直 import。フォーク禁止 —
+// 学校単体 JSON と静的 HTML・JS mount 後で校名・距離が食い違う事故を防ぐ。
+// docs/local/plan_seo-growth-strategy_c7 C1）。
+import { selectNeighbors } from '../src/lib/neighbors.ts'
+import { successorsByPredecessorId } from '../src/lib/successors.ts'
 
 const here = dirname(fileURLToPath(import.meta.url))
 const webRoot = join(here, '..')
@@ -263,6 +269,105 @@ await writeFile(outputPath, gzipSync(body, { level: 9 }))
 await writeFile(join(publicDir, cityIndexFilename), cityIndexBody)
 await writeFile(join(publicDir, nameIndexFilename), nameIndexBody)
 
+// --- 学校単体 JSON / 県別分割 JSON（plan_seo-growth-strategy_c7 C1） ---------
+// 学校詳細ページ（/school/<id>/ 直リンク着地）は全件 JSON（gzip 約 1.7MB / 展開約 28MB）
+// を読まず、単体 JSON（数 KB〜数十 KB）だけで初期描画を完結させる。全件 JSON は
+// 地図表示時のみ遅延取得する。県別分割は将来の地図の分県ロード用に同形式で置く。
+// ファイル名は固定パス（/school-data/<id>.json）とし、フロントは manifest の
+// schoolDataVersion を `?v=` に付けて取得する（public/_headers の immutable とセット）。
+const schoolDataDir = join(publicDir, 'school-data')
+await rm(schoolDataDir, { recursive: true, force: true })
+await mkdir(schoolDataDir, { recursive: true })
+
+// 出典 index は全件 catalog（sourceCatalog）基準で振られているため、部分出力ごとに
+// ローカル catalog へ振り直す。rows は全件 payload（出力済み body）とオブジェクトを
+// 共有しているので、必ず structuredClone した行に対してだけ書き換える。
+// visited は同一 stat の二重 remap 防止。同じ前身校を複数の関係行が参照すると
+// unit 配列がクローン内でも共有され、2 回目の remap が「ローカル index を全件 index と
+// 誤読する」壊れ方をする（compactUnitSources の二重圧縮事故と同型）。
+function remapSourceRefs(units, localCatalog, localIndex, visited) {
+  for (const unit of units ?? []) {
+    for (const stat of unit.school_admission_selection_stats ?? []) {
+      if (visited.has(stat)) continue
+      visited.add(stat)
+      stat.school_admission_stat_sources = (stat.school_admission_stat_sources ?? []).map((ref) => {
+        if (typeof ref !== 'number') return ref
+        let local = localIndex.get(ref)
+        if (local == null) {
+          local = localCatalog.length
+          localCatalog.push(sourceCatalog[ref])
+          localIndex.set(ref, local)
+        }
+        return local
+      })
+    }
+  }
+}
+
+/** rows の部分集合を、全件 JSON と同じ形（formatVersion / sourceCatalog / schools）で切り出す。 */
+function subsetPayload(subsetRows) {
+  const localCatalog = []
+  const localIndex = new Map()
+  const visited = new WeakSet()
+  const cloned = subsetRows.map((row) => {
+    const clone = structuredClone(row)
+    remapSourceRefs(clone.admission_recruitment_units, localCatalog, localIndex, visited)
+    for (const relationship of clone.predecessor_relationships ?? []) {
+      remapSourceRefs(relationship.predecessor?.admission_recruitment_units, localCatalog, localIndex, visited)
+    }
+    return clone
+  })
+  return { formatVersion: payload.formatVersion, sourceCatalog: localCatalog, schools: cloned }
+}
+
+// 単体 JSON は個別ページを持つ学校（緯度経度あり = gen-seo-pages.mjs の生成対象・
+// React 側 mapSchoolRows のフィルタと同一集合）だけ出力する。近隣校の母集合も同じ。
+const detailRows = rows.filter((row) => row.latitude != null && row.longitude != null)
+const detailIds = new Set(detailRows.map((row) => row.id))
+const neighborUniverse = detailRows.map((row) => ({
+  id: row.id,
+  name: row.name,
+  prefecture: row.prefecture,
+  city: row.city ?? null,
+  latitude: Number(row.latitude),
+  longitude: Number(row.longitude),
+}))
+const subjectById = new Map(neighborUniverse.map((subject) => [subject.id, subject]))
+const successorsById = successorsByPredecessorId(detailRows)
+
+for (const row of detailRows) {
+  const single = subsetPayload([row])
+  // 近隣校（距離は raw の double のまま持つ。丸めると静的 HTML の toFixed(1) 表示と
+  // 端数の丸め方向がずれうるため、丸めは表示側だけで行う）。
+  single.neighbors = selectNeighbors(subjectById.get(row.id), neighborUniverse).map(
+    ({ school, distanceKm }) => ({
+      id: school.id,
+      name: school.name,
+      prefecture: school.prefecture,
+      city: school.city,
+      distanceKm,
+    }),
+  )
+  single.successors = successorsById.get(row.id) ?? []
+  // 前身校のうち個別ページが存在する id（詳細シートのリンク可否判定用）。
+  single.linkableSchoolIds = (row.predecessor_relationships ?? [])
+    .map((relationship) => relationship.predecessor?.id)
+    .filter((id) => id != null && detailIds.has(id))
+  await writeFile(join(schoolDataDir, `${row.id}.json`), `${JSON.stringify(single)}\n`)
+}
+
+// 県別分割（全 rows を prefecture ごとに全件 JSON と同形式で分割）。
+// 取りこぼし（prefectures.json に無い県名の行）は verify-static-output.mjs の
+// 合計突き合わせで build を落として検出する。
+const prefDataUrls = {}
+for (const pref of prefectures) {
+  const prefRows = rows.filter((row) => row.prefecture === pref.name)
+  if (prefRows.length === 0) continue
+  const prefFilename = `pref-${pref.slug}.json`
+  await writeFile(join(schoolDataDir, prefFilename), `${JSON.stringify(subsetPayload(prefRows))}\n`)
+  prefDataUrls[pref.slug] = `/school-data/${prefFilename}`
+}
+
 const manifest = {
   url: `/${filename}`,
   hash,
@@ -273,13 +378,19 @@ const manifest = {
   cityIndexUrl: `/${cityIndexFilename}`,
   cityIndexCount: cityIndex.length,
   nameIndexUrl: `/${nameIndexFilename}`,
+  // 学校単体 JSON / 県別分割 JSON（/school-data/）のキャッシュバスト用バージョンと台帳。
+  // URL は固定パスなので、取得時に `?v=<schoolDataVersion>` を付ける。
+  schoolDataVersion: hash,
+  schoolDataCount: detailRows.length,
+  prefDataUrls,
   generatedAt: new Date().toISOString(),
 }
 await writeFile(join(publicDir, 'schools-manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`)
 
 console.log(
   `wrote ${rows.length} schools to ${outputPath} (manifest url=${manifest.url}, ` +
-  `cityIndex=${cityIndex.length}, nameIndex=${nameIndex.length})`,
+  `cityIndex=${cityIndex.length}, nameIndex=${nameIndex.length}, ` +
+  `schoolData=${detailRows.length}, prefData=${Object.keys(prefDataUrls).length})`,
 )
 
 // 市区町村を解決できず県ページの「その他」へ落ちる校数。新県データ投入後にここが
