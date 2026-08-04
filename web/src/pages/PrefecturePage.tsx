@@ -615,21 +615,21 @@ export function PrefecturePage({ userData }: Props) {
                           }}
                         >
                           {s.name}
-                        </a>
-                        {favorites[s.id] && (
-                          <span
-                            className="city-school-fav"
-                            role="img"
-                            aria-label={t('prefPage.favorited')}
-                          >
-                            ★
+                          {favorites[s.id] && (
+                            <span
+                              className="city-school-fav"
+                              role="img"
+                              aria-label={t('prefPage.favorited')}
+                            >
+                              ★
+                            </span>
+                          )}
+                          <span className="city-school-meta">
+                            {ownershipFull(s)}・{s.course_times.map((c) => COURSE_TIME_FULL[c]).join('・')}
+                            {status ? `〔${status}〕` : ''}
+                            {facts ? ` ・ ${facts}` : ''}
                           </span>
-                        )}
-                        <span className="city-school-meta">
-                          {ownershipFull(s)}・{s.course_times.map((c) => COURSE_TIME_FULL[c]).join('・')}
-                          {status ? `〔${status}〕` : ''}
-                          {facts ? ` ・ ${facts}` : ''}
-                        </span>
+                        </a>
                       </li>
                     )
                   })}
