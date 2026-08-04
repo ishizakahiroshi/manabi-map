@@ -13,7 +13,7 @@ import { lstat, readFile, readdir } from 'node:fs/promises'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { gunzipSync } from 'node:zlib'
-import { loadCivicData } from './lib/municipalities.mjs'
+import { loadCivicData, resolveCityGroup } from './lib/municipalities.mjs'
 
 const DEFAULT_MAX_FILE_MIB = 25
 const SITE_ORIGIN = 'https://manabi-map.app'
@@ -200,7 +200,7 @@ export async function verifyStaticOutput({
   const targets = schools.filter((school) => school?.latitude != null && school?.longitude != null)
 
   // 県ハブは prefectures.json（総務省コード表由来）とデータの突き合わせで決まる。
-  const { prefectures } = await loadCivicData(join(dirname(fileURLToPath(import.meta.url)), '..'))
+  const { prefectures, muniByPref } = await loadCivicData(join(dirname(fileURLToPath(import.meta.url)), '..'))
   const activePrefectures = prefectures.filter((p) => targets.some((s) => s.prefecture === p.name))
 
   const LEGAL_DOCS = ['terms', 'privacy', 'third-party', 'deviation-methodology']
@@ -323,8 +323,16 @@ export async function verifyStaticOutput({
     }
     // BreadcrumbList（UUID URL の検索結果表示の救済・c7 C4）: ホーム › 県 ›（市区町村）› 校名。
     const breadcrumb = jsonLdBlocks.find((block) => block?.['@type'] === 'BreadcrumbList')
-    if (!breadcrumb || !Array.isArray(breadcrumb.itemListElement) || breadcrumb.itemListElement.length < 3) {
-      throw new Error(`BreadcrumbList JSON-LD is missing or too short on ${pageLabel}`)
+    const cityGroup = resolveCityGroup(target, muniByPref)
+    const expectedBreadcrumbLength = cityGroup ? 4 : 3
+    if (
+      !breadcrumb ||
+      !Array.isArray(breadcrumb.itemListElement) ||
+      breadcrumb.itemListElement.length !== expectedBreadcrumbLength
+    ) {
+      throw new Error(
+        `BreadcrumbList JSON-LD is missing or too short (expected ${expectedBreadcrumbLength} items) on ${pageLabel}`,
+      )
     }
     const breadcrumbLast = breadcrumb.itemListElement[breadcrumb.itemListElement.length - 1]
     if (breadcrumbLast?.name !== target.name) {
@@ -351,8 +359,11 @@ export async function verifyStaticOutput({
     }
     neighborLinkTotal += schoolLinks.size
     // 選抜実績の年度表を出すページには公式出典が必須（c4 C3 完了条件）。
-    if (main.includes('年度別志願状況') && !main.includes('出典:')) {
-      throw new Error(`admission table without 出典 on ${pageLabel}`)
+    if (main.includes('年度別志願状況')) {
+      const sourceLine = main.match(/<p>出典:\s*([\s\S]*?)<\/p>/i)?.[1] ?? ''
+      if (!/<a\b[^>]*\bhref="https?:\/\/[^" ]+/i.test(sourceLine)) {
+        throw new Error(`admission table without 出典 URL on ${pageLabel}`)
+      }
     }
   }
 
