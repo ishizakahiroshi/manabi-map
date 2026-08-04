@@ -603,6 +603,11 @@ export function SchoolDetailSheet({ school, onClose, userData, extras, standalon
     >
       <button className="handle" onClick={onClose} aria-label={t('common.close')} />
       <div className="head">
+        {standalone && (
+          <button className="icon-btn" onClick={onClose} aria-label={t('common.back')}>
+            ←
+          </button>
+        )}
         <span className="grow">
           <h3 className="detail-title">{fmt.displayName(school)}</h3>
           {school.name_kana ? (

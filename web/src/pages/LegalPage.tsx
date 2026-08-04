@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
 import Markdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { useI18n } from '../contexts/I18nContext'
+import { useGoBack } from '../hooks/useGoBack'
 
 interface Props {
   doc: 'terms' | 'privacy' | 'third-party' | 'deviation-methodology'
@@ -10,7 +10,7 @@ interface Props {
 
 /** /legal/*。本文は web/public/legal/*.md を表示する */
 export function LegalPage({ doc }: Props) {
-  const navigate = useNavigate()
+  const goBack = useGoBack('/')
   const { t } = useI18n()
   const [body, setBody] = useState<string | null>(null)
   const [error, setError] = useState(false)
@@ -47,7 +47,7 @@ export function LegalPage({ doc }: Props) {
   return (
     <div className="screen">
       <div className="header">
-        <button className="icon-btn" onClick={() => navigate(-1)} aria-label={t('common.back')}>
+        <button className="icon-btn" onClick={goBack} aria-label={t('common.back')}>
           ←
         </button>
         <div className="brand">{title}</div>

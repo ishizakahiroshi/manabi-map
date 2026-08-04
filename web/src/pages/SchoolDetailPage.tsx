@@ -1,8 +1,10 @@
-import { useNavigate, useParams } from 'react-router-dom'
+import { useParams } from 'react-router-dom'
 import { useI18n } from '../contexts/I18nContext'
+import { useGoBack } from '../hooks/useGoBack'
 import { useSchoolDetail } from '../hooks/useSchoolDetail'
 import type { useUserData } from '../hooks/useUserData'
 import { SchoolDetailSheet } from '../components/SchoolDetailSheet'
+import { prefectureByName } from '../lib/prefecture'
 import { NotFoundPage } from './NotFoundPage'
 
 interface Props {
@@ -20,9 +22,13 @@ interface Props {
  */
 export function SchoolDetailPage({ userData }: Props) {
   const { id } = useParams<{ id: string }>()
-  const navigate = useNavigate()
   const { t } = useI18n()
   const { school, extras, loading, notFound, error } = useSchoolDetail(id ?? null)
+  const backFallback = (() => {
+    const slug = school ? prefectureByName(school.prefecture)?.slug : null
+    return slug ? `/pref/${slug}` : '/map'
+  })()
+  const goBack = useGoBack(backFallback)
 
   if (notFound) return <NotFoundPage />
 
@@ -43,7 +49,7 @@ export function SchoolDetailPage({ userData }: Props) {
           school={school}
           extras={extras}
           standalone
-          onClose={() => navigate('/map', { replace: true })}
+          onClose={goBack}
           userData={userData}
         />
       )}

@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
 import Markdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { GUIDE_BY_SLUG } from '../lib/guides'
 import { useI18n } from '../contexts/I18nContext'
+import { useGoBack } from '../hooks/useGoBack'
 import { NotFoundPage } from './NotFoundPage'
 
 interface Props {
@@ -12,7 +12,7 @@ interface Props {
 
 /** /guide/:slug。本文は public/guide/*.md に置き、静的生成側も同じファイルを HTML 化する。 */
 export function GuidePage({ slug }: Props) {
-  const navigate = useNavigate()
+  const goBack = useGoBack('/')
   const { t } = useI18n()
   const guide = GUIDE_BY_SLUG.get(slug)
   const [body, setBody] = useState<string | null>(null)
@@ -44,7 +44,7 @@ export function GuidePage({ slug }: Props) {
   return (
     <div className="screen">
       <div className="header">
-        <button className="icon-btn" onClick={() => navigate(-1)} aria-label={t('common.back')}>
+        <button className="icon-btn" onClick={goBack} aria-label={t('common.back')}>
           ←
         </button>
         <div className="brand">{t('footer.guide')}</div>
