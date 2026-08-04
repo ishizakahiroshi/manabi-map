@@ -1419,8 +1419,22 @@ button:focus:not(:focus-visible), a:focus:not(:focus-visible), input:focus:not(:
 .city-section summary::after { content: "▾"; color: var(--ink-soft); }
 .city-section[open] summary::after { content: "▴"; }
 .city-school-list { list-style: none; margin: 0; padding: 0 12px 12px; display: flex; flex-direction: column; gap: 8px; }
-.city-school-list a { font-family: var(--display); font-weight: 700; color: var(--ink); }
-.city-school-meta { display: block; font-size: 0.78rem; color: #5c5348; margin-top: 2px; }
+.city-school-list li { min-width: 0; }
+.city-school-list a {
+  display: block; width: 100%; padding: 4px 8px 5px; border-radius: 8px;
+  text-decoration: none; font-family: var(--display); font-weight: 700; color: var(--ink);
+  transition: background-color 160ms ease, box-shadow 160ms ease;
+}
+@media (hover: hover) and (pointer: fine) {
+  .city-school-list a:hover {
+    background: rgba(255, 122, 61, 0.11);
+    box-shadow: 0 0 18px rgba(255, 122, 61, 0.2);
+  }
+}
+.city-school-meta {
+  display: block; margin-top: 2px; font-family: var(--body); font-weight: 400;
+  font-size: 0.78rem; color: #5c5348;
+}
 /* お気に入り済みの印。校名の直後に置き、地図ピンの fav 色（accent）と揃える。 */
 .city-school-fav { margin-left: 4px; color: var(--accent); font-size: 0.9em; }
 
