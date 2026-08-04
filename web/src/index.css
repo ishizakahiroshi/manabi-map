@@ -127,7 +127,8 @@ body {
   position: absolute; left: 0; right: 0; bottom: 0;
   min-height: var(--tabbar-h);
   padding: 7px 8px calc(7px + env(safe-area-inset-bottom));
-  display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px;
+  /* タブ数に自動追従（列数固定だと 5 個目で折り返す） */
+  display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 6px;
   background: rgba(255, 253, 248, 0.98);
   border-top: 2px solid var(--ink);
   z-index: 850;
