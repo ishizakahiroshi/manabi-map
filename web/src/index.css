@@ -238,7 +238,7 @@ body {
   display: flex; flex-direction: column; gap: 8px;
   width: 100%; max-width: 420px; margin: 8px auto 20px;
 }
-.demo-links button {
+.demo-links :is(button, a) {
   text-decoration: none; color: var(--ink); padding: 10px 12px;
   border: 2px solid var(--ink); border-radius: 12px; background: #fff;
   display: flex; justify-content: space-between; align-items: center;
@@ -1114,18 +1114,36 @@ body[data-sheet-open="true"] .leaflet-bottom.leaflet-right { display: none; }
 .admin-rebuild { width: 100%; margin-top: 10px; }
 
 /* --- ログインシート --- */
-.login-line, .login-google, .login-anon {
+.oauth-button, .login-anon {
   display: flex; align-items: center; gap: 12px;
-  width: 100%; padding: 14px 16px; text-align: left;
+  width: 100%; min-height: 44px; padding: 10px 12px; text-align: left;
   font-family: var(--display); font-weight: 800; font-size: 1.02rem;
-  border: 2px solid var(--ink); border-radius: 14px; cursor: pointer;
+  border-radius: 8px; cursor: pointer;
+}
+.oauth-button-line {
+  background: #06c755; color: #fff; border: 0;
+}
+.oauth-button-google {
+  background: #fff; color: #1f1f1f; border: 1px solid #747775; margin-top: 10px;
+  font-family: 'Google Sans', Arial, sans-serif; font-weight: 500; font-size: 14px;
+}
+.oauth-button-first { margin-top: 8px; }
+.oauth-button-icon { width: 24px; height: 24px; object-fit: contain; flex: 0 0 24px; }
+.oauth-button-label { flex: 1; text-align: center; }
+.oauth-button-provider { width: 24px; color: transparent; user-select: none; flex: 0 0 24px; }
+.oauth-button-line:hover { background: #05b34a; }
+.oauth-button-google:hover { background: #f2f2f2; }
+.oauth-button-line:active { background: #044b20; }
+.oauth-button-google:active { background: #e6e6e6; }
+.oauth-button:disabled { opacity: 0.6; cursor: default; }
+.login-anon {
+  padding: 14px 16px;
+  border: 2px solid var(--ink); border-radius: 14px;
   box-shadow: 4px 4px 0 var(--ink);
 }
-.login-line { background: #06c755; color: #fff; }
-.login-google { background: #fff; color: var(--ink); margin-top: 10px; }
 .login-anon { background: #fff; color: var(--ink); margin-top: 10px; }
-.login-line:active, .login-google:active, .login-anon:active { transform: translate(2px, 2px); box-shadow: 2px 2px 0 var(--ink); }
-.login-line:disabled, .login-google:disabled, .login-anon:disabled { opacity: 0.6; }
+.login-anon:active { transform: translate(2px, 2px); box-shadow: 2px 2px 0 var(--ink); }
+.login-anon:disabled { opacity: 0.6; }
 .li-icon { font-size: 1.4rem; flex: 0 0 auto; display: inline-flex; align-items: center; }
 .li-tx { flex: 1; }
 .login-note { margin: 0 0 12px; color: var(--ink-soft); font-size: 0.92rem; }
