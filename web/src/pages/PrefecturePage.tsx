@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useLocation, useNavigate, useParams } from 'react-router-dom'
+import { useLocation, useNavigate, useNavigationType, useParams } from 'react-router-dom'
 import { useApp } from '../contexts/AppContext'
 import { useI18n } from '../contexts/I18nContext'
+import { useGoBack } from '../hooks/useGoBack'
 import { useSchools } from '../hooks/useSchools'
 import type { useUserData } from '../hooks/useUserData'
 import { loadSearchIndexes, normalizeForMatch } from '../lib/searchIndex'
@@ -15,6 +16,38 @@ import { NotFoundPage } from './NotFoundPage'
 
 /** 解決不能校の受け皿（scripts/lib/municipalities.mjs の UNRESOLVED_CITY_LABEL と同値）。 */
 const UNRESOLVED_CITY = 'その他'
+const viewStateKey = (slug: string) => `manabi:pref-view:${slug}`
+type PrefViewState = { open: string[]; scroll: number }
+
+function readPrefViewState(slug: string | undefined): PrefViewState {
+  if (!slug || typeof window === 'undefined') return { open: [], scroll: 0 }
+  try {
+    const raw = window.sessionStorage.getItem(viewStateKey(slug))
+    if (!raw) return { open: [], scroll: 0 }
+    const parsed = JSON.parse(raw) as Partial<PrefViewState>
+    return {
+      open: Array.isArray(parsed.open)
+        ? parsed.open.filter((label): label is string => typeof label === 'string')
+        : [],
+      scroll: typeof parsed.scroll === 'number' && Number.isFinite(parsed.scroll)
+        ? Math.max(0, parsed.scroll)
+        : 0,
+    }
+  } catch {
+    return { open: [], scroll: 0 }
+  }
+}
+
+function savePrefViewState(slug: string, openCities: Set<string>, scroll: number): void {
+  try {
+    window.sessionStorage.setItem(
+      viewStateKey(slug),
+      JSON.stringify({ open: [...openCities], scroll }),
+    )
+  } catch {
+    // sessionStorage unavailable or full: view-state persistence is best effort
+  }
+}
 
 type OwnershipChip = 'public' | 'private' | 'national'
 
@@ -66,7 +99,9 @@ interface Props {
 export function PrefecturePage({ userData }: Props) {
   const { pref: slug } = useParams()
   const navigate = useNavigate()
+  const goBack = useGoBack('/schools')
   const location = useLocation()
+  const navigationType = useNavigationType()
   const { setHome } = useApp()
   const { t } = useI18n()
   const { schools, loading, error } = useSchools()
@@ -75,7 +110,26 @@ export function PrefecturePage({ userData }: Props) {
 
   const [cityOrder, setCityOrder] = useState<string[] | null>(null)
   const [cityBySchool, setCityBySchool] = useState<Map<string, string> | null>(null)
-  const [openCities, setOpenCities] = useState<Set<string>>(new Set())
+  const contentRef = useRef<HTMLElement>(null)
+  const storedViewStateRef = useRef<PrefViewState | null>(null)
+  const viewStateSlugRef = useRef(slug)
+  const restoredFor = useRef<string | null>(null)
+  const scrollFrameRef = useRef<number | null>(null)
+  const [openCities, setOpenCities] = useState<Set<string>>(() => {
+    const state = readPrefViewState(slug)
+    storedViewStateRef.current = state
+    return new Set(state.open)
+  })
+  const openCitiesRef = useRef(openCities)
+  openCitiesRef.current = openCities
+  /**
+   * 戻る操作（POP）でこの画面へ着いたときは、URL hash よりも保存済みの閲覧位置を優先する。
+   * 市区町村ジャンプで hash が付いた状態から学校詳細へ行き来しても、読んでいた場所を
+   * 見出しの先頭へ巻き戻さないため。保存位置が無い直リンク着地は従来どおり hash へ着地する。
+   */
+  const preferStoredScroll = useRef(
+    navigationType === 'POP' && (storedViewStateRef.current?.scroll ?? 0) > 0,
+  )
   const [chips, setChips] = useState<ChipState>(emptyChips)
   const [q, setQ] = useState('')
   const scrolledFor = useRef<string | null>(null)
@@ -190,9 +244,12 @@ export function PrefecturePage({ userData }: Props) {
     setOpenCities((prev) => (prev.has(target) ? prev : new Set(prev).add(target)))
     if (scrolledFor.current !== location.hash) {
       scrolledFor.current = location.hash
-      requestAnimationFrame(() => {
-        document.getElementById(target)?.scrollIntoView({ block: 'start' })
-      })
+      // 戻る操作で着いた時は見出しへ飛ばさない（保存済みの閲覧位置を復元する側に任せる）
+      if (!preferStoredScroll.current) {
+        requestAnimationFrame(() => {
+          document.getElementById(target)?.scrollIntoView({ block: 'start' })
+        })
+      }
     }
   }, [location.hash, groups])
 
@@ -215,6 +272,71 @@ export function PrefecturePage({ userData }: Props) {
     ro.observe(bar)
     return () => ro.disconnect()
   }, [groups.length])
+
+  /**
+   * hash 着地（市区町村ジャンプ・アンカー付き直リンク）は見出しへスクロールさせるため復元しない。
+   * ただし戻る操作で着いた場合は保存位置を優先するので、その時はスキップしない。
+   */
+  const skipScrollRestore = Boolean(location.hash) && !preferStoredScroll.current
+
+  // 同じコンポーネントのまま県パラメータだけが変わる場合も、県ごとの状態を混ぜない
+  useEffect(() => {
+    if (viewStateSlugRef.current === slug) return
+    viewStateSlugRef.current = slug
+    storedViewStateRef.current = readPrefViewState(slug)
+    restoredFor.current = null
+    scrolledFor.current = null
+    // 別の県への遷移は戻る操作ではないので、その県の hash 着地を優先させる
+    preferStoredScroll.current = false
+    setOpenCities(new Set(storedViewStateRef.current.open))
+  }, [slug])
+
+  // 市区町村の開閉状態を、現在のスクロール位置と一緒に県別へ保存する
+  useEffect(() => {
+    if (!pref || viewStateSlugRef.current !== slug) return
+    const currentScroll = contentRef.current?.scrollTop
+    const storedScroll = storedViewStateRef.current?.scroll ?? 0
+    // 復元を待たない経路（hash 着地）と、復元が済んだ後は現在位置。
+    // 復元前に保存すると、まだ 0 のスクロール位置で保存値を潰してしまう。
+    const scroll =
+      skipScrollRestore || restoredFor.current === pref.slug ? currentScroll ?? 0 : storedScroll
+    savePrefViewState(pref.slug, openCities, scroll)
+  }, [skipScrollRestore, openCities, pref, slug])
+
+  // 保存済みスクロール位置は、一覧が描画されてから一度だけ復元する
+  useEffect(() => {
+    if (
+      !pref ||
+      viewStateSlugRef.current !== slug ||
+      groups.length === 0 ||
+      skipScrollRestore ||
+      restoredFor.current === pref.slug
+    ) return
+    const savedScroll = storedViewStateRef.current?.scroll ?? 0
+    const frame = requestAnimationFrame(() => {
+      const content = contentRef.current
+      if (!content) return
+      restoredFor.current = pref.slug
+      content.scrollTop = savedScroll
+      savePrefViewState(pref.slug, openCitiesRef.current, savedScroll)
+    })
+    return () => cancelAnimationFrame(frame)
+  }, [groups.length, skipScrollRestore, pref, slug])
+
+  useEffect(() => {
+    return () => {
+      if (scrollFrameRef.current != null) cancelAnimationFrame(scrollFrameRef.current)
+    }
+  }, [])
+
+  const handleScroll = () => {
+    if (scrollFrameRef.current != null) return
+    scrollFrameRef.current = requestAnimationFrame(() => {
+      scrollFrameRef.current = null
+      if (!pref || !contentRef.current) return
+      savePrefViewState(pref.slug, openCitiesRef.current, contentRef.current.scrollTop)
+    })
+  }
 
   if (!pref) return <NotFoundPage />
 
@@ -335,12 +457,18 @@ export function PrefecturePage({ userData }: Props) {
   return (
     <div className="screen">
       <div className="header">
-        <button className="icon-btn" onClick={() => navigate(-1)} aria-label={t('common.back')}>
+        <button className="icon-btn" onClick={goBack} aria-label={t('common.back')}>
           ←
         </button>
         <div className="brand">{t('prefPage.title', { pref: pref.name, n: prefSchools.length })}</div>
       </div>
-      <main id="main-content" className="content hub-content" tabIndex={-1}>
+      <main
+        id="main-content"
+        className="content hub-content"
+        tabIndex={-1}
+        ref={contentRef}
+        onScroll={handleScroll}
+      >
         <nav className="breadcrumb" aria-label={t('prefPage.breadcrumbLabel')}>
           <a
             href="/"

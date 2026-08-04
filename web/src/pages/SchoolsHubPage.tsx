@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useI18n } from '../contexts/I18nContext'
+import { useGoBack } from '../hooks/useGoBack'
 import { PREFECTURES, REGION_KEYS } from '../lib/prefecture'
 import { loadSearchIndexes } from '../lib/searchIndex'
 import { SiteFooter } from '../components/SiteFooter'
@@ -13,6 +14,7 @@ import { SiteFooter } from '../components/SiteFooter'
  */
 export function SchoolsHubPage() {
   const navigate = useNavigate()
+  const goBack = useGoBack('/')
   const { t } = useI18n()
   const [counts, setCounts] = useState<Map<string, number> | null>(null)
 
@@ -37,7 +39,7 @@ export function SchoolsHubPage() {
   return (
     <div className="screen">
       <div className="header">
-        <button className="icon-btn" onClick={() => navigate(-1)} aria-label={t('common.back')}>
+        <button className="icon-btn" onClick={goBack} aria-label={t('common.back')}>
           ←
         </button>
         <div className="brand">{t('schoolsHub.title')}</div>
