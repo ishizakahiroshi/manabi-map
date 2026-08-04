@@ -116,7 +116,7 @@ export const en: MessageTree = {
     navLabel: 'Site info',
     press: 'Press kit',
     privacy: 'Privacy policy',
-    guidePreparing: 'Guide (coming soon)',
+    guide: 'School choice guides',
   },
   schoolsHub: {
     title: 'Prefectures',
@@ -636,6 +636,9 @@ export const en: MessageTree = {
   },
   legal: {
     loadFail: 'Could not load the document. Try again later.',
+  },
+  guide: {
+    loadFail: 'Could not load the guide. Please try again later.',
   },
   header: {
     favList: 'Favorites',

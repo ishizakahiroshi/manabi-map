@@ -12,6 +12,7 @@ import { ComparePage } from './pages/ComparePage'
 import { AuthCallbackPage } from './pages/AuthCallbackPage'
 import { FamilyJoinPage } from './pages/FamilyJoinPage'
 import { LegalPage } from './pages/LegalPage'
+import { GuidePage } from './pages/GuidePage'
 import { PressPage } from './pages/PressPage'
 import { MyPage } from './pages/MyPage'
 import { SchoolsHubPage } from './pages/SchoolsHubPage'
@@ -63,6 +64,7 @@ export default function App() {
     path === '/auth/callback' ||
     path === '/family/join' ||
     path.startsWith('/legal/') ||
+    path.startsWith('/guide/') ||
     path === '/press'
   )
 
@@ -105,6 +107,7 @@ export default function App() {
           <Route path="/legal/privacy" element={<LegalPage doc="privacy" />} />
           <Route path="/legal/third-party" element={<LegalPage doc="third-party" />} />
           <Route path="/legal/deviation-methodology" element={<LegalPage doc="deviation-methodology" />} />
+          <Route path="/guide/:slug" element={<GuideRoute />} />
           <Route path="/press" element={<PressPage />} />
           <Route path="/schools" element={<SchoolsHubPage />} />
           <Route path="/pref/:pref" element={<PrefecturePage />} />
@@ -123,4 +126,10 @@ export default function App() {
       </div>
     </div>
   )
+}
+
+function GuideRoute() {
+  const location = useLocation()
+  const slug = location.pathname.replace(/\/+$/, '').split('/').at(-1) ?? ''
+  return <GuidePage slug={slug} />
 }

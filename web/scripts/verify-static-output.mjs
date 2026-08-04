@@ -82,12 +82,15 @@ function extractJsonLdBlocks(html) {
 // 禁止線を、それぞれビルドで固定する。「通学時間」は実乗換データを持たないため
 // プリレンダーに書かない（c4 C1。距離は「直線距離」と明記する）。
 const FORBIDDEN_WORDS = ['ランキング', 'TOP', '狙い目', 'おすすめ', '偏差値', '通学時間']
+// ガイドは「通学時間」「偏差値」を説明する一次目的のページなので、その二語だけは対象外。
+// 序列化を助長する語は、本文にも引き続き出さない。
+const GUIDE_FORBIDDEN_WORDS = ['ランキング', 'TOP', '狙い目', 'おすすめ']
 // 「◯◯市から通える」型の断定は学区データを保有するまで禁止（/pref/ 配下と全域ハブ）。
 // トップ・学校ページの定型文「住所を入れると通える高校が…」はサービス説明なので対象外。
 const FORBIDDEN_COMMUTE_PHRASE = 'から通える'
 
-function checkForbiddenWords(main, pageLabel, { includeCommutePhrase }) {
-  for (const word of FORBIDDEN_WORDS) {
+function checkForbiddenWords(main, pageLabel, { includeCommutePhrase, words = FORBIDDEN_WORDS }) {
+  for (const word of words) {
     if (main.includes(word)) {
       throw new Error(`forbidden word "${word}" found in <main> of ${pageLabel}`)
     }
@@ -201,11 +204,13 @@ export async function verifyStaticOutput({
   const activePrefectures = prefectures.filter((p) => targets.some((s) => s.prefecture === p.name))
 
   const LEGAL_DOCS = ['terms', 'privacy', 'third-party', 'deviation-methodology']
+  const GUIDE_SLUGS = ['commute-time', 'school-visit', 'deviation-with-care']
   const staticRoutes = [
     '/schools/',
     ...activePrefectures.map((p) => `/pref/${p.slug}/`),
     '/press/',
     ...LEGAL_DOCS.map((doc) => `/legal/${doc}/`),
+    ...GUIDE_SLUGS.map((slug) => `/guide/${slug}/`),
   ]
 
   const expectedLocations = new Set([
@@ -421,6 +426,22 @@ export async function verifyStaticOutput({
     const html = await readPage(absoluteDist, join('legal', doc, 'index.html'), `/legal/${doc}/`)
     const main = checkPageSkeleton(html, `/legal/${doc}/`, `${SITE_ORIGIN}/legal/${doc}/`)
     if (!/<h1[\s>]/.test(main)) throw new Error(`missing <h1> on /legal/${doc}/`)
+  }
+  for (const slug of GUIDE_SLUGS) {
+    const html = await readPage(absoluteDist, join('guide', slug, 'index.html'), `/guide/${slug}/`)
+    const pageLabel = `/guide/${slug}/`
+    const main = checkPageSkeleton(html, pageLabel, `${SITE_ORIGIN}${pageLabel}`)
+    if (!/<h1[\s>]/.test(main)) throw new Error(`missing <h1> on ${pageLabel}`)
+    checkForbiddenWords(main, pageLabel, { includeCommutePhrase: false, words: GUIDE_FORBIDDEN_WORDS })
+  }
+
+  // llms.txt は AI 向けの入口。必須のライセンス・公式 URL を持ち、序列化語を含まない。
+  const llms = await readFile(join(absoluteDist, 'llms.txt'), 'utf8')
+  if (!llms.includes('CC BY-SA') || !llms.includes('manabi-map.app')) {
+    throw new Error('llms.txt is missing required license or official URL')
+  }
+  for (const word of FORBIDDEN_WORDS) {
+    if (llms.includes(word)) throw new Error(`forbidden word "${word}" found in llms.txt`)
   }
 
   // --- 404.html（ソフト 404 対策の実体） ---

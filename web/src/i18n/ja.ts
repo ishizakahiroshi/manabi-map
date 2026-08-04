@@ -116,7 +116,7 @@ export const ja: MessageTree = {
     navLabel: 'サイト情報',
     press: 'プレスキット',
     privacy: 'プライバシーポリシー',
-    guidePreparing: 'ガイド（準備中）',
+    guide: '学校選びガイド',
   },
   schoolsHub: {
     title: '都道府県一覧',
@@ -636,6 +636,9 @@ export const ja: MessageTree = {
   },
   legal: {
     loadFail: '文書の読み込みに失敗しました。時間をおいて再読み込みしてください。',
+  },
+  guide: {
+    loadFail: 'ガイドを読み込めませんでした。時間をおいて再度お試しください。',
   },
   header: {
     favList: 'お気に入り一覧',
