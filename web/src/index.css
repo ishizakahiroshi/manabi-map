@@ -35,6 +35,12 @@
   --phone-h: 844px;
   --app-max-w: 960px;
   --tabbar-h: 68px;
+  /* .content の内側余白。sticky の基準ずれ補正（下記 --city-jump-h の説明）に使う。 */
+  --content-pad: 16px;
+  /* 県ページの市区町村ジャンプバーの高さ。実際の値は PrefecturePage が実測して
+     .content へ上書きする（横スクロールバーの有無で 15px ほど変わるため）。
+     ここは実測前に使われる初期値。 */
+  --city-jump-h: 74px;
 }
 
 * { box-sizing: border-box; }
@@ -121,7 +127,7 @@ body {
   display: flex; flex-direction: column;
   background: var(--bg);
 }
-.content { flex: 1; overflow: auto; padding: 16px 16px calc(24px + var(--tabbar-h)); }
+.content { flex: 1; overflow: auto; padding: var(--content-pad) var(--content-pad) calc(24px + var(--tabbar-h)); }
 
 .bottom-tabs {
   position: absolute; left: 0; right: 0; bottom: 0;
@@ -1364,11 +1370,23 @@ button:focus:not(:focus-visible), a:focus:not(:focus-visible), input:focus:not(:
   font-family: var(--display); font-weight: 700; box-shadow: 2px 2px 0 var(--line);
 }
 .chip-row { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0 4px; }
+/* 校名しぼりこみ。440 校規模の県で、区を開いて探さずに目的の校へ着けるようにする。 */
+.pref-search { margin: 10px 0 0; }
+.pref-search .input { padding: 10px 40px 10px 14px; font-size: 0.95rem; }
 .city-jump {
-  position: sticky; top: 0; z-index: 40; display: flex; gap: 8px; overflow-x: auto;
-  padding: 8px 2px; margin: 8px -2px; background: var(--bg);
+  /*
+   * sticky の top は .content の内側余白の分だけ下がった位置を基準にするため、
+   * top: 0 のままだと上に 16px の帯が残り、そこを一覧が透けて流れる。
+   * 内側余白ぶん引き上げて、貼り付いた時に可視領域の上端へぴたりと載せる。
+   * 上余白も padding で持つ（margin-top を残すと sticky は margin box を吸着させるので
+   * やはり背景の載らない帯ができる）。
+   */
+  position: sticky; top: calc(-1 * var(--content-pad)); z-index: 40;
+  display: flex; gap: 8px; overflow-x: auto;
+  padding: 12px 2px 8px; margin: 0 -2px; background: var(--bg);
   border-bottom: 1px solid var(--line); -webkit-overflow-scrolling: touch;
 }
+.city-jump.empty { display: none; }
 .city-jump a {
   flex: 0 0 auto; padding: 6px 12px; border: 2px solid var(--ink); border-radius: 999px;
   background: #fff; text-decoration: none; color: var(--ink);
@@ -1376,11 +1394,25 @@ button:focus:not(:focus-visible), a:focus:not(:focus-visible), input:focus:not(:
 }
 .city-section {
   border: 2px solid var(--ink); border-radius: 12px; background: #fff; margin: 8px 0;
-  scroll-margin-top: 56px;
+  scroll-margin-top: var(--city-jump-h);
 }
 .city-section summary {
   padding: 10px 12px; cursor: pointer; font-family: var(--display); font-weight: 700;
   list-style: none; display: flex; justify-content: space-between; align-items: center; gap: 8px;
+}
+/*
+ * 開いている間は見出しを貼り付ける。世田谷区 38 校のような長い区を読んでいる途中でも
+ * 「今どの市区町村か」が消えず、その見出しをそのまま押して畳める（先頭まで戻らずに済む）。
+ * sticky の効く範囲は親 details の中だけなので、次の区が来れば自然に押し出される。
+ * z-index はジャンプバー（40）より低くして、バーの下へ潜らせる。
+ * 角丸は section の 12px から border 2px を引いた内側半径に合わせる（白い角が食み出さない）。
+ */
+.city-section[open] summary {
+  /* top はジャンプバーと同じ基準（.content の内側余白ぶん下）で測るので、
+     バー実高からその余白を引くとちょうどバーの真下に載る。 */
+  position: sticky; top: calc(var(--city-jump-h) - var(--content-pad)); z-index: 30;
+  background: #fff; border-radius: 10px 10px 0 0;
+  border-bottom: 1px solid var(--line);
 }
 .city-section summary::-webkit-details-marker { display: none; }
 .city-section summary::after { content: "▾"; color: var(--ink-soft); }
@@ -1388,6 +1420,8 @@ button:focus:not(:focus-visible), a:focus:not(:focus-visible), input:focus:not(:
 .city-school-list { list-style: none; margin: 0; padding: 0 12px 12px; display: flex; flex-direction: column; gap: 8px; }
 .city-school-list a { font-family: var(--display); font-weight: 700; color: var(--ink); }
 .city-school-meta { display: block; font-size: 0.78rem; color: #5c5348; margin-top: 2px; }
+/* お気に入り済みの印。校名の直後に置き、地図ピンの fav 色（accent）と揃える。 */
+.city-school-fav { margin-left: 4px; color: var(--accent); font-size: 0.9em; }
 
 /* ===== サイト共通フッター ===== */
 .site-footer {
