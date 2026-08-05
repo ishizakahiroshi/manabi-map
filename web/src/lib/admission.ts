@@ -126,12 +126,16 @@ export function primaryAdmissionTrend(school: School): PrimaryAdmissionTrend | n
     byYear.set(selection.year, values)
   }
 
+  const hasFulltimeAnyYear = [...byYear.values()].flat().some((selection) => selection.course_time === 'fulltime')
+
   const annualWithScope = [...byYear.entries()]
     .map(([year, selections]) => {
       // 全日制と定時制・通信制は同じ学校でも別の募集scope。
       // 全日制が公表されていれば地図の代表値には全日制だけを使う。
-      // 全日制が無い学校は、単一course_timeだけならその課程を表示する。
+      // 学校内の別年度に全日制がある場合、その年度だけ全日制が未公表でも
+      // 定時制・通信制を代用しない。学校単位で代表課程を固定する。
       const fulltime = selections.filter((selection) => selection.course_time === 'fulltime')
+      if (hasFulltimeAnyYear && fulltime.length === 0) return null
       const scoped = fulltime.length > 0 ? fulltime : selections
       const courseTimes = new Set(scoped.map((selection) => selection.course_time ?? 'unknown'))
       if (courseTimes.size > 1) return null

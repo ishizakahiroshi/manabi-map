@@ -35,9 +35,13 @@ async function readEnvFile(path) {
   }
 }
 
+// .env の探索先。既定は web/（従来どおり）。MANABI_MAP_ENV_DIR を設定するとリポジトリ外を見る
+// （秘密をリポジトリ配下に置かないための仕組み。vite.config.ts の envDir と同じ変数を使う）。
+const envDir = process.env.MANABI_MAP_ENV_DIR || webRoot
+
 const env = {
-  ...(await readEnvFile(join(webRoot, '.env'))),
-  ...(await readEnvFile(join(webRoot, '.env.local'))),
+  ...(await readEnvFile(join(envDir, '.env'))),
+  ...(await readEnvFile(join(envDir, '.env.local'))),
   ...process.env,
 }
 

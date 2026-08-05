@@ -12,8 +12,9 @@
     "gen:schools-json": "tsx scripts/gen-schools-json.mjs",
     "typecheck": "tsc --noEmit -p tsconfig.app.json",
     "lint": "oxlint",
-    "test": "vitest run && pnpm test:static",
+    "test": "vitest run && pnpm test:static && pnpm test:functions",
     "test:static": "node --test scripts/verify-static-output.test.mjs",
+    "test:functions": "node --test ../functions/api/admin/_auth.test.ts ../functions/_middleware.test.ts",
     "verify:static": "node scripts/verify-static-output.mjs --dist dist --max-file-mib 25",
     "preview": "vite preview"
   },
@@ -39,10 +40,11 @@
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.3",
     "oxlint": "^1.71.0",
+    "postcss": "8.5.25",
     "tailwindcss": "^4.3.2",
     "tsx": "^4.23.5",
     "typescript": "~6.0.2",
     "vite": "^8.1.1",
-    "vitest": "^3.2.4"
+    "vitest": "^4.1.10"
   }
 }

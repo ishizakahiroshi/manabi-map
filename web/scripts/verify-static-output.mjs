@@ -115,6 +115,14 @@ function checkPageSkeleton(html, pageLabel, expectedCanonical) {
   return main
 }
 
+function checkSafeHrefAttributes(html, pageLabel) {
+  for (const [, href] of html.matchAll(/\bhref="([^"]*)"/gi)) {
+    if (!/^(?:https?:\/\/|\/|#|mailto:|tel:)/i.test(href)) {
+      throw new Error(`unsafe href scheme on ${pageLabel}: ${href}`)
+    }
+  }
+}
+
 async function readPage(absoluteDist, relativePath, label) {
   const path = join(absoluteDist, relativePath)
   let stat
@@ -309,6 +317,7 @@ export async function verifyStaticOutput({
     const html = await readPage(absoluteDist, join('school', String(target.id), 'index.html'), `school:${target.id}`)
     const pageLabel = `/school/${target.id}/`
     const main = checkPageSkeleton(html, pageLabel, `${SITE_ORIGIN}/school/${target.id}/`)
+    checkSafeHrefAttributes(main, pageLabel)
     const escapedName = escapeHtml(target.name)
     const title = extractTitle(html)
     if (!title || !title.includes(escapedName)) {

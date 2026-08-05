@@ -60,7 +60,9 @@ function csvValue(value) {
   const text = Array.isArray(value)
     ? value.map((item) => typeof item === 'object' ? item.name : item).filter(Boolean).join(' / ')
     : value == null ? '' : String(value)
-  return `"${text.replaceAll('"', '""')}"`
+  // Excel / Sheets が先頭文字を数式として解釈しないよう apostrophe を付ける。
+  const guarded = /^[=+\-@\t\r]/.test(text) ? `'${text}` : text
+  return `"${guarded.replaceAll('"', '""')}"`
 }
 
 const outputDir = parseArgs(process.argv.slice(2))

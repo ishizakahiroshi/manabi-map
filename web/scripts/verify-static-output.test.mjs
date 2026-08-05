@@ -240,6 +240,28 @@ test('a wrong canonical on any single school page is rejected', async (t) => {
   )
 })
 
+test('a dangerous href scheme on any school page is rejected', async (t) => {
+  const dir = await syntheticDist()
+  t.after(() => rm(dir, { recursive: true, force: true }))
+  await writeFile(join(dir, 'school', 'synthetic-b', 'index.html'), page({
+    title: '合成第二高等学校 | Manabi Map',
+    canonical: `${ORIGIN}/school/synthetic-b/`,
+    main: '<h1>合成第二高等学校</h1>' +
+      '<a href="javascript:alert(1)">危険な合成リンク</a>' +
+      '<section><h2>合成第二高等学校の近くにある高校</h2>' +
+      '<p>直線距離の近い順に 1 校。</p>' +
+      '<ul><li><a href="/school/synthetic-a/">合成第一高等学校</a>（前橋市・約 1.0 km）</li></ul></section>',
+    jsonLd: [
+      { '@context': 'https://schema.org', '@type': 'HighSchool', name: '合成第二高等学校' },
+      breadcrumbLd('合成第二高等学校'),
+    ],
+  }))
+  await assert.rejects(
+    verifyStaticOutput({ distDir: dir, maxFileBytes: 1024 * 1024 }),
+    /unsafe href scheme on \/school\/synthetic-b\//,
+  )
+})
+
 test('a forbidden ranking word in a pref hub is rejected', async (t) => {
   const dir = await syntheticDist()
   t.after(() => rm(dir, { recursive: true, force: true }))

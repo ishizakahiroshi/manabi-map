@@ -78,7 +78,11 @@ cd web && pnpm build       # 本番ビルド（dist/）
 node scripts/secrets-scan.mjs --staged --block   # 手動 secrets-scan（layer 1）
 ```
 
-Supabase / LINE の接続情報はリポジトリ外に保管する。`web/.env.local`（gitignored）に `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY` を転記して使う。作者ローカルの保管パスなど個人環境固有の情報は `CLAUDE.local.md`（gitignored）に記載する。
+Supabase / LINE の接続情報はリポジトリ外に保管する。既定では `web/.env.local`（gitignored）に `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY` を転記して使う。
+
+**env をリポジトリ配下に一切置かない運用（推奨）**: 環境変数 `MANABI_MAP_ENV_DIR` に `.env.local` を置いたディレクトリの絶対パスを設定すると、`vite.config.ts`（`envDir`）・`web/scripts/gen-schools-json.mjs`・`scripts/maintenance.mjs` の 3 つがそのディレクトリを参照する。未設定なら従来どおり `web/` を見るため、他環境・CI・Cloudflare Pages は無影響（Pages はファイルではなく Pages env を `process.env` として渡すので元から無関係）。**環境変数に入るのはパスだけで、鍵の値は入らない。** 特に `scripts/maintenance.mjs` は service role key を読むため、この方式だとリポジトリ配下に本物の秘密が置かれなくなる。
+
+作者ローカルの保管パスなど個人環境固有の情報は `CLAUDE.local.md`（gitignored）に記載する。
 
 ## AI 作業共通ルール
 
@@ -89,7 +93,7 @@ Supabase / LINE の接続情報はリポジトリ外に保管する。`web/.env.
 - ユーザーが「メンテにして」「メンテモード ON」「メンテ入れて」等と言ったら、`node scripts/maintenance.mjs on` を実行する。
 - 「メンテ解除」「メンテ OFF」「メンテ戻して」等は `node scripts/maintenance.mjs off` を実行する。
 - 状態確認は `node scripts/maintenance.mjs status` を実行する。
-- CLI は `web/.env.local` の service role key を読むため、キーを出力・ログ・コミットしない。
+- CLI は `.env.local` の service role key を読むため、キーを出力・ログ・コミットしない。参照先は `MANABI_MAP_ENV_DIR`（設定時）または `web/`（未設定時）。
 - DB 復元中など CLI が DB に到達できない非常時だけ、既存の env var + Retry deployment 経路を使う。
 
 ## 利用可能な skill（作者環境）
