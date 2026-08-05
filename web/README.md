@@ -12,6 +12,20 @@ cp .env.example .env.local   # 実値を記入（Supabase Dashboard → Data API
 
 `.env.local` は gitignored。コミットしないこと。
 
+### env をリポジトリ外に置く（任意）
+
+`.env.local` をリポジトリ配下に一切置きたくない場合は、環境変数 `MANABI_MAP_ENV_DIR` に
+`.env.local` を置いたディレクトリの絶対パスを設定する。`vite.config.ts` の `envDir`、
+`scripts/gen-schools-json.mjs`、リポジトリ直下の `scripts/maintenance.mjs` が同じ変数を見る。
+
+```bash
+# 例（パスは各自の環境に合わせる）
+export MANABI_MAP_ENV_DIR=/path/to/secrets/manabi-map
+```
+
+未設定なら従来どおり `web/` を探すため、この変数を使わない環境の挙動は変わらない。
+Cloudflare Pages のビルドは `.env` ファイルではなく Pages の環境変数を使うので影響しない。
+
 ## 開発サーバー
 
 ```bash

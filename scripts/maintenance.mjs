@@ -17,12 +17,16 @@ if (!['status', 'on', 'off'].includes(command)) {
   process.exitCode = 2
 } else {
   try {
-    const envFile = resolve(dirname(fileURLToPath(import.meta.url)), '../web/.env.local')
+    // .env.local の探索先。既定は web/（従来どおり）。MANABI_MAP_ENV_DIR を設定するとリポジトリ外を見る。
+    // 本 CLI は service role key を読むため、リポジトリ配下に秘密を置かずに済ませる意味が特に大きい
+    // （vite.config.ts / gen-schools-json.mjs と同じ変数を使う）。
+    const envDir = process.env.MANABI_MAP_ENV_DIR || resolve(dirname(fileURLToPath(import.meta.url)), '../web')
+    const envFile = resolve(envDir, '.env.local')
     const fileEnv = parseEnvFile(envFile)
     const supabaseUrl = (fileEnv.SUPABASE_URL ?? fileEnv.VITE_SUPABASE_URL ?? process.env.SUPABASE_URL ?? '').replace(/\/$/, '')
     const serviceRoleKey = fileEnv.SUPABASE_SERVICE_ROLE_KEY ?? process.env.SUPABASE_SERVICE_ROLE_KEY ?? ''
-    if (!supabaseUrl) throw new Error('SUPABASE_URL (or VITE_SUPABASE_URL) is missing in web/.env.local')
-    if (!serviceRoleKey) throw new Error('SUPABASE_SERVICE_ROLE_KEY is missing in web/.env.local')
+    if (!supabaseUrl) throw new Error(`SUPABASE_URL (or VITE_SUPABASE_URL) is missing in ${envFile}`)
+    if (!serviceRoleKey) throw new Error(`SUPABASE_SERVICE_ROLE_KEY is missing in ${envFile}`)
 
     const configUrl = `${supabaseUrl}/rest/v1/app_config?key=eq.maintenance_mode&select=key,value,updated_at,updated_by`
     const headers = {

@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useApp } from '../contexts/AppContext'
 import { useI18n } from '../contexts/I18nContext'
+import { useGoBack } from '../hooks/useGoBack'
 import { useSchools } from '../hooks/useSchools'
 import { trackEvent } from '../lib/analytics'
 import type { School } from '../types/school'
@@ -25,6 +26,7 @@ function topDeviation(school: School): number | null {
 
 export function SchoolSearchPage() {
   const navigate = useNavigate()
+  const goBack = useGoBack('/')
   const { setHome } = useApp()
   const { t } = useI18n()
   const { schools, loading, error } = useSchools()
@@ -50,7 +52,7 @@ export function SchoolSearchPage() {
   return (
     <div className="screen">
       <div className="header">
-        <button className="icon-btn" onClick={() => navigate(-1)} aria-label={t('common.back')}>
+        <button className="icon-btn" onClick={goBack} aria-label={t('common.back')}>
           ←
         </button>
         <div className="brand">{t('schoolSearch.title')}</div>

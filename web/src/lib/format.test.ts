@@ -55,7 +55,11 @@ describe('shortSchoolName', () => {
     expect(shortSchoolName('桐生市立商業高等学校')).toBe('桐生商業高校')
   })
   it('国立接頭辞と高等専門学校を剥がす', () => {
-    expect(shortSchoolName('国立群馬工業高等専門学校')).toBe('群馬工業高専')
+    expect(shortSchoolName('国立群馬工業高等専門学校', { ownership: 'national', prefecture: '群馬県' })).toBe('群馬工業高専')
+  })
+  it('校名の「国立」は設置者が国立でない場合に残す', () => {
+    expect(shortSchoolName('東京都立国立高等学校', { ownership: 'prefectural', prefecture: '東京都' })).toBe('国立高校')
+    expect(shortSchoolName('国立音楽大学附属高等学校', { ownership: 'private', prefecture: '東京都' })).toBe('国立音楽大学附属高校')
   })
   it('中等教育学校は中等に', () => {
     expect(shortSchoolName('群馬県立中央中等教育学校')).toBe('中央中等')

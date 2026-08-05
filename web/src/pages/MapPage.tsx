@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import 'leaflet.markercluster'
@@ -194,8 +194,13 @@ interface Props {
 
 export function MapPage({ userData }: Props) {
   const navigate = useNavigate()
-  const { id: sharedSchoolId } = useParams<{ id: string }>()
-  const sharedOpenedRef = useRef(false)
+  // 学校詳細ページの「地図で見る」導線（/map?school=<id>）で該当校へ寄せて詳細シートを
+  // 開く。/school/:id 自体は SchoolDetailPage（単体 JSON・Leaflet 非依存）が受け持つ
+  // （plan_seo-growth-strategy_c7 C1 / C3）。
+  const [searchParams] = useSearchParams()
+  const sharedSchoolId = searchParams.get('school')
+  /** 最後に URL から開いた school id。?school= 切替に追随する */
+  const sharedOpenedRef = useRef<string | null>(null)
   const { home } = useApp()
   const { t } = useI18n()
   const fmt = useFormat()
@@ -429,10 +434,11 @@ export function MapPage({ userData }: Props) {
     mapRef.fitBounds(homeViewBounds(home, schools))
   }, [home, schools, mapRef])
 
-  // 共有 URL で開かれたら、学校データ到着後に 1 回だけ該当校の詳細シートを開いて寄せる
+  // 「地図で見る」導線（/map?school=<id>）で開いたら、
+  // 該当校の詳細シートを開いて地図を寄せる（同じ id の再実行はしない）
   useEffect(() => {
-    if (!sharedSchoolId || sharedOpenedRef.current || !mapRef || schools.length === 0) return
-    sharedOpenedRef.current = true
+    if (!sharedSchoolId || sharedOpenedRef.current === sharedSchoolId || !mapRef || schools.length === 0) return
+    sharedOpenedRef.current = sharedSchoolId
     const school = schools.find((s) => s.id === sharedSchoolId)
     if (school) {
       setDetail(school)
@@ -754,7 +760,9 @@ export function MapPage({ userData }: Props) {
           school={detail}
           onClose={() => {
             setDetail(null)
-            // 共有 URL 経由なら、シートを閉じた時点で通常の地図 URL に戻す
+            // ?school= 経由なら、シートを閉じた時点で通常の地図 URL に戻す。
+            // 同じ学校へ再度リンクで来たとき開き直せるよう、開封記録もリセットする
+            sharedOpenedRef.current = null
             if (sharedSchoolId) navigate('/map', { replace: true })
           }}
           userData={userData}

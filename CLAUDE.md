@@ -8,7 +8,7 @@ fresh public clone でも有効な内容に保つこと。 -->
 
 **Manabi Map（まなびマップ）は「親子で使う、学校選びの地図ノート」**。住所を入れると通える高校が地図に表示され、気になる学校をお気に入り保存し、文化祭・説明会・通学経路・親子の感想を学校ごとに家族でメモできる進路検討サービス。中学生と保護者が対象。**巨大な偏差値サイトではなく、進路選択を管理するプロダクト**を目指す（企画書 §2）。
 
-群馬県版として 2026-07-05 に v0.1.0 を本番公開（https://manabi-map.app）。現行の最新リリースは `git tag --sort=-v:refname | head -1` / `web/package.json` の `version` を正典とすること（この CLAUDE.md にバージョン番号を直書きすると更新漏れで stale 化する）。個人 OSS（コード AGPL-3.0 / データ CC BY-SA 4.0）。偏差値は商用サイトから転載せず、公的資料に基づく「Manabi Map 独自推計」を掲載する。
+群馬県版として 2026-07-05 に v0.1.0 を本番公開（https://manabi-map.app）。現行の最新リリースは `git tag --sort=-v:refname | head -1` / `web/package.json` の `version` を正典とすること（この CLAUDE.md にバージョン番号を直書きすると更新漏れで stale 化する）。個人 OSS（コード AGPL-3.0 / データ CC BY-SA 4.0）。偏差値は商用サイトから転載せず、公的資料を参考にした「Manabi Map 編集推計」を、根拠を確認できた範囲で掲載する。
 
 ## やらないこと（スコープ外）
 
@@ -78,7 +78,11 @@ cd web && pnpm build       # 本番ビルド（dist/）
 node scripts/secrets-scan.mjs --staged --block   # 手動 secrets-scan（layer 1）
 ```
 
-Supabase / LINE の接続情報はリポジトリ外に保管する。`web/.env.local`（gitignored）に `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY` を転記して使う。作者ローカルの保管パスなど個人環境固有の情報は `CLAUDE.local.md`（gitignored）に記載する。
+Supabase / LINE の接続情報はリポジトリ外に保管する。既定では `web/.env.local`（gitignored）に `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY` を転記して使う。
+
+**env をリポジトリ配下に一切置かない運用（推奨）**: 環境変数 `MANABI_MAP_ENV_DIR` に `.env.local` を置いたディレクトリの絶対パスを設定すると、`vite.config.ts`（`envDir`）・`web/scripts/gen-schools-json.mjs`・`scripts/maintenance.mjs` の 3 つがそのディレクトリを参照する。未設定なら従来どおり `web/` を見るため、他環境・CI・Cloudflare Pages は無影響（Pages はファイルではなく Pages env を `process.env` として渡すので元から無関係）。**環境変数に入るのはパスだけで、鍵の値は入らない。** 特に `scripts/maintenance.mjs` は service role key を読むため、この方式だとリポジトリ配下に本物の秘密が置かれなくなる。
+
+作者ローカルの保管パスなど個人環境固有の情報は `CLAUDE.local.md`（gitignored）に記載する。
 
 ## AI 作業共通ルール
 
@@ -89,7 +93,7 @@ Supabase / LINE の接続情報はリポジトリ外に保管する。`web/.env.
 - ユーザーが「メンテにして」「メンテモード ON」「メンテ入れて」等と言ったら、`node scripts/maintenance.mjs on` を実行する。
 - 「メンテ解除」「メンテ OFF」「メンテ戻して」等は `node scripts/maintenance.mjs off` を実行する。
 - 状態確認は `node scripts/maintenance.mjs status` を実行する。
-- CLI は `web/.env.local` の service role key を読むため、キーを出力・ログ・コミットしない。
+- CLI は `.env.local` の service role key を読むため、キーを出力・ログ・コミットしない。参照先は `MANABI_MAP_ENV_DIR`（設定時）または `web/`（未設定時）。
 - DB 復元中など CLI が DB に到達できない非常時だけ、既存の env var + Retry deployment 経路を使う。
 
 ## 利用可能な skill（作者環境）
@@ -105,6 +109,7 @@ Supabase / LINE の接続情報はリポジトリ外に保管する。`web/.env.
 |---|---|---|
 | バージョンリリース全体（backup → migration → データ投入 → 検証 → プレビュー → main マージ → タグ） | `manabi-map-deploy` | 「manabi-map リリース」「v0.x.y 出して」「関東の次のリリース」 |
 | 新県データ投入（schools SQL + deviation SQL + 校パターン再分類 + course_type_master 確認） | `manabi-map-add-prefecture` | 「◯◯県 追加」「manabi-map に◯◯県入れて」「新県 データ投入」 |
+| nullable な学校情報を「情報提供募集中」型で追加（テンプレ・i18n・CSS・実装メモ生成） | `manabi-map-info-wanted-field` | 「情報提供募集中 field 追加」「空欄可能フィールド」「manabi-map-info-wanted-field」 |
 | Supabase 本番へ migration 適用（Docker 不要・psql 直叩き・backup + schema_migrations 記録） | `supabase-migrate` | 「Supabase migration 適用」「本番 DB に SQL 流して」「pg_dump backup 取って」 |
 | フリーテキスト分類列 → master + FK + trigger 化（表記ゆれ・分類漏れ対策） | `taxonomy-refactor` | 「分類を master 化」「course_type refactor」「表記ゆれ対策」 |
 

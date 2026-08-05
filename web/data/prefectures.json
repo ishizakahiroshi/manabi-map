@@ -1,0 +1,336 @@
+{
+  "source": "総務省 全国地方公共団体コード（都道府県コード及び市区町村コード）令和6年1月1日現在",
+  "sourceUrl": "https://www.soumu.go.jp/denshijiti/code.html",
+  "retrievedAt": "2026-08-03",
+  "prefectures": [
+    {
+      "code": "01",
+      "name": "北海道",
+      "kana": "ほっかいどう",
+      "slug": "hokkaido",
+      "region": "hokkaido-tohoku"
+    },
+    {
+      "code": "02",
+      "name": "青森県",
+      "kana": "あおもりけん",
+      "slug": "aomori",
+      "region": "hokkaido-tohoku"
+    },
+    {
+      "code": "03",
+      "name": "岩手県",
+      "kana": "いわてけん",
+      "slug": "iwate",
+      "region": "hokkaido-tohoku"
+    },
+    {
+      "code": "04",
+      "name": "宮城県",
+      "kana": "みやぎけん",
+      "slug": "miyagi",
+      "region": "hokkaido-tohoku"
+    },
+    {
+      "code": "05",
+      "name": "秋田県",
+      "kana": "あきたけん",
+      "slug": "akita",
+      "region": "hokkaido-tohoku"
+    },
+    {
+      "code": "06",
+      "name": "山形県",
+      "kana": "やまがたけん",
+      "slug": "yamagata",
+      "region": "hokkaido-tohoku"
+    },
+    {
+      "code": "07",
+      "name": "福島県",
+      "kana": "ふくしまけん",
+      "slug": "fukushima",
+      "region": "hokkaido-tohoku"
+    },
+    {
+      "code": "08",
+      "name": "茨城県",
+      "kana": "いばらきけん",
+      "slug": "ibaraki",
+      "region": "kanto"
+    },
+    {
+      "code": "09",
+      "name": "栃木県",
+      "kana": "とちぎけん",
+      "slug": "tochigi",
+      "region": "kanto"
+    },
+    {
+      "code": "10",
+      "name": "群馬県",
+      "kana": "ぐんまけん",
+      "slug": "gunma",
+      "region": "kanto"
+    },
+    {
+      "code": "11",
+      "name": "埼玉県",
+      "kana": "さいたまけん",
+      "slug": "saitama",
+      "region": "kanto"
+    },
+    {
+      "code": "12",
+      "name": "千葉県",
+      "kana": "ちばけん",
+      "slug": "chiba",
+      "region": "kanto"
+    },
+    {
+      "code": "13",
+      "name": "東京都",
+      "kana": "とうきょうと",
+      "slug": "tokyo",
+      "region": "kanto"
+    },
+    {
+      "code": "14",
+      "name": "神奈川県",
+      "kana": "かながわけん",
+      "slug": "kanagawa",
+      "region": "kanto"
+    },
+    {
+      "code": "15",
+      "name": "新潟県",
+      "kana": "にいがたけん",
+      "slug": "niigata",
+      "region": "chubu"
+    },
+    {
+      "code": "16",
+      "name": "富山県",
+      "kana": "とやまけん",
+      "slug": "toyama",
+      "region": "chubu"
+    },
+    {
+      "code": "17",
+      "name": "石川県",
+      "kana": "いしかわけん",
+      "slug": "ishikawa",
+      "region": "chubu"
+    },
+    {
+      "code": "18",
+      "name": "福井県",
+      "kana": "ふくいけん",
+      "slug": "fukui",
+      "region": "chubu"
+    },
+    {
+      "code": "19",
+      "name": "山梨県",
+      "kana": "やまなしけん",
+      "slug": "yamanashi",
+      "region": "chubu"
+    },
+    {
+      "code": "20",
+      "name": "長野県",
+      "kana": "ながのけん",
+      "slug": "nagano",
+      "region": "chubu"
+    },
+    {
+      "code": "21",
+      "name": "岐阜県",
+      "kana": "ぎふけん",
+      "slug": "gifu",
+      "region": "chubu"
+    },
+    {
+      "code": "22",
+      "name": "静岡県",
+      "kana": "しずおかけん",
+      "slug": "shizuoka",
+      "region": "chubu"
+    },
+    {
+      "code": "23",
+      "name": "愛知県",
+      "kana": "あいちけん",
+      "slug": "aichi",
+      "region": "chubu"
+    },
+    {
+      "code": "24",
+      "name": "三重県",
+      "kana": "みえけん",
+      "slug": "mie",
+      "region": "kinki"
+    },
+    {
+      "code": "25",
+      "name": "滋賀県",
+      "kana": "しがけん",
+      "slug": "shiga",
+      "region": "kinki"
+    },
+    {
+      "code": "26",
+      "name": "京都府",
+      "kana": "きょうとふ",
+      "slug": "kyoto",
+      "region": "kinki"
+    },
+    {
+      "code": "27",
+      "name": "大阪府",
+      "kana": "おおさかふ",
+      "slug": "osaka",
+      "region": "kinki"
+    },
+    {
+      "code": "28",
+      "name": "兵庫県",
+      "kana": "ひょうごけん",
+      "slug": "hyogo",
+      "region": "kinki"
+    },
+    {
+      "code": "29",
+      "name": "奈良県",
+      "kana": "ならけん",
+      "slug": "nara",
+      "region": "kinki"
+    },
+    {
+      "code": "30",
+      "name": "和歌山県",
+      "kana": "わかやまけん",
+      "slug": "wakayama",
+      "region": "kinki"
+    },
+    {
+      "code": "31",
+      "name": "鳥取県",
+      "kana": "とっとりけん",
+      "slug": "tottori",
+      "region": "chugoku-shikoku"
+    },
+    {
+      "code": "32",
+      "name": "島根県",
+      "kana": "しまねけん",
+      "slug": "shimane",
+      "region": "chugoku-shikoku"
+    },
+    {
+      "code": "33",
+      "name": "岡山県",
+      "kana": "おかやまけん",
+      "slug": "okayama",
+      "region": "chugoku-shikoku"
+    },
+    {
+      "code": "34",
+      "name": "広島県",
+      "kana": "ひろしまけん",
+      "slug": "hiroshima",
+      "region": "chugoku-shikoku"
+    },
+    {
+      "code": "35",
+      "name": "山口県",
+      "kana": "やまぐちけん",
+      "slug": "yamaguchi",
+      "region": "chugoku-shikoku"
+    },
+    {
+      "code": "36",
+      "name": "徳島県",
+      "kana": "とくしまけん",
+      "slug": "tokushima",
+      "region": "chugoku-shikoku"
+    },
+    {
+      "code": "37",
+      "name": "香川県",
+      "kana": "かがわけん",
+      "slug": "kagawa",
+      "region": "chugoku-shikoku"
+    },
+    {
+      "code": "38",
+      "name": "愛媛県",
+      "kana": "えひめけん",
+      "slug": "ehime",
+      "region": "chugoku-shikoku"
+    },
+    {
+      "code": "39",
+      "name": "高知県",
+      "kana": "こうちけん",
+      "slug": "kochi",
+      "region": "chugoku-shikoku"
+    },
+    {
+      "code": "40",
+      "name": "福岡県",
+      "kana": "ふくおかけん",
+      "slug": "fukuoka",
+      "region": "kyushu-okinawa"
+    },
+    {
+      "code": "41",
+      "name": "佐賀県",
+      "kana": "さがけん",
+      "slug": "saga",
+      "region": "kyushu-okinawa"
+    },
+    {
+      "code": "42",
+      "name": "長崎県",
+      "kana": "ながさきけん",
+      "slug": "nagasaki",
+      "region": "kyushu-okinawa"
+    },
+    {
+      "code": "43",
+      "name": "熊本県",
+      "kana": "くまもとけん",
+      "slug": "kumamoto",
+      "region": "kyushu-okinawa"
+    },
+    {
+      "code": "44",
+      "name": "大分県",
+      "kana": "おおいたけん",
+      "slug": "oita",
+      "region": "kyushu-okinawa"
+    },
+    {
+      "code": "45",
+      "name": "宮崎県",
+      "kana": "みやざきけん",
+      "slug": "miyazaki",
+      "region": "kyushu-okinawa"
+    },
+    {
+      "code": "46",
+      "name": "鹿児島県",
+      "kana": "かごしまけん",
+      "slug": "kagoshima",
+      "region": "kyushu-okinawa"
+    },
+    {
+      "code": "47",
+      "name": "沖縄県",
+      "kana": "おきなわけん",
+      "slug": "okinawa",
+      "region": "kyushu-okinawa"
+    }
+  ]
+}

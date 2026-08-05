@@ -71,9 +71,6 @@ export function ComparePage({ userData }: Props) {
           ←
         </button>
         <div className="brand">{t('compare.title')}</div>
-        <button className="icon-btn" onClick={() => navigate('/')} aria-label={t('common.home')}>
-          🏠
-        </button>
       </div>
 
       <main id="main-content" className="content compare-content" tabIndex={-1}>

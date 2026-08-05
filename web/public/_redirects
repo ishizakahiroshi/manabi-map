@@ -1,1 +1,16 @@
-/* /index.html 200
+# SPA フォールバックは「既知の SPA ルートの列挙」に限定する。
+# 旧: `/* /index.html 200` は存在しない URL をすべて 200 + 空シェル + canonical=トップで
+# 返し、GSC のソフト 404 とインデックス判断のノイズ源だった
+# （docs/local/plan_seo-growth-strategy_c5_static-routes.md C4）。
+# 列挙外の URL は Cloudflare Pages が dist/404.html を HTTP 404 で返す。
+# /（トップ）・/school/*・/schools/・/pref/*・/legal/*・/press は静的 HTML が存在するので
+# フォールバック不要。
+# 注意: _redirects の上限は 静的 2,000 + 動的 100。ルートを増やすときは意識すること。
+/map        /index.html   200
+/search     /index.html   200
+/favorites  /index.html   200
+/compare    /index.html   200
+/mypage     /index.html   200
+/auth/*     /index.html   200
+/family/*   /index.html   200
+/dashboard  /index.html   200
