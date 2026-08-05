@@ -1,5 +1,5 @@
 import type { AdSlotItem } from '../data/ad-slots'
-import { AD_CAMPAIGN_V014, withUtm } from '../lib/utm'
+import { AD_CAMPAIGN, withUtm } from '../lib/utm'
 import { trackEvent } from '../lib/analytics'
 
 interface AdSlotProps {
@@ -29,7 +29,7 @@ const CATEGORY_JA: Record<AdSlotItem['category'], string> = {
  */
 export function AdSlot({ slot, context, categoryLabel, className }: AdSlotProps) {
   const href = withUtm(slot.baseUrl, {
-    campaign: AD_CAMPAIGN_V014,
+    campaign: AD_CAMPAIGN,
     medium: slot.placement,
     content: context?.schoolId ? `school-${context.schoolId}` : slot.id,
   })

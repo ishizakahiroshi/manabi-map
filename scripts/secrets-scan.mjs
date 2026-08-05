@@ -33,6 +33,11 @@ const EXEMPT_PATHS = [
   '.husky/pre-commit',
   '.github/workflows/secrets-scan',
   'docs/local/',
+  // 総務省「全国地方公共団体コード」由来の公的データ専用ディレクトリ
+  // （docs/local/convert-soumu-codes.py の生成物のみを置く契約）。
+  // 市区町村名・かなが watchlist の短い needle（人名かな 2 文字等）と
+  // 偶然部分一致して誤検知するため除外する（2026-08-04・実例: かつうらちょう/さくら市/熊谷市）。
+  'web/data/',
 ];
 
 const MIN_NEEDLE_LEN = 2;

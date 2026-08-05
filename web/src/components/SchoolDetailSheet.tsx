@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState, type TouchEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type MouseEvent, type TouchEvent } from 'react'
+import { useNavigate } from 'react-router-dom'
 import type { AdmissionSelection, AdmissionQualityReason, School } from '../types/school'
 import {
   haversine,
@@ -9,6 +10,9 @@ import {
   googleMapsRoute,
 } from '../lib/geo'
 import { primaryAdmissionTrend } from '../lib/admission'
+import { neighborPlaceLabel, selectNeighbors } from '../lib/neighbors'
+import { successorsByPredecessorId, type SuccessorRef } from '../lib/successors'
+import { useSchoolsCache } from '../hooks/useSchools'
 import { useApp } from '../contexts/AppContext'
 import { useAuth } from '../contexts/AuthContext'
 import { useI18n } from '../contexts/I18nContext'
@@ -24,13 +28,41 @@ import { slotsForPlacement } from '../data/ad-slots'
 import { DataReportForm } from './DataReportForm'
 import { scaleBand } from '../lib/format'
 
+/** 近隣校リストの 1 項目（school は表示に必要な最小形。School 全体でもよい）。 */
+interface NeighborEntry {
+  school: { id: string; name: string; prefecture: string; city: string | null }
+  distanceKm: number
+}
+
+/**
+ * 学校単体 JSON（/school-data/<id>.json）に同梱された事前計算値。
+ * /school/:id 直リンク着地時は全件データが無いため、近隣校・後継校・前身校リンク可否を
+ * ビルド時計算（gen-schools-json.mjs・選定ロジックは lib/neighbors.ts を共有）で受け取る。
+ * 未指定時は全件キャッシュ（useSchoolsCache）から同じ共有ロジックで算出する。
+ */
+export interface SchoolDetailExtras {
+  neighbors: NeighborEntry[]
+  successors: SuccessorRef[]
+  linkableSchoolIds: ReadonlySet<string>
+}
+
 interface Props {
   school: School | null
   onClose: () => void
   userData: ReturnType<typeof useUserData>
+  extras?: SchoolDetailExtras | null
+  /** 単独ページ（/school/:id）として表示中。「地図で見る」導線を出す。 */
+  standalone?: boolean
 }
 
-export function SchoolDetailSheet({ school, onClose, userData }: Props) {
+/**
+ * 近隣校リストの初期表示件数。距離順で上位ほど価値が高いため先頭のみ見せる。
+ * index.css の .neighbor-block.collapsed 側の nth-child(n + 6) と対（変えるときは両方）。
+ */
+const NEIGHBOR_PREVIEW_COUNT = 5
+
+export function SchoolDetailSheet({ school, onClose, userData, extras, standalone }: Props) {
+  const navigate = useNavigate()
   const { home, toast, setLoginOpen } = useApp()
   const { session } = useAuth()
   const { t } = useI18n()
@@ -40,7 +72,7 @@ export function SchoolDetailSheet({ school, onClose, userData }: Props) {
   const touchStartY = useRef<number | null>(null)
   const touchCurrentY = useRef<number | null>(null)
   const {
-    favorites, notes, mine, loading: userDataLoading,
+    favorites, notes, mine, loading: userDataLoading, loadError: userDataLoadError,
     toggleFavorite, setPriority, saveNote, saveMineValue, saveMineNote, saveMineConsent,
   } = userData
 
@@ -74,6 +106,29 @@ export function SchoolDetailSheet({ school, onClose, userData }: Props) {
   const schoolId = school?.id ?? null
   const open = school != null
 
+  // 近隣校・後継校の算出用。受動購読（キャッシュがあれば使う・無くても全件 fetch を
+  // 起動しない）。/school/:id 直リンク着地時は extras（単体 JSON 同梱の事前計算値）が
+  // 渡され、地図・お気に入り等の全件ロード済み画面では下の共有ロジック計算が使われる。
+  const { schools } = useSchoolsCache()
+  // 選定ロジックは静的生成（gen-seo-pages.mjs）・単体 JSON 生成（gen-schools-json.mjs）と
+  // 共有（lib/neighbors.ts）。距離順のみ。偏差値順・倍率順のソートは実装しない
+  // （ランキングサイト化の禁止線）。
+  const computedNeighbors = useMemo(
+    () => (school ? selectNeighbors(school, schools) : []),
+    [school, schools],
+  )
+  const neighbors: NeighborEntry[] = extras?.neighbors ?? computedNeighbors
+  const [neighborsExpanded, setNeighborsExpanded] = useState(false)
+  const schoolIdSet = useMemo(() => new Set(schools.map((s) => s.id)), [schools])
+  /** 前身校リンクを張ってよいか（= 個別ページが存在するか）。 */
+  const isLinkableSchool = (id: string): boolean =>
+    extras ? extras.linkableSchoolIds.has(id) : schoolIdSet.has(id)
+  // この学校を前身校とする後継校（沿革の逆方向リンク）。逆引きは lib/successors.ts を
+  // ビルドスクリプトと共有する。
+  const successorsById = useMemo(() => successorsByPredecessorId(schools), [schools])
+  const successors: SuccessorRef[] =
+    extras?.successors ?? (school ? (successorsById.get(school.id) ?? []) : [])
+
   useFocusTrap(sheetRef, open)
   useEscapeKey(onClose, open)
 
@@ -81,7 +136,10 @@ export function SchoolDetailSheet({ school, onClose, userData }: Props) {
     if (!schoolId) return
     // 詳細シート開封（school 切替時に 1 回）。PII は載せない（school_id / prefecture のみ）
     trackEvent('detail_open', { school_id: schoolId, prefecture: school?.prefecture })
+    // 近隣校リンク等でシート内から別の学校へ切り替わったとき、本文を先頭へ戻す
+    sheetRef.current?.querySelector('.body')?.scrollTo({ top: 0 })
     dirtyRef.current = { memo: false, commute: false, mineNote: false, depts: false }
+    setNeighborsExpanded(false)
     const n = notes[schoolId]
     setMemo(n?.note ?? '')
     setCommuteNote(n?.commute_note ?? '')
@@ -185,7 +243,15 @@ export function SchoolDetailSheet({ school, onClose, userData }: Props) {
     school.predecessor_relationships.length > 0 ||
     school.name_history.length > 0 ||
     school.legally_established_on != null ||
-    school.opened_on != null
+    school.opened_on != null ||
+    successors.length > 0
+
+  /** シート内から別の学校ページへ SPA 遷移する（<a href> はクローラー・新規タブ用に残す） */
+  const schoolLinkClick = (id: string) => (e: MouseEvent<HTMLAnchorElement>) => {
+    if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return
+    e.preventDefault()
+    navigate(`/school/${id}`)
+  }
 
   const admissionSelections = school.admission_selections
     .slice()
@@ -398,8 +464,8 @@ export function SchoolDetailSheet({ school, onClose, userData }: Props) {
   const handleSave = async () => {
     if (requireLogin()) return
     // userData 未到着のうちに空欄保存すると既存メモを上書きしてしまう
-    if (userDataLoading) {
-      toast(t('common.loading'))
+    if (userDataLoading || userDataLoadError) {
+      toast(t(userDataLoadError ? 'common.dataLoadFailed' : 'common.loading'))
       return
     }
     setSaving(true)
@@ -475,13 +541,15 @@ export function SchoolDetailSheet({ school, onClose, userData }: Props) {
     }
     setAdminSavingDept(departmentId)
     try {
-      const { error } = await supabase.rpc('correct_school_deviation', {
+      const { data, error } = await supabase.rpc('correct_school_deviation', {
         p_department_id: departmentId,
         p_new_value: nextValue,
         p_reason: adminReason,
         p_pin: adminPin,
       })
-      if (error) throw error
+      // PIN 失敗・一時ロックは DB が失敗回数を残すため 0 行で返す。
+      // Supabase の RPC 自体は成功扱いになるので、ここで UI 上の失敗に戻す。
+      if (error || !data?.length) throw error ?? new Error('admin pin verification failed')
       setAdminOverride((cur) => ({ ...cur, [departmentId]: nextValue }))
       setAdminPin('')
       toast(t('detail.adminCorrectionDone'))
@@ -543,6 +611,11 @@ export function SchoolDetailSheet({ school, onClose, userData }: Props) {
     >
       <button className="handle" onClick={onClose} aria-label={t('common.close')} />
       <div className="head">
+        {standalone && (
+          <button className="icon-btn" onClick={onClose} aria-label={t('common.back')}>
+            ←
+          </button>
+        )}
         <span className="grow">
           <h3 className="detail-title">{fmt.displayName(school)}</h3>
           {school.name_kana ? (
@@ -638,14 +711,28 @@ export function SchoolDetailSheet({ school, onClose, userData }: Props) {
               <div className="lifecycle-list">
                 <b>{t('detail.predecessorTitle')}</b>
                 <ul>
-                  {school.predecessor_relationships.map((relationship) => (
+                  {school.predecessor_relationships.map((relationship) => {
+                    const relationshipEvidenceHref = safeSourceUrl(relationship.official_url)
+                    return (
                     <li key={relationship.id}>
                       <div>
-                        {relationship.predecessor.name}{' '}
+                        {isLinkableSchool(relationship.predecessor.id) ? (
+                          <a
+                            href={`/school/${relationship.predecessor.id}`}
+                            onClick={schoolLinkClick(relationship.predecessor.id)}
+                          >
+                            {relationship.predecessor.name}
+                          </a>
+                        ) : (
+                          relationship.predecessor.name
+                        )}{' '}
                         <small>{t('detail.effectiveOn', { date: relationship.effective_on })}</small>{' '}
-                        <a href={relationship.official_url} target="_blank" rel="noreferrer">
-                          {t('detail.officialEvidence')}
-                        </a>
+                        {relationshipEvidenceHref && (
+                          <a href={relationshipEvidenceHref} target="_blank" rel="noreferrer">
+                            {t('detail.officialEvidence')}
+                          </a>
+                        )}
+                        {relationship.notes && <small> — {relationship.notes}</small>}
                       </div>
                       <details className="predecessor-admissions">
                         <summary>
@@ -666,20 +753,38 @@ export function SchoolDetailSheet({ school, onClose, userData }: Props) {
                                   {' — '}{t('detail.admissionCapacity')}: {admissionValue(row.capacity)}
                                   {' / '}{t('detail.admissionApplicants')}: {admissionValue(row.applicants)}
                                   {admissionRatio(row) && ` / ${t('detail.admissionRatio')}: ${admissionRatio(row)}`}
-                                  {row.sources[0] && safeSourceUrl(row.sources[0].official_url) && (
-                                    <>{' '}<a href={row.sources[0].official_url} target="_blank" rel="noreferrer">
-                                      {t('detail.officialEvidence')}
-                                    </a></>
-                                  )}
+                                  {row.sources[0] && (() => {
+                                    const sourceHref = safeSourceUrl(row.sources[0].official_url)
+                                    return sourceHref ? (
+                                      <>{' '}<a href={sourceHref} target="_blank" rel="noreferrer">
+                                        {t('detail.officialEvidence')}
+                                      </a></>
+                                    ) : null
+                                  })()}
                                 </li>
                               ))}
                           </ul>
                         )}
                       </details>
                     </li>
-                  ))}
+                    )
+                  })}
                 </ul>
               </div>
+            )}
+            {successors.length > 0 && (
+              <p className="successor-note">
+                {t('detail.successorPrefix')}
+                {successors.map((s, i) => (
+                  <span key={s.id}>
+                    {i > 0 && '、'}
+                    <a href={`/school/${s.id}`} onClick={schoolLinkClick(s.id)}>
+                      {s.name}
+                    </a>
+                  </span>
+                ))}
+                {t('detail.successorSuffix')}
+              </p>
             )}
             {school.name_history.length > 0 && (
               <div className="lifecycle-list">
@@ -714,6 +819,18 @@ export function SchoolDetailSheet({ school, onClose, userData }: Props) {
         </div>
 
         <div className="ext-links">
+          {standalone && (
+            <a
+              href={`/map?school=${school.id}`}
+              onClick={(e) => {
+                if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return
+                e.preventDefault()
+                navigate(`/map?school=${school.id}`)
+              }}
+            >
+              🗺 {t('detail.viewOnMap')}
+            </a>
+          )}
           {officialUrl ? (
             <a href={officialUrl} target="_blank" rel="noreferrer">
               🌐 {t('detail.official')}
@@ -735,6 +852,7 @@ export function SchoolDetailSheet({ school, onClose, userData }: Props) {
           {school.departments.length === 0 ? (
             <div className="depts-empty">
               <p>{t('detail.deptDeviationEmpty')}</p>
+              <p>{t('detail.deptDeviationEvidenceGuide')}</p>
               <DataReportForm
                 schoolId={school.id}
                 field="other"
@@ -779,6 +897,16 @@ export function SchoolDetailSheet({ school, onClose, userData }: Props) {
           </div>
           <p className="note">
             {t('detail.sourceNote')}
+            {' '}
+            <a
+              href="/legal/deviation-methodology"
+              onClick={(e) => {
+                e.preventDefault()
+                navigate('/legal/deviation-methodology')
+              }}
+            >
+              {t('detail.methodologyLink')}
+            </a>
             <br />
             {t('detail.disclaimer')}
             <br />
@@ -794,7 +922,8 @@ export function SchoolDetailSheet({ school, onClose, userData }: Props) {
           )}
         </div>
 
-        <details className="admission-block">
+        {/* key: 近隣校リンク等での学校切替時に、非制御の open 状態を初期値（閉）へ戻す */}
+        <details className="admission-block" key={school.id}>
           <summary>
             <span className="admission-block-title">📈 {t('detail.admissionTitle')}</span>
             <span className="admission-block-hint">{t('detail.admissionSub')}</span>
@@ -804,13 +933,32 @@ export function SchoolDetailSheet({ school, onClose, userData }: Props) {
               {admissionTrend && (
                 <section className="admission-trend">
                   <h5>{t('detail.admissionTrendTitle')}</h5>
-                  <div className="admission-trend-years">
-                    {admissionTrend.annual.map((annual) => (
-                      <span key={annual.year}>
-                        {annual.year}{t('detail.admissionYearSuffix')} {annual.ratio.toFixed(2)}
-                        <small> ({annual.applicants.toLocaleString()} / {annual.capacity.toLocaleString()})</small>
-                      </span>
-                    ))}
+                  {/* 静的生成（gen-seo-pages.mjs）の年度表と同じ集計値を出す（内容一致・c4 C5） */}
+                  <div className="admission-scroll">
+                    <table className="admission-table">
+                      <thead>
+                        <tr>
+                          <th>{t('detail.admissionYear')}</th>
+                          <th>{t('detail.admissionCapacity')}</th>
+                          <th>{t('detail.admissionApplicants')}</th>
+                          <th>{t('detail.admissionExaminees')}</th>
+                          <th>{t('detail.admissionAdmitted')}</th>
+                          <th>{t('detail.admissionRatio')}</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {admissionTrend.annual.map((annual) => (
+                          <tr key={annual.year}>
+                            <th scope="row">{annual.year}{t('detail.admissionYearSuffix')}</th>
+                            <td>{admissionValue(annual.capacity)}</td>
+                            <td>{admissionValue(annual.applicants)}</td>
+                            <td>{admissionValue(annual.examinees)}</td>
+                            <td>{admissionValue(annual.admitted)}</td>
+                            <td>{annual.ratio.toFixed(2)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
                   {trendDescription && <p>{trendDescription}</p>}
                   {admissionTrend.average != null && (
@@ -849,6 +997,42 @@ export function SchoolDetailSheet({ school, onClose, userData }: Props) {
           )}
           <p className="note">{t('detail.disclaimer')}</p>
         </details>
+
+        {neighbors.length > 0 && (
+          /* 畳み中も li は DOM に残し CSS で隠す（条件レンダーにしない）。静的 HTML
+             （gen-seo-pages.mjs）の全件掲載とレンダリング後 DOM の内部リンク網を一致させるため */
+          <div className={`neighbor-block${neighborsExpanded ? '' : ' collapsed'}`}>
+            <h4>📍 {t('detail.neighborTitle')}</h4>
+            <p className="sub">{t('detail.neighborNote', { count: neighbors.length })}</p>
+            <ul>
+              {neighbors.map(({ school: neighbor, distanceKm }) => (
+                <li key={neighbor.id}>
+                  <a href={`/school/${neighbor.id}`} onClick={schoolLinkClick(neighbor.id)}>
+                    {neighbor.name}
+                  </a>
+                  <span className="neighbor-meta">
+                    （{t('detail.neighborMeta', {
+                      place: neighborPlaceLabel(school, neighbor),
+                      km: distanceKm.toFixed(1),
+                    })}）
+                  </span>
+                </li>
+              ))}
+            </ul>
+            {neighbors.length > NEIGHBOR_PREVIEW_COUNT && (
+              <button
+                type="button"
+                className="chip neighbor-more"
+                aria-expanded={neighborsExpanded}
+                onClick={() => setNeighborsExpanded((v) => !v)}
+              >
+                {neighborsExpanded
+                  ? t('detail.neighborLess')
+                  : t('detail.neighborMore', { count: neighbors.length - NEIGHBOR_PREVIEW_COUNT })}
+              </button>
+            )}
+          </div>
+        )}
 
         <div className="mine-block">
           <h4>📊 {t('detail.myBlockTitle')}</h4>

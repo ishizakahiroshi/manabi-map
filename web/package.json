@@ -1,19 +1,20 @@
 {
   "name": "manabi-map-web",
   "private": true,
-  "version": "0.4.0",
+  "version": "0.5.0",
   "author": "Hiroshi Ishizaka (ishizakahiroshi) <ishizakahiroshi.dev@gmail.com>",
   "license": "AGPL-3.0-or-later",
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "pnpm fetch:tags && pnpm gen:schools-json && vite build && node scripts/gen-seo-pages.mjs",
+    "build": "pnpm fetch:tags && pnpm gen:schools-json && vite build && tsx scripts/gen-seo-pages.mjs && pnpm verify:static",
     "fetch:tags": "git fetch --unshallow --tags 2>/dev/null || git fetch --deepen=200 --tags 2>/dev/null || git fetch --tags || true",
-    "gen:schools-json": "node scripts/gen-schools-json.mjs",
+    "gen:schools-json": "tsx scripts/gen-schools-json.mjs",
     "typecheck": "tsc --noEmit -p tsconfig.app.json",
     "lint": "oxlint",
-    "test": "vitest run && pnpm test:static",
+    "test": "vitest run && pnpm test:static && pnpm test:functions",
     "test:static": "node --test scripts/verify-static-output.test.mjs",
+    "test:functions": "node --test ../functions/api/admin/_auth.test.ts ../functions/_middleware.test.ts",
     "verify:static": "node scripts/verify-static-output.mjs --dist dist --max-file-mib 25",
     "preview": "vite preview"
   },
@@ -39,9 +40,11 @@
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.3",
     "oxlint": "^1.71.0",
+    "postcss": "8.5.25",
     "tailwindcss": "^4.3.2",
+    "tsx": "^4.23.5",
     "typescript": "~6.0.2",
     "vite": "^8.1.1",
-    "vitest": "^3.2.4"
+    "vitest": "^4.1.10"
   }
 }

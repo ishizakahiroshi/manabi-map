@@ -71,3 +71,6 @@ secrets.*
 # 西日本 v0.4 の成果物置き場を誤ったもの。正しい場所は docs/local/ 配下（gitignored）
 # ここは公開リポなので root の artifacts/ を追跡すると監査データが公開される
 /artifacts/
+
+# 公開データセットのリリース添付用出力（scripts/export-dataset.mjs）
+/dist-dataset/

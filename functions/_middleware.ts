@@ -13,8 +13,8 @@
 // - MAINTENANCE_MODE が "1" 以外(0 / 未設定)なら素通し。
 // - /legal/* は SPA ルート(React が /legal/*.md を fetch して描画)のため、
 //   index.html への SPA フォールバック(_redirects)と /assets/* の JS/CSS も
-//   通す必要がある。/assets/* を許可しても index.html 本体は書き換え対象なので
-//   アプリ画面(/ /map /favorites)がメンテ中に見えることはない。
+//   通す必要がある。/legal/* の許可は SPA のハード遮断を保証しないため、
+//   ハードメンテ時は VITE_MAINTENANCE_MODE も設定する。
 //
 // 切替手順の正典: docs/local/maintenance-mode-runbook.md
 // 注意: Pages の環境変数変更は再デプロイ(最新デプロイの Retry で可)を伴う。
@@ -60,6 +60,11 @@ export const onRequest = async (context: Context): Promise<Response> => {
   }
 
   const { pathname } = new URL(request.url);
+  // API は maintenance.html（200 + HTML）で汚さず、各 Function 自身の
+  // 認証・認可・エラー応答を返す。admin 誤判定もここで防ぐ。
+  if (pathname.startsWith("/api/")) {
+    return next();
+  }
   if (
     ALLOWED_PATHS.has(pathname) ||
     ALLOWED_PREFIXES.some((prefix) => pathname.startsWith(prefix))

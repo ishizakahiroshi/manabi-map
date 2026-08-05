@@ -23,7 +23,7 @@ export function FavoritesPage({ userData }: Props) {
   const { toast } = useApp()
   const { t } = useI18n()
   const fmt = useFormat()
-  const { favorites, notes, mine } = userData
+  const { favorites, notes, mine, loadError, reload } = userData
   const [detail, setDetail] = useState<School | null>(null)
   const [familyOpen, setFamilyOpen] = useState(false)
 
@@ -51,9 +51,6 @@ export function FavoritesPage({ userData }: Props) {
           ←
         </button>
         <div className="brand">{t('nav.favoritesTitle')}</div>
-        <button className="icon-btn" onClick={() => navigate('/')} aria-label={t('common.home')}>
-          🏠
-        </button>
       </div>
       <main id="main-content" className="content favs-content" tabIndex={-1}>
         <div className="favs-toolbar">
@@ -70,7 +67,14 @@ export function FavoritesPage({ userData }: Props) {
           </span>
         </div>
 
-        {favList.length === 0 && (
+        {loadError && (
+          <div className="mydata-note" role="alert">
+            <p>{t('common.dataLoadFailed')}</p>
+            <button className="cta secondary" onClick={reload}>{t('common.retry')}</button>
+          </div>
+        )}
+
+        {!loadError && favList.length === 0 && (
           <div className="favs-empty">
             {t('favorites.empty')}
             <br />

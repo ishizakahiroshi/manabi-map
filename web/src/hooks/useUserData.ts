@@ -15,6 +15,9 @@ interface UserData {
   /** school_id → MineRecord（個人偏差値記録） */
   mine: Record<string, MineRecord>
   loading: boolean
+  /** 初期ロードまたは再読み込みに失敗している間は保存を許可しない。 */
+  loadError: boolean
+  reload: () => void
   toggleFavorite: (schoolId: string) => Promise<boolean>
   setPriority: (schoolId: string, priority: number) => Promise<void>
   saveNote: (schoolId: string, note: string, commuteNote: string) => Promise<void>
@@ -35,8 +38,13 @@ export function useUserData(): UserData {
   const [notes, setNotes] = useState<Record<string, SchoolNote>>({})
   const [mine, setMine] = useState<Record<string, MineRecord>>({})
   const [loading, setLoading] = useState(false)
+  const [loadError, setLoadError] = useState(false)
+  const loadedUserId = useRef<string | null>(null)
+  const loadGeneration = useRef(0)
   /** 連打で insert が二重に走らないよう school_id 単位で排他する */
   const favoriteInFlight = useRef(new Set<string>())
+  /** 志望度の連打は学校単位で順番に DB へ送り、完了順逆転を防ぐ。 */
+  const priorityInFlight = useRef(new Map<string, Promise<void>>())
   const favoritesRef = useRef(favorites)
   favoritesRef.current = favorites
 
@@ -51,63 +59,97 @@ export function useUserData(): UserData {
     return true
   }, [maintenanceMode, toast, t])
 
-  useEffect(() => {
+  const loadData = useCallback(async () => {
+    const generation = ++loadGeneration.current
     if (!userId) {
       setFavorites({})
       setNotes({})
       setMine({})
+      setLoadError(false)
+      setLoading(false)
+      loadedUserId.current = null
       return
     }
-    let cancelled = false
-    // ユーザー切替時に前ユーザーのデータを一瞬でも見せない（取得完了前に空にする）
-    setFavorites({})
-    setNotes({})
-    setMine({})
+    if (loadedUserId.current !== userId) {
+      // ユーザー切替時に前ユーザーのデータを一瞬でも見せない。
+      setFavorites({})
+      setNotes({})
+      setMine({})
+      setLoadError(false)
+      loadedUserId.current = userId
+    }
     setLoading(true)
-    void (async () => {
-      const [favRes, noteRes, mineRes] = await Promise.all([
+    let responses
+    try {
+      responses = await Promise.all([
         supabase.from('user_school_favorites').select('school_id, priority, status'),
         supabase.from('user_school_notes').select('school_id, note, commute_note'),
         supabase.from('user_school_deviations').select('school_id, department_id, value, note, visibility'),
       ])
-      if (cancelled) return
-      // 取得失敗を空データと誤認させない（空扱いのまま toggle すると DB と乖離する）
-      if (favRes.error || noteRes.error || mineRes.error) {
-        console.error('user data load failed:', (favRes.error ?? noteRes.error ?? mineRes.error)?.message)
-      }
-      const favs: Record<string, Favorite> = {}
-      for (const f of favRes.data ?? []) {
-        favs[f.school_id] = { school_id: f.school_id, priority: f.priority ?? 0, status: f.status ?? 'interested' }
-      }
-      const ns: Record<string, SchoolNote> = {}
-      for (const n of noteRes.data ?? []) {
-        ns[n.school_id] = { school_id: n.school_id, note: n.note ?? '', commute_note: n.commute_note ?? '' }
-      }
-      const ms: Record<string, MineRecord> = {}
-      for (const m of mineRes.data ?? []) {
-        const cur = ms[m.school_id] ?? { depts: {}, note: '', visibility: 'private' as const }
-        if (m.department_id) {
-          cur.depts[m.department_id] = m.value
-        } else {
-          cur.note = m.note ?? ''
-        }
-        if (m.visibility === 'submit_to_manabi') cur.visibility = 'submit_to_manabi'
-        ms[m.school_id] = cur
-      }
-      if (!favRes.error) setFavorites(favs)
-      if (!noteRes.error) setNotes(ns)
-      if (!mineRes.error) setMine(ms)
+    } catch (err) {
+      if (generation !== loadGeneration.current) return
+      console.error('user data load failed:', (err as Error)?.message)
+      setLoadError(true)
       setLoading(false)
-    })()
-    return () => {
-      cancelled = true
+      return
     }
+    const [favRes, noteRes, mineRes] = responses
+    if (generation !== loadGeneration.current) return
+
+    const failed = Boolean(favRes.error || noteRes.error || mineRes.error)
+    if (failed) {
+      // 失敗を空データと誤認させない。特にメモ保存を止め、既存値の空上書きを防ぐ。
+      console.error('user data load failed:', (favRes.error ?? noteRes.error ?? mineRes.error)?.message)
+      setLoadError(true)
+      setLoading(false)
+      return
+    }
+
+    const favs: Record<string, Favorite> = {}
+    for (const f of favRes.data ?? []) {
+      favs[f.school_id] = { school_id: f.school_id, priority: f.priority ?? 0, status: f.status ?? 'interested' }
+    }
+    const ns: Record<string, SchoolNote> = {}
+    for (const n of noteRes.data ?? []) {
+      ns[n.school_id] = { school_id: n.school_id, note: n.note ?? '', commute_note: n.commute_note ?? '' }
+    }
+    const ms: Record<string, MineRecord> = {}
+    for (const m of mineRes.data ?? []) {
+      const cur = ms[m.school_id] ?? { depts: {}, note: '', visibility: 'private' as const }
+      if (m.department_id) {
+        cur.depts[m.department_id] = m.value
+      } else {
+        cur.note = m.note ?? ''
+      }
+      if (m.visibility === 'submit_to_manabi') cur.visibility = 'submit_to_manabi'
+      ms[m.school_id] = cur
+    }
+    setFavorites(favs)
+    setNotes(ns)
+    setMine(ms)
+    setLoadError(false)
+    setLoading(false)
   }, [userId])
+
+  useEffect(() => {
+    void loadData()
+  }, [loadData])
+
+  const reload = useCallback(() => {
+    void loadData()
+  }, [loadData])
+
+  const blockedByLoadError = useCallback((): boolean => {
+    if (!loadError) return false
+    toast(t('common.dataLoadFailed'))
+    return true
+  }, [loadError, toast, t])
 
   /** @returns 登録後の状態（true = お気に入り済） */
   const toggleFavorite = useCallback(
     async (schoolId: string): Promise<boolean> => {
       if (!userId) throw new Error('not signed in')
+      if (blockedByLoadError()) return Boolean(favoritesRef.current[schoolId])
       if (blockedByMaintenance()) return Boolean(favoritesRef.current[schoolId])
       // 連打で同一 school の insert/delete が競合しないよう in-flight 排他
       if (favoriteInFlight.current.has(schoolId)) {
@@ -162,38 +204,50 @@ export function useUserData(): UserData {
         favoriteInFlight.current.delete(schoolId)
       }
     },
-    [userId, blockedByMaintenance],
+    [userId, blockedByLoadError, blockedByMaintenance],
   )
 
   const setPriority = useCallback(
     async (schoolId: string, priority: number) => {
       if (!userId) throw new Error('not signed in')
+      if (blockedByLoadError()) return
       if (blockedByMaintenance()) return
-      const existing = favorites[schoolId]
-      setFavorites((cur) => ({
-        ...cur,
-        [schoolId]: { school_id: schoolId, priority, status: existing?.status ?? 'interested' },
-      }))
-      const { error } = await supabase.from('user_school_favorites').upsert(
-        { user_id: userId, school_id: schoolId, priority, status: existing?.status ?? 'interested' },
-        { onConflict: 'user_id,school_id' },
-      )
-      if (error) {
-        setFavorites((cur) => {
-          const next = { ...cur }
-          if (existing) next[schoolId] = existing
-          else delete next[schoolId]
-          return next
-        })
-        throw error
-      }
+
+      const previous = priorityInFlight.current.get(schoolId) ?? Promise.resolve()
+      const operation = previous.catch(() => undefined).then(async () => {
+        const existing = favoritesRef.current[schoolId]
+        setFavorites((cur) => ({
+          ...cur,
+          [schoolId]: { school_id: schoolId, priority, status: existing?.status ?? 'interested' },
+        }))
+        const { error } = await supabase.from('user_school_favorites').upsert(
+          { user_id: userId, school_id: schoolId, priority, status: existing?.status ?? 'interested' },
+          { onConflict: 'user_id,school_id' },
+        )
+        if (error) {
+          setFavorites((cur) => {
+            const next = { ...cur }
+            if (existing) next[schoolId] = existing
+            else delete next[schoolId]
+            return next
+          })
+          throw error
+        }
+      })
+      let tracked: Promise<void>
+      tracked = operation.finally(() => {
+        if (priorityInFlight.current.get(schoolId) === tracked) priorityInFlight.current.delete(schoolId)
+      })
+      priorityInFlight.current.set(schoolId, tracked)
+      await tracked
     },
-    [userId, favorites, blockedByMaintenance],
+    [userId, blockedByLoadError, blockedByMaintenance],
   )
 
   const saveNote = useCallback(
     async (schoolId: string, note: string, commuteNote: string) => {
       if (!userId) throw new Error('not signed in')
+      if (blockedByLoadError()) return
       if (blockedByMaintenance()) return
       const prev = notes[schoolId]
       setNotes((cur) => ({ ...cur, [schoolId]: { school_id: schoolId, note, commute_note: commuteNote } }))
@@ -218,16 +272,16 @@ export function useUserData(): UserData {
       }
       trackEvent('memo_save', { school_id: schoolId })
     },
-    [userId, notes, blockedByMaintenance],
+    [userId, notes, blockedByLoadError, blockedByMaintenance],
   )
 
   /**
-   * 個人偏差値の保存。unique(user_id, school_id, department_id) は department_id が
-   * NULL の行に効かないため、学科行のみ upsert し school 単位の note 行は手動分岐する。
+   * 個人偏差値の保存。学科行と学校単位のセンチネル行を同じ一意キーで扱う。
    */
   const saveMineValue = useCallback(
     async (schoolId: string, departmentId: string, value: number | null) => {
       if (!userId) throw new Error('not signed in')
+      if (blockedByLoadError()) return
       if (blockedByMaintenance()) return
       const prev = mine[schoolId]
       const cur = prev ?? EMPTY_MINE
@@ -271,12 +325,13 @@ export function useUserData(): UserData {
         }
       }
     },
-    [userId, mine, blockedByMaintenance],
+    [userId, mine, blockedByLoadError, blockedByMaintenance],
   )
 
   const saveMineNote = useCallback(
     async (schoolId: string, note: string) => {
       if (!userId) throw new Error('not signed in')
+      if (blockedByLoadError()) return
       if (blockedByMaintenance()) return
       const prev = mine[schoolId]
       const cur = prev ?? EMPTY_MINE
@@ -289,44 +344,33 @@ export function useUserData(): UserData {
           return next
         })
       try {
-        const { data, error: selErr } = await supabase
-          .from('user_school_deviations')
-          .select('id')
-          .eq('user_id', userId)
-          .eq('school_id', schoolId)
-          .is('department_id', null)
-          .maybeSingle()
-        if (selErr) throw selErr
-        if (data) {
-          const { error } = await supabase
-            .from('user_school_deviations')
-            .update({ note, updated_at: new Date().toISOString() })
-            .eq('id', data.id)
-          if (error) throw error
-        } else {
-          // 学校単位の note は department_id=null の行に持つ。value は not null 制約のため
-          // 0 を「値なし」のセンチネルとして格納する（表示側は department_id 付き行しか値として扱わない）
-          const { error } = await supabase.from('user_school_deviations').insert({
+        // 202608040104 の UNIQUE NULLS NOT DISTINCT により、note 行も同じ
+        // user/school/null department キーで競合なく upsert できる。
+        const { error } = await supabase.from('user_school_deviations').upsert(
+          {
             user_id: userId,
             school_id: schoolId,
             department_id: null,
             value: 0,
             note,
             visibility: cur.visibility,
-          })
-          if (error) throw error
-        }
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: 'user_id,school_id,department_id' },
+        )
+        if (error) throw error
       } catch (err) {
         rollback()
         throw err
       }
     },
-    [userId, mine, blockedByMaintenance],
+    [userId, mine, blockedByLoadError, blockedByMaintenance],
   )
 
   const saveMineConsent = useCallback(
     async (schoolId: string, submit: boolean) => {
       if (!userId) throw new Error('not signed in')
+      if (blockedByLoadError()) return
       if (blockedByMaintenance()) return
       const visibility = submit ? 'submit_to_manabi' : 'private'
       const prev = mine[schoolId]
@@ -340,36 +384,40 @@ export function useUserData(): UserData {
           return next
         })
       try {
-        const { data, error } = await supabase
-          .from('user_school_deviations')
-          .update({ visibility, updated_at: new Date().toISOString() })
-          .eq('user_id', userId)
-          .eq('school_id', schoolId)
-          .select('id')
-        if (error) throw error
-        if ((data ?? []).length === 0) {
-          // 行が 1 つも無い状態で同意だけ切り替えた場合は、note と同じ
-          // department_id=null のセンチネル行を作って同意状態を永続化する
-          const { error: insErr } = await supabase.from('user_school_deviations').insert({
+        // 同意だけの切替も note と同じセンチネル行へ upsert する。
+        const { error } = await supabase.from('user_school_deviations').upsert(
+          {
             user_id: userId,
             school_id: schoolId,
             department_id: null,
             value: 0,
             note: cur.note,
             visibility,
-          })
-          if (insErr) throw insErr
-        }
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: 'user_id,school_id,department_id' },
+        )
+        if (error) throw error
+
+        // 同意撤回はセンチネル行だけでなく、既存の学科行にも反映する。
+        // 学科行が submit_to_manabi のままだと、集計キューと再読込時の OR 集約に残る。
+        const { error: departmentError } = await supabase
+          .from('user_school_deviations')
+          .update({ visibility, updated_at: new Date().toISOString() })
+          .eq('user_id', userId)
+          .eq('school_id', schoolId)
+          .not('department_id', 'is', null)
+        if (departmentError) throw departmentError
       } catch (err) {
         rollback()
         throw err
       }
     },
-    [userId, mine, blockedByMaintenance],
+    [userId, mine, blockedByLoadError, blockedByMaintenance],
   )
 
   return {
-    favorites, notes, mine, loading,
+    favorites, notes, mine, loading, loadError, reload,
     toggleFavorite, setPriority, saveNote,
     saveMineValue, saveMineNote, saveMineConsent,
   }

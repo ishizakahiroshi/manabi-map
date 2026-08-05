@@ -7,8 +7,8 @@
 --          from pg_constraint
 --         where conrelid = 'public.user_school_deviations'::regclass
 --           and contype = 'u';
---      → 出力された制約名を `<UNIQUE_NAME>` プレースホルダに置換してから適用する。
---         プレースホルダ未置換のままだと `alter table ... drop constraint '<UNIQUE_NAME>'` で必ず失敗する。
+--      → 出力された制約名を確認する。この migration は初期の placeholder を含んでいたため、
+--         現行では標準の制約名を使う。既に適用済みの環境は 202608040104 migration が安全に引き継ぐ。
 --   2) `pnpm dlx supabase db push`（もしくは psql で本ファイルを直接実行）
 --   3) 適用後、user_school_deviations に (user_id, school_id, department_id NULL) の
 --      重複がないことを確認:
@@ -47,7 +47,7 @@ delete from public.user_school_deviations d
 -- 2) 既存 unique 制約を drop → nulls not distinct 版へ張替
 --    制約名は環境依存のため、適用時に上記プレースホルダ手順で置換すること。
 alter table public.user_school_deviations
-  drop constraint if exists "<UNIQUE_NAME>";
+  drop constraint if exists user_school_deviations_user_id_school_id_department_id_key;
 
 alter table public.user_school_deviations
   add constraint user_school_deviations_user_school_dept_key
