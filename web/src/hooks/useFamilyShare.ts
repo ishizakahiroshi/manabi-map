@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 
@@ -61,6 +61,7 @@ interface MemberRow {
 export interface FamilyShareState {
   groups: FamilyGroupView[]
   loading: boolean
+  loadError: boolean
   reload: () => Promise<void>
   createGroup: (name?: string) => Promise<string>
   /** 招待を作成し、受諾用 URL を返す */
@@ -84,10 +85,23 @@ export function useFamilyShare(): FamilyShareState {
   const userId = session?.user.id ?? null
   const [groups, setGroups] = useState<FamilyGroupView[]>([])
   const [loading, setLoading] = useState(false)
+  const [loadError, setLoadError] = useState(false)
+  const reloadGeneration = useRef(0)
+  const loadedUserId = useRef<string | null>(null)
 
   const reload = useCallback(async () => {
-    if (!userId) {
+    const generation = ++reloadGeneration.current
+    if (loadedUserId.current !== userId) {
+      // ユーザー切替直後に前ユーザーのグループを新ユーザーへ見せない。
       setGroups([])
+      setLoadError(false)
+      loadedUserId.current = userId
+    }
+    if (!userId) {
+      if (generation !== reloadGeneration.current) return
+      setGroups([])
+      setLoadError(false)
+      setLoading(false)
       return
     }
     setLoading(true)
@@ -134,12 +148,16 @@ export function useFamilyShare(): FamilyShareState {
           members,
         }
       })
+      if (generation !== reloadGeneration.current) return
       setGroups(views)
+      setLoadError(false)
     } catch (err) {
+      if (generation !== reloadGeneration.current) return
       console.error('family share load failed:', (err as Error)?.message)
-      setGroups([])
+      // 取得失敗を「未作成」と誤認させない。前回の正常値を保持する。
+      setLoadError(true)
     } finally {
-      setLoading(false)
+      if (generation === reloadGeneration.current) setLoading(false)
     }
   }, [userId])
 
@@ -230,6 +248,7 @@ export function useFamilyShare(): FamilyShareState {
   return {
     groups,
     loading,
+    loadError,
     reload,
     createGroup,
     createInviteUrl,

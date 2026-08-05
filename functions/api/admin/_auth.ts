@@ -1,15 +1,20 @@
-export interface Env { SUPABASE_URL?: string; SUPABASE_SERVICE_ROLE_KEY?: string; ADMIN_USER_ID?: string }
+export interface Env {
+  SUPABASE_URL?: string
+  SUPABASE_ANON_KEY?: string
+  SUPABASE_SERVICE_ROLE_KEY?: string
+  ADMIN_USER_ID?: string
+}
 export interface Context { request: Request; env: Env }
 
 export const notFound = () => new Response('Not Found', { status: 404 })
 
 export async function requireAdminUser(context: Context): Promise<Response | { userId: string }> {
   const token = context.request.headers.get('authorization')?.match(/^Bearer\s+(.+)$/i)?.[1]
-  const { SUPABASE_URL: url, SUPABASE_SERVICE_ROLE_KEY: key, ADMIN_USER_ID: adminId } = context.env
-  if (!token || !url || !key || !adminId) return notFound()
+  const { SUPABASE_URL: url, SUPABASE_ANON_KEY: anonKey, ADMIN_USER_ID: adminId } = context.env
+  if (!token || !url || !anonKey || !adminId) return notFound()
   try {
     const response = await fetch(`${url.replace(/\/$/, '')}/auth/v1/user`, {
-      headers: { apikey: key, authorization: `Bearer ${token}` },
+      headers: { apikey: anonKey, authorization: `Bearer ${token}` },
     })
     if (!response.ok) return notFound()
     const user = await response.json() as { id?: string }

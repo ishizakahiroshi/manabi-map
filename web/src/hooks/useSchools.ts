@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react'
 import type {
   AdmissionSelection,
-  AdmissionSelectionQualityFlag,
   AdmissionSelectionSource,
   AdmissionStat,
   Department,
@@ -9,6 +8,7 @@ import type {
   SchoolNameHistory,
   SchoolRelationshipSummary,
 } from '../types/school'
+import { flattenRecruitmentUnits, type AdmissionRecruitmentUnitRow } from '../lib/admissionUnits'
 
 const FETCH_ERROR_MESSAGE = '学校データの取得に失敗しました。時間をおいて再読み込みしてください。'
 
@@ -26,7 +26,7 @@ interface DepartmentRow {
   ui_group: Department['ui_group']
 }
 
-interface SchoolRow {
+export interface SchoolRow {
   id: string
   record_key?: string | null
   name: string
@@ -91,40 +91,6 @@ interface AdmissionStatRow {
   source_url: string | null
 }
 
-interface AdmissionRecruitmentUnitRow {
-  id: string
-  unit_key: string
-  unit_kind_code: AdmissionSelection['unit_kind_code']
-  label: string
-  course_time: AdmissionSelection['course_time']
-  valid_from_year: number | null
-  valid_to_year: number | null
-  admission_recruitment_unit_departments?: { department_id: string }[] | null
-  school_admission_selection_stats?: AdmissionSelectionStatRow[] | null
-}
-
-interface AdmissionSelectionStatRow {
-  id: string
-  year: number
-  selection_stage_code: AdmissionSelection['selection_stage_code']
-  selection_track_code: AdmissionSelection['selection_track_code']
-  stage_label_raw: string | null
-  track_label_raw: string | null
-  selection_scope_raw: string | null
-  population_scope_raw: string | null
-  scope_key: string
-  map_role_code: AdmissionSelection['map_role_code']
-  is_ratio_comparable: boolean
-  capacity: number | null
-  applicants: number | null
-  examinees: number | null
-  admitted: number | null
-  exam_scope_raw: string | null
-  school_admission_stat_exam_components?: { component_code: string }[] | null
-  school_admission_stat_quality_flags?: AdmissionSelectionQualityFlag[] | null
-  school_admission_stat_sources?: AdmissionSelectionSource[] | null
-}
-
 interface SchoolsState {
   schools: School[]
   loading: boolean
@@ -132,7 +98,7 @@ interface SchoolsState {
   reload: () => void
 }
 
-function mapSchoolRows(rows: SchoolRow[]): School[] {
+export function mapSchoolRows(rows: SchoolRow[]): School[] {
   return rows
     .filter((r) => r.latitude != null && r.longitude != null)
     .map((r) => {
@@ -148,44 +114,10 @@ function mapSchoolRows(rows: SchoolRow[]): School[] {
         ui_group: d.ui_group ?? null,
         deviation: devByDept.get(d.id) ?? null,
       }))
-      const admissionSelections: AdmissionSelection[] = (
-        r.admission_recruitment_units ?? []
-      ).flatMap((unit) => {
-        const departmentIds = (unit.admission_recruitment_unit_departments ?? [])
-          .map((membership) => membership.department_id)
-          .filter((id): id is string => typeof id === 'string')
-        return (unit.school_admission_selection_stats ?? []).map((stat) => ({
-          id: stat.id,
-          recruitment_unit_id: unit.id,
-          unit_key: unit.unit_key,
-          unit_kind_code: unit.unit_kind_code,
-          unit_label: unit.label,
-          course_time: unit.course_time,
-          department_ids: [...new Set(departmentIds)].sort(),
-          valid_from_year: unit.valid_from_year,
-          valid_to_year: unit.valid_to_year,
-          year: stat.year,
-          selection_stage_code: stat.selection_stage_code,
-          selection_track_code: stat.selection_track_code,
-          stage_label_raw: stat.stage_label_raw,
-          track_label_raw: stat.track_label_raw,
-          selection_scope_raw: stat.selection_scope_raw,
-          population_scope_raw: stat.population_scope_raw,
-          scope_key: stat.scope_key,
-          map_role_code: stat.map_role_code,
-          is_ratio_comparable: stat.is_ratio_comparable,
-          capacity: stat.capacity,
-          applicants: stat.applicants,
-          examinees: stat.examinees,
-          admitted: stat.admitted,
-          exam_scope_raw: stat.exam_scope_raw,
-          exam_components: (stat.school_admission_stat_exam_components ?? [])
-            .map((component) => component.component_code)
-            .filter((code): code is string => typeof code === 'string'),
-          quality_flags: stat.school_admission_stat_quality_flags ?? [],
-          sources: stat.school_admission_stat_sources ?? [],
-        }))
-      })
+      // 平坦化は Node ビルドスクリプトと共有（lib/admissionUnits.ts）。フォーク禁止。
+      const admissionSelections: AdmissionSelection[] = flattenRecruitmentUnits(
+        r.admission_recruitment_units,
+      )
       return {
         id: r.id,
         record_key: r.record_key ?? `school-${r.id}`,
@@ -237,43 +169,9 @@ function mapSchoolRows(rows: SchoolRow[]): School[] {
             notes: relationship.notes,
             predecessor: {
               ...relationship.predecessor!,
-              admission_selections: (relationship.predecessor!.admission_recruitment_units ?? [])
-                .flatMap((unit) => {
-                  const departmentIds = (unit.admission_recruitment_unit_departments ?? [])
-                    .map((membership) => membership.department_id)
-                    .filter((id): id is string => typeof id === 'string')
-                  return (unit.school_admission_selection_stats ?? []).map((stat) => ({
-                    id: stat.id,
-                    recruitment_unit_id: unit.id,
-                    unit_key: unit.unit_key,
-                    unit_kind_code: unit.unit_kind_code,
-                    unit_label: unit.label,
-                    course_time: unit.course_time,
-                    department_ids: [...new Set(departmentIds)].sort(),
-                    valid_from_year: unit.valid_from_year,
-                    valid_to_year: unit.valid_to_year,
-                    year: stat.year,
-                    selection_stage_code: stat.selection_stage_code,
-                    selection_track_code: stat.selection_track_code,
-                    stage_label_raw: stat.stage_label_raw,
-                    track_label_raw: stat.track_label_raw,
-                    selection_scope_raw: stat.selection_scope_raw,
-                    population_scope_raw: stat.population_scope_raw,
-                    scope_key: stat.scope_key,
-                    map_role_code: stat.map_role_code,
-                    is_ratio_comparable: stat.is_ratio_comparable,
-                    capacity: stat.capacity,
-                    applicants: stat.applicants,
-                    examinees: stat.examinees,
-                    admitted: stat.admitted,
-                    exam_scope_raw: stat.exam_scope_raw,
-                    exam_components: (stat.school_admission_stat_exam_components ?? [])
-                      .map((component) => component.component_code)
-                      .filter((code): code is string => typeof code === 'string'),
-                    quality_flags: stat.school_admission_stat_quality_flags ?? [],
-                    sources: stat.school_admission_stat_sources ?? [],
-                  }))
-                }),
+              admission_selections: flattenRecruitmentUnits(
+                relationship.predecessor!.admission_recruitment_units,
+              ),
             },
           })),
         name_history: r.school_name_history ?? [],
@@ -387,14 +285,24 @@ async function fetchSchoolRows(): Promise<SchoolRow[]> {
     schools: SchoolRow[]
     sourceCatalog: AdmissionSelectionSource[]
   }
+  hydrateAdmissionSourceRefs(compact.schools, compact.sourceCatalog)
+  return compact.schools
+}
+
+/**
+ * gen-schools-json.mjs は出典 object を sourceCatalog の index へ圧縮している。
+ * index → object へ復元する（全件 JSON と学校単体 JSON の両経路で共有。フォーク禁止）。
+ */
+export function hydrateAdmissionSourceRefs(
+  rows: SchoolRow[],
+  sourceCatalog: AdmissionSelectionSource[],
+): void {
   const hydrateUnitSources = (units: AdmissionRecruitmentUnitRow[] | null | undefined) => {
     for (const unit of units ?? []) {
       for (const stat of unit.school_admission_selection_stats ?? []) {
         const refs = (stat.school_admission_stat_sources ?? []) as unknown[]
         stat.school_admission_stat_sources = refs
-          .map((ref) =>
-            typeof ref === 'number' ? compact.sourceCatalog[ref] : ref,
-          )
+          .map((ref) => (typeof ref === 'number' ? sourceCatalog[ref] : ref))
           .filter(
             (source): source is AdmissionSelectionSource =>
               source != null && typeof source === 'object',
@@ -402,13 +310,12 @@ async function fetchSchoolRows(): Promise<SchoolRow[]> {
       }
     }
   }
-  for (const row of compact.schools) {
+  for (const row of rows) {
     hydrateUnitSources(row.admission_recruitment_units)
     for (const relationship of row.predecessor_relationships ?? []) {
       hydrateUnitSources(relationship.predecessor?.admission_recruitment_units)
     }
   }
-  return compact.schools
 }
 
 // ---------------------------------------------------------------------------
@@ -490,4 +397,38 @@ export function useSchools(): SchoolsState {
       void loadSchools(true)
     },
   }
+}
+
+// ---------------------------------------------------------------------------
+// 受動購読（fetch を起動しない）
+//
+// 学校詳細ページ（/school/:id）は単体 JSON（school-data/<id>.json）で初期描画を
+// 完結させ、全件 JSON は地図表示時のみ遅延取得する（plan_seo-growth-strategy_c7 C1）。
+// SchoolDetailSheet は「全件キャッシュがあれば使う・無くても取りに行かない」ため、
+// useSchools() ではなくこちらを購読する（useSchools を呼ぶと mount しただけで
+// 全件 fetch が走ってしまう）。
+// ---------------------------------------------------------------------------
+
+/** キャッシュ購読のみの読み取り。データが無くてもロードを開始しない。 */
+export function useSchoolsCache(): { schools: School[]; loading: boolean; error: string | null } {
+  const [, forceRender] = useState(0)
+
+  useEffect(() => {
+    const listener = () => forceRender((n) => n + 1)
+    listeners.add(listener)
+    return () => {
+      listeners.delete(listener)
+    }
+  }, [])
+
+  return {
+    schools: cachedSchools ?? [],
+    loading: cachedSchools == null && cacheError == null,
+    error: cacheError,
+  }
+}
+
+/** 全件データのロードを明示的に開始する（単体 JSON 取得失敗時のフォールバック用）。 */
+export function ensureSchoolsLoaded(): Promise<void> {
+  return loadSchools(false)
 }

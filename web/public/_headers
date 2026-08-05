@@ -1,6 +1,6 @@
 # Cloudflare Pages のレスポンスヘッダ設定
-# CSP は Report-Only で試験中（v0.2.0 C11）。プレビューで主要フローの違反ゼロを
-# 確認してから enforce（Content-Security-Policy）へ昇格する。
+# CSP は Report-Only で試験中。違反は Pages Function の /api/csp-report へ送る。
+# プレビューで主要フローの違反ゼロを確認してから enforce へ昇格する。
 # 地図インフラ移行（C2: Protomaps/R2 + 国土地理院 API）後は img-src / connect-src の
 # 許可先を差し替えること。geolocation は現在地機能で使うため制限しない。
 /*
@@ -8,7 +8,7 @@
   X-Content-Type-Options: nosniff
   Referrer-Policy: strict-origin-when-cross-origin
   Permissions-Policy: camera=(), microphone=(), payment=(), usb=()
-  Content-Security-Policy-Report-Only: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: https://tile.openstreetmap.org blob:; connect-src 'self' https://*.supabase.co https://nominatim.openstreetmap.org https://msearch.gsi.go.jp; frame-ancestors 'none'
+  Content-Security-Policy-Report-Only: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: https://tile.openstreetmap.org blob:; connect-src 'self' https://*.supabase.co https://nominatim.openstreetmap.org https://msearch.gsi.go.jp; frame-ancestors 'none'; report-uri /api/csp-report
 
 # schools データの build hash 付き URL 化（plan_schools-json-cache-strategy.md）:
 # - manifest は常に最新を取る (no-store)
@@ -16,4 +16,14 @@
 /schools-manifest.json
   Cache-Control: no-store
 /schools-*.json.gz
+  Cache-Control: public, max-age=31536000, immutable
+# 統合検索用の軽量索引（市区町村・校名）も hash 付き URL なので永久キャッシュ可
+/city-index-*.json
+  Cache-Control: public, max-age=31536000, immutable
+/school-name-index-*.json
+  Cache-Control: public, max-age=31536000, immutable
+# 学校単体 JSON / 県別分割 JSON（c7 C1）。パスは固定だが、フロントは manifest の
+# schoolDataVersion を `?v=` に付けて取得する（クエリ込みでキャッシュキーが変わる）ので
+# 永久キャッシュ可
+/school-data/*
   Cache-Control: public, max-age=31536000, immutable

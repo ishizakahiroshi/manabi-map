@@ -14,6 +14,9 @@ public/schools.json
 public/schools-*.json
 public/schools-*.json.gz
 public/schools-manifest.json
+public/city-index-*.json
+public/school-name-index-*.json
+public/school-data/
 *.local
 
 # Supabase CLI local state（project ref 等の機微情報を含む）

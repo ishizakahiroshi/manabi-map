@@ -9,12 +9,22 @@ export function BottomTabBar() {
   const { t } = useI18n()
 
   const path = location.pathname
+  const isHome = path === '/'
   const isMap = path === '/map' || path.startsWith('/school/')
   const isFavorites = path === '/favorites'
   const isMyPage = path === '/mypage'
 
   return (
     <nav className="bottom-tabs" aria-label={t('tabs.label')}>
+      <button
+        type="button"
+        className={`bottom-tab ${isHome ? 'on' : ''}`}
+        aria-current={isHome ? 'page' : undefined}
+        onClick={() => navigate('/')}
+      >
+        <span aria-hidden="true">🏠</span>
+        <b>{t('tabs.home')}</b>
+      </button>
       <button
         type="button"
         className={`bottom-tab ${isMap ? 'on' : ''}`}

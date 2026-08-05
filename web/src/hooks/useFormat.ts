@@ -1,3 +1,4 @@
+import { useMemo } from 'react'
 import type { School } from '../types/school'
 import { GEN_LABEL, band, botDev, ownershipFull, ownershipShort, scaleBand, topDev } from '../lib/format'
 import { useI18n, type TFunction } from '../contexts/I18nContext'
@@ -10,7 +11,7 @@ function label(t: TFunction, prefix: string, key: string): string {
 export function useFormat() {
   const { t, locale } = useI18n()
 
-  return {
+  return useMemo(() => ({
     /**
      * 設立主体のフル表記（都立/道立/府立/県立/市立/国立/私立/組合立）。
      * ownership + prefecture から動的に判定するため School 全体を渡すこと。
@@ -104,5 +105,5 @@ export function useFormat() {
     },
 
     band,
-  }
+  }), [t, locale])
 }

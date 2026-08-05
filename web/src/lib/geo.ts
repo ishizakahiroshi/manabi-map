@@ -34,17 +34,10 @@ async function fetchWithRetry(
   throw lastErr instanceof Error ? lastErr : new Error('fetch failed')
 }
 
-/** 直線距離（Haversine・km） */
-export function haversine(a: { lat: number; lng: number }, b: { lat: number; lng: number }): number {
-  const R = 6371
-  const toR = (x: number) => (x * Math.PI) / 180
-  const dLat = toR(b.lat - a.lat)
-  const dLng = toR(b.lng - a.lng)
-  const s =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos(toR(a.lat)) * Math.cos(toR(b.lat)) * Math.sin(dLng / 2) ** 2
-  return 2 * R * Math.asin(Math.sqrt(s))
-}
+// 直線距離は Node ビルドスクリプトと共有するため lib/haversine.ts に実体を置き、
+// 既存の import 経路（lib/geo）は re-export で維持する。
+export { haversine } from './haversine'
+import { haversine } from './haversine'
 
 /** 自宅ズームの通学圏パラメータ: 最寄り校がこの校数収まる半径を初期表示にする */
 const HOME_VIEW_NEAREST_COUNT = 15

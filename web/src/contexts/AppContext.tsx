@@ -23,11 +23,35 @@ interface AppState {
 
 const AppContext = createContext<AppState | null>(null)
 
-function loadLocalHome(): HomeLocation | null {
+export function isValidHomeLocation(value: unknown): value is HomeLocation {
+  if (!value || typeof value !== 'object') return false
+  const candidate = value as Partial<HomeLocation>
+  return (
+    typeof candidate.label === 'string' &&
+    Number.isFinite(candidate.lat) &&
+    Number.isFinite(candidate.lng)
+  )
+}
+
+/** localStorage の値を検証する純粋関数。壊れた JSON/形状は地図へ渡さない。 */
+export function parseStoredHome(raw: string | null): HomeLocation | null {
+  try {
+    if (!raw) return null
+    const value: unknown = JSON.parse(raw)
+    return isValidHomeLocation(value) ? value : null
+  } catch {
+    return null
+  }
+}
+
+export function loadLocalHome(): HomeLocation | null {
   try {
     const raw = localStorage.getItem(HOME_KEY)
-    return raw ? (JSON.parse(raw) as HomeLocation) : null
+    const home = parseStoredHome(raw)
+    if (raw && !home) localStorage.removeItem(HOME_KEY)
+    return home
   } catch {
+    try { localStorage.removeItem(HOME_KEY) } catch { /* noop */ }
     return null
   }
 }
@@ -41,6 +65,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const migratedFor = useRef<string | null>(null)
+  const activeHomeUserId = useRef<string | null>(null)
 
   const toast = useCallback((msg: string) => {
     setToastMsg(msg)
@@ -100,8 +125,21 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // ログイン時: DB の自宅を読み込み。無ければ LocalStorage の仮住所を移送（§7.6.5）
   // migratedFor は成功時のみ立てる（失敗時に再試行できるよう、エラーで固定しない）
   useEffect(() => {
-    if (!session || migratedFor.current === session.user.id) return
+    if (!session) {
+      activeHomeUserId.current = null
+      migratedFor.current = null
+      setHomeState(loadLocalHome())
+      return
+    }
     const userId = session.user.id
+    if (activeHomeUserId.current !== null && activeHomeUserId.current !== userId) {
+      // DB 応答がまだ返っていない切替でも、前ユーザーの自宅地点を消す。
+      setHomeState(null)
+      migratedFor.current = null
+    }
+    activeHomeUserId.current = userId
+    if (migratedFor.current === userId) return
+    let cancelled = false
     void (async () => {
       const { data, error: selErr } = await supabase
         .from('home_locations')
@@ -112,14 +150,21 @@ export function AppProvider({ children }: { children: ReactNode }) {
         console.error('home_locations load failed:', selErr.message)
         return
       }
-      migratedFor.current = userId
+      if (cancelled) return
       if (data) {
         const h = { label: data.address, lat: Number(data.latitude), lng: Number(data.longitude) }
+        if (!isValidHomeLocation(h)) {
+          console.error('home_locations load returned invalid coordinates')
+          return
+        }
+        if (cancelled) return
+        migratedFor.current = userId
         setHomeState(h)
         try { localStorage.setItem(HOME_KEY, JSON.stringify(h)) } catch { /* noop */ }
       } else {
         const local = loadLocalHome()
         if (local) {
+          if (cancelled) return
           const { error } = await supabase.from('home_locations').insert({
             user_id: userId,
             label: '自宅',
@@ -129,9 +174,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
             is_primary: true,
           })
           if (error) console.error('home_locations migrate failed:', error.message)
+          if (error || cancelled) return
         }
+        if (cancelled) return
+        migratedFor.current = userId
       }
     })()
+    return () => { cancelled = true }
   }, [session])
 
   return (

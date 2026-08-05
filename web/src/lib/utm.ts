@@ -37,5 +37,8 @@ export function withUtm(baseUrl: string, opts: UtmOptions): string {
   }
 }
 
-/** v0.1.4 リリース版のキャンペーン名（全 AdSlot 共通） */
-export const AD_CAMPAIGN_V014 = 'v0.1.4-launch'
+/** Vite ビルド時に git タグ由来の版数が define される。Vite 外（vitest 等）ではダミー値。 */
+const APP_VERSION = typeof __APP_VERSION__ === 'string' && __APP_VERSION__ ? __APP_VERSION__ : '0.0.0-dev'
+
+/** 全 AdSlot 共通のキャンペーン名。リリース版の更新は git tag に追随する。 */
+export const AD_CAMPAIGN = `launch-${APP_VERSION}`
