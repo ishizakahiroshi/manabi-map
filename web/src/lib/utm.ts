@@ -37,8 +37,8 @@ export function withUtm(baseUrl: string, opts: UtmOptions): string {
   }
 }
 
-/** Vite が git tag / package.json の version を注入する。テスト・Vite 外では package version に戻す。 */
-const APP_VERSION = typeof __APP_VERSION__ === 'string' && __APP_VERSION__ ? __APP_VERSION__ : '0.4.0'
+/** Vite ビルド時に git タグ由来の版数が define される。Vite 外（vitest 等）ではダミー値。 */
+const APP_VERSION = typeof __APP_VERSION__ === 'string' && __APP_VERSION__ ? __APP_VERSION__ : '0.0.0-dev'
 
 /** 全 AdSlot 共通のキャンペーン名。リリース版の更新は git tag に追随する。 */
 export const AD_CAMPAIGN = `launch-${APP_VERSION}`
