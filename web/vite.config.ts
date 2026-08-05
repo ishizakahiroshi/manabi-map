@@ -16,6 +16,12 @@ import { gitVersion } from '@ishizakahiroshi/vite-plugin-git-version'
 // 実装は @ishizakahiroshi/vite-plugin-git-version に抽出済み（2026-07-07）。
 // 背景: docs/local/plan_vite-plugin-git-version.md
 export default defineConfig({
+  // .env ファイルの探索先。既定は web/（従来どおり）。
+  // 環境変数 MANABI_MAP_ENV_DIR を設定すると、リポジトリ外のディレクトリを見る。
+  // 秘密をリポジトリ配下に置かないための仕組み（環境変数に入るのはパスだけ・値は入らない）。
+  // 未設定なら従来どおり web/.env.local を読むので、他環境・CI・Cloudflare Pages は無影響
+  // （Pages はファイルではなく Pages env を process.env として渡すため、そもそも影響しない）。
+  envDir: process.env.MANABI_MAP_ENV_DIR || undefined,
   plugins: [
     react(),
     tailwindcss(),

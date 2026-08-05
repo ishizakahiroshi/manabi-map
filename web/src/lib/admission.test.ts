@@ -220,6 +220,22 @@ describe('primaryAdmissionTrend', () => {
     expect(primaryAdmissionTrend(school([parttime]))?.annual[0].ratio).toBe(0.5)
   })
 
+  it('全日制併設校で全日制が未公表の年度は定時制を代用しない', () => {
+    const fulltime2026 = selection(2026, 100, 120)
+    const parttime2025 = selection(2025, 40, 20, {
+      id: 'parttime-2025',
+      recruitment_unit_id: 'parttime',
+      unit_key: 'parttime',
+      unit_kind_code: 'time_division',
+      unit_label: '定時制',
+      course_time: 'parttime',
+    })
+    const fulltime2024 = selection(2024, 100, 100)
+
+    expect(primaryAdmissionTrend(school([fulltime2026, parttime2025, fulltime2024]))?.annual.map(({ year }) => year))
+      .toEqual([2026, 2024])
+  })
+
   it('受検者・合格者は全行公表の指標だけ合算し、欠けがあれば null にする', () => {
     const selections = [
       selection(2026, 40, 50, {

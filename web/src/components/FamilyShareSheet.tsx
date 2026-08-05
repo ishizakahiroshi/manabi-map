@@ -166,7 +166,16 @@ export function FamilyShareSheet({ open, onClose }: Props) {
               <p className="mydata-note">{t('common.loading')}</p>
             )}
 
-            {!family.loading && family.groups.length === 0 && (
+            {family.loadError && (
+              <div className="mydata-note" role="alert">
+                <p>{t('family.loadError')}</p>
+                <button className="cta secondary" onClick={() => void family.reload()} disabled={family.loading || busy}>
+                  {t('family.retry')}
+                </button>
+              </div>
+            )}
+
+            {!family.loading && !family.loadError && family.groups.length === 0 && (
               <>
                 <p className="mydata-note">{t('family.noGroup')}</p>
                 <button className="cta" onClick={() => void handleCreate()} disabled={busy}>

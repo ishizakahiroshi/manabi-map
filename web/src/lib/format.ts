@@ -52,7 +52,7 @@ export function shortSchoolName(
   ) {
     name = name.slice(school.prefecture.length)
   }
-  return name
+  let out = name
     // 都道府県名 + 都/道/府/県 + 立（例: 群馬県立 / 埼玉県立 / 東京都立 / 北海道立 / 大阪府立）
     .replace(/^.+?[都道府県]立/, '')
     // 都道府県名なしの「都立」「県立」等（念のため）
@@ -62,7 +62,10 @@ export function shortSchoolName(
     // 「N市立X…」（X ≠ N）= 桐生市立商業 / 伊勢崎市立四ツ葉学園 等は「市立」だけ剥がし
     // 市名 N は残す（残さないと「商業高校」のようにどの市か分からなくなる）
     .replace(/^([^\s]{2,4})市立/, '$1')
-    .replace(/^国立/, '')
+  // 「国立」接頭辞は設置者が国立の学校のときだけ剥がす。
+  // 「国立（くにたち）」市系の校名は、都立・私立でもこの文字列を含み得るため守る。
+  if (school?.ownership === 'national') out = out.replace(/^国立/, '')
+  return out
     .replace(/高等専門学校$/, '高専')
     .replace(/高等学校$/, '高校')
     .replace(/中等教育学校$/, '中等')

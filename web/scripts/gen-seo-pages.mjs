@@ -181,26 +181,26 @@ function renderHead(html, { title, description, url }) {
   const d = escapeHtml(description)
   const u = escapeHtml(url)
   let out = html
-  out = replaceOrThrow(out, /<title>[\s\S]*?<\/title>/, `<title>${t}</title>`, 'title')
-  out = replaceOrThrow(out, /(<meta name="description" content=")[^"]*(")/, `$1${d}$2`, 'meta description')
-  out = replaceOrThrow(out, /(<link rel="canonical" href=")[^"]*(")/, `$1${u}$2`, 'canonical')
-  out = replaceOrThrow(out, /(<meta property="og:title" content=")[^"]*(")/, `$1${t}$2`, 'og:title')
-  out = replaceOrThrow(out, /(<meta property="og:description" content=")[^"]*(")/, `$1${d}$2`, 'og:description')
-  out = replaceOrThrow(out, /(<meta property="og:url" content=")[^"]*(")/, `$1${u}$2`, 'og:url')
-  out = replaceOrThrow(out, /(<meta name="twitter:title" content=")[^"]*(")/, `$1${t}$2`, 'twitter:title')
-  out = replaceOrThrow(out, /(<meta name="twitter:description" content=")[^"]*(")/, `$1${d}$2`, 'twitter:description')
+  out = replaceOrThrow(out, /<title>[\s\S]*?<\/title>/, () => `<title>${t}</title>`, 'title')
+  out = replaceOrThrow(out, /(<meta name="description" content=")[^"]*(")/, (_m, p1, p2) => `${p1}${d}${p2}`, 'meta description')
+  out = replaceOrThrow(out, /(<link rel="canonical" href=")[^"]*(")/, (_m, p1, p2) => `${p1}${u}${p2}`, 'canonical')
+  out = replaceOrThrow(out, /(<meta property="og:title" content=")[^"]*(")/, (_m, p1, p2) => `${p1}${t}${p2}`, 'og:title')
+  out = replaceOrThrow(out, /(<meta property="og:description" content=")[^"]*(")/, (_m, p1, p2) => `${p1}${d}${p2}`, 'og:description')
+  out = replaceOrThrow(out, /(<meta property="og:url" content=")[^"]*(")/, (_m, p1, p2) => `${p1}${u}${p2}`, 'og:url')
+  out = replaceOrThrow(out, /(<meta name="twitter:title" content=")[^"]*(")/, (_m, p1, p2) => `${p1}${t}${p2}`, 'twitter:title')
+  out = replaceOrThrow(out, /(<meta name="twitter:description" content=")[^"]*(")/, (_m, p1, p2) => `${p1}${d}${p2}`, 'twitter:description')
   return out
 }
 
 /** JSON-LD を head 閉じタグ直前に注入する。"</script" で script が閉じないようエスケープ。 */
 function withJsonLd(html, jsonLd) {
   const script = `<script type="application/ld+json">${JSON.stringify(jsonLd).replaceAll('</', '<\\/')}</script>`
-  return replaceOrThrow(html, /<\/head>/, `    ${script}\n  </head>`, 'head 閉じタグ')
+  return replaceOrThrow(html, /<\/head>/, () => `    ${script}\n  </head>`, 'head 閉じタグ')
 }
 
 /** #root に静的コンテンツ（クローラー向けの初期 HTML。mount 時に React が置き換える）を注入。 */
 function withRootContent(html, content) {
-  return replaceOrThrow(html, /<div id="root"><\/div>/, `<div id="root">${content}</div>`, '#root')
+  return replaceOrThrow(html, /<div id="root"><\/div>/, () => `<div id="root">${content}</div>`, '#root')
 }
 
 /**
@@ -304,8 +304,9 @@ function renderSchoolPage(school) {
   const dl = rows
     .map(([k, v]) => `<dt>${escapeHtml(k)}</dt><dd>${escapeHtml(v)}</dd>`)
     .join('')
-  const officialLink = school.official_url
-    ? `<p><a href="${escapeHtml(school.official_url)}" rel="noopener">公式サイト</a></p>`
+  const officialHref = safeUrl(school.official_url)
+  const officialLink = officialHref
+    ? `<p><a href="${escapeHtml(officialHref)}" rel="noopener">公式サイト</a></p>`
     : ''
 
   // SchoolDetailSheet.tsx の showLifecycle と同じ条件（+ 後継校の逆引き）。
@@ -484,7 +485,7 @@ function renderSchoolPage(school) {
   ]
   const locality = localityOf(school)
   const streetAddress = streetAddressOf(school)
-  const officialLinkUrl = safeUrl(school.official_url)
+  const officialLinkUrl = officialHref
   const jsonLd = {
     '@context': 'https://schema.org',
     '@type': school.type === 'kosen' ? 'EducationalOrganization' : 'HighSchool',

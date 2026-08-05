@@ -10,7 +10,7 @@ permissions:
   contents: read
 
 env:
-  HAS_SUPABASE_BUILD_ACCESS: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY != '' }}
+  HAS_SUPABASE_BUILD_ACCESS: ${{ secrets.SUPABASE_ANON_KEY != '' }}
 
 concurrency:
   group: validate-web-${{ github.ref }}
@@ -25,17 +25,17 @@ jobs:
         working-directory: web
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           fetch-depth: 0
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@a15d269cd4658e1107c09f1fabf4cbd7bd1f308a # v4.4.0
         with:
           version: 11.1.1
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: '24'
           cache: pnpm
@@ -57,9 +57,10 @@ jobs:
         if: env.HAS_SUPABASE_BUILD_ACCESS == 'true'
         env:
           VITE_SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          # This credential is scoped to this read-only Node step and is never
-          # passed to Vite or written to the generated JSON.
-          VITE_SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          # schools 系は anon で SELECT 可能（RLS: "Public read schools"）。個人データは
+          # RLS（auth.uid() = user_id）で保護されるため、公開データ生成は公開値の anon key
+          # で十分。service role のような全権限鍵は CI に載せない（DEP-CI-01）。
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
         run: pnpm gen:schools-json
 
       - name: Build app

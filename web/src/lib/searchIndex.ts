@@ -89,6 +89,7 @@ export function loadSearchIndexes(): Promise<SearchIndexes> {
 const SMALL_KANA: Record<string, string> = {
   ぁ: 'あ', ぃ: 'い', ぅ: 'う', ぇ: 'え', ぉ: 'お',
   っ: 'つ', ゃ: 'や', ゅ: 'ゆ', ょ: 'よ', ゎ: 'わ',
+  ゕ: 'か', ゖ: 'け',
 }
 
 /**
@@ -100,7 +101,7 @@ export function normalizeForMatch(s: string): string {
   return s
     .toLowerCase()
     .replace(/[ァ-ヶ]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0x60))
-    .replace(/[ぁぃぅぇぉっゃゅょゎ]/g, (c) => SMALL_KANA[c])
+    .replace(/[ぁぃぅぇぉっゃゅょゎゕゖ]/g, (c) => SMALL_KANA[c])
     .replace(/[\s　]+/g, '')
 }
 
@@ -113,8 +114,10 @@ export function matchCities(cities: CityIndexEntry[], query: string, limit: numb
   const includes: CityIndexEntry[] = []
   for (const c of cities) {
     const kana = normalizeForMatch(c.kana)
-    if (c.city.startsWith(raw) || kana.startsWith(n)) starts.push(c)
-    else if (c.city.includes(raw) || kana.includes(n) || `${c.pref}${c.city}`.includes(raw)) includes.push(c)
+    const cityN = normalizeForMatch(c.city)
+    const prefCityN = normalizeForMatch(`${c.pref}${c.city}`)
+    if (cityN.startsWith(n) || kana.startsWith(n)) starts.push(c)
+    else if (cityN.includes(n) || kana.includes(n) || prefCityN.includes(n)) includes.push(c)
     if (starts.length >= limit) break
   }
   return [...starts, ...includes].slice(0, limit)
