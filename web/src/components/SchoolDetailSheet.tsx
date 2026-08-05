@@ -72,7 +72,7 @@ export function SchoolDetailSheet({ school, onClose, userData, extras, standalon
   const touchStartY = useRef<number | null>(null)
   const touchCurrentY = useRef<number | null>(null)
   const {
-    favorites, notes, mine, loading: userDataLoading,
+    favorites, notes, mine, loading: userDataLoading, loadError: userDataLoadError,
     toggleFavorite, setPriority, saveNote, saveMineValue, saveMineNote, saveMineConsent,
   } = userData
 
@@ -464,8 +464,8 @@ export function SchoolDetailSheet({ school, onClose, userData, extras, standalon
   const handleSave = async () => {
     if (requireLogin()) return
     // userData 未到着のうちに空欄保存すると既存メモを上書きしてしまう
-    if (userDataLoading) {
-      toast(t('common.loading'))
+    if (userDataLoading || userDataLoadError) {
+      toast(t(userDataLoadError ? 'common.dataLoadFailed' : 'common.loading'))
       return
     }
     setSaving(true)
@@ -711,7 +711,9 @@ export function SchoolDetailSheet({ school, onClose, userData, extras, standalon
               <div className="lifecycle-list">
                 <b>{t('detail.predecessorTitle')}</b>
                 <ul>
-                  {school.predecessor_relationships.map((relationship) => (
+                  {school.predecessor_relationships.map((relationship) => {
+                    const relationshipEvidenceHref = safeSourceUrl(relationship.official_url)
+                    return (
                     <li key={relationship.id}>
                       <div>
                         {isLinkableSchool(relationship.predecessor.id) ? (
@@ -725,9 +727,11 @@ export function SchoolDetailSheet({ school, onClose, userData, extras, standalon
                           relationship.predecessor.name
                         )}{' '}
                         <small>{t('detail.effectiveOn', { date: relationship.effective_on })}</small>{' '}
-                        <a href={relationship.official_url} target="_blank" rel="noreferrer">
-                          {t('detail.officialEvidence')}
-                        </a>
+                        {relationshipEvidenceHref && (
+                          <a href={relationshipEvidenceHref} target="_blank" rel="noreferrer">
+                            {t('detail.officialEvidence')}
+                          </a>
+                        )}
                         {relationship.notes && <small> — {relationship.notes}</small>}
                       </div>
                       <details className="predecessor-admissions">
@@ -749,18 +753,22 @@ export function SchoolDetailSheet({ school, onClose, userData, extras, standalon
                                   {' — '}{t('detail.admissionCapacity')}: {admissionValue(row.capacity)}
                                   {' / '}{t('detail.admissionApplicants')}: {admissionValue(row.applicants)}
                                   {admissionRatio(row) && ` / ${t('detail.admissionRatio')}: ${admissionRatio(row)}`}
-                                  {row.sources[0] && safeSourceUrl(row.sources[0].official_url) && (
-                                    <>{' '}<a href={row.sources[0].official_url} target="_blank" rel="noreferrer">
-                                      {t('detail.officialEvidence')}
-                                    </a></>
-                                  )}
+                                  {row.sources[0] && (() => {
+                                    const sourceHref = safeSourceUrl(row.sources[0].official_url)
+                                    return sourceHref ? (
+                                      <>{' '}<a href={sourceHref} target="_blank" rel="noreferrer">
+                                        {t('detail.officialEvidence')}
+                                      </a></>
+                                    ) : null
+                                  })()}
                                 </li>
                               ))}
                           </ul>
                         )}
                       </details>
                     </li>
-                  ))}
+                    )
+                  })}
                 </ul>
               </div>
             )}

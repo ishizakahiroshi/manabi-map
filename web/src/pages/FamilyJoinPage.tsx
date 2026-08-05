@@ -6,6 +6,54 @@ import { useFamilyShare } from '../hooks/useFamilyShare'
 import { OAuthButton } from '../components/OAuthButton'
 
 const PENDING_KEY = 'mm.pending_family_invite'
+const PENDING_TTL_MS = 10 * 60 * 1000
+
+interface PendingInvite {
+  token: string
+  userId: string | null
+  savedAt: number
+}
+
+/** 招待トークンを短時間だけ保持し、保存時の実ユーザーと紐付ける。 */
+export function parsePendingInvite(raw: string | null, now = Date.now()): PendingInvite | null {
+  if (!raw) return null
+  try {
+    const value = JSON.parse(raw) as Partial<PendingInvite>
+    if (
+      typeof value.token !== 'string' || !value.token ||
+      (typeof value.userId !== 'string' && value.userId !== null) ||
+      typeof value.savedAt !== 'number' || !Number.isFinite(value.savedAt) ||
+      now - value.savedAt > PENDING_TTL_MS || now < value.savedAt
+    ) return null
+    return { token: value.token, userId: value.userId ?? null, savedAt: value.savedAt }
+  } catch {
+    return null
+  }
+}
+
+function readPendingToken(currentUserId: string | null): string {
+  try {
+    const raw = localStorage.getItem(PENDING_KEY)
+    const pending = parsePendingInvite(raw)
+    if (!pending || (pending.userId !== null && pending.userId !== currentUserId)) {
+      if (raw) localStorage.removeItem(PENDING_KEY)
+      return ''
+    }
+    return pending.token
+  } catch {
+    return ''
+  }
+}
+
+function savePendingToken(token: string, userId: string | null): void {
+  try {
+    localStorage.setItem(PENDING_KEY, JSON.stringify({ token, userId, savedAt: Date.now() }))
+  } catch { /* localStorage 不可環境では往復リカバリを諦める */ }
+}
+
+function clearPendingToken(): void {
+  try { localStorage.removeItem(PENDING_KEY) } catch { /* noop */ }
+}
 
 /**
  * 同一 token の accept をモジュール単位で共有する。
@@ -31,16 +79,17 @@ export function FamilyJoinPage() {
   const [status, setStatus] = useState<JoinStatus>('idle')
 
   // URL から取得できなければ localStorage の退避分（ログイン往復後）を使う
-  const token = params.get('token') || localStorage.getItem(PENDING_KEY) || ''
+  const durableUserId = kind === 'anon' ? null : session?.user.id ?? null
+  const token = params.get('token') || readPendingToken(durableUserId)
 
   useEffect(() => {
     if (!token) {
       setStatus('no-token')
       return
     }
-    try {
-      localStorage.setItem(PENDING_KEY, token)
-    } catch { /* localStorage 不可環境では往復リカバリは諦める */ }
+    // 匿名セッションの UUID はログイン往復で変わり得るため、実ログイン時だけ
+    // user_id と紐付ける。実ユーザーの切替時は readPendingToken が破棄する。
+    savePendingToken(token, durableUserId)
 
     // 招待は実ログイン済みの家族だけが受諾できる。匿名ユーザーは認証済みでも
     // DB RPC が拒否するため、先に明示的なログイン導線へ戻す。
@@ -63,7 +112,6 @@ export function FamilyJoinPage() {
           acceptInFlight.set(token, pending)
         }
         await pending
-        try { localStorage.removeItem(PENDING_KEY) } catch { /* noop */ }
         if (cancelled) return
         setStatus('done')
         setTimeout(() => navigate('/favorites', { replace: true }), 1200)
@@ -72,12 +120,15 @@ export function FamilyJoinPage() {
         if (cancelled) return
         console.error('accept invite failed:', (err as Error)?.message)
         setStatus('error')
+      } finally {
+        // 成功・失敗を問わず、受諾処理が終わったトークンを端末に残さない。
+        clearPendingToken()
       }
     })()
     return () => {
       cancelled = true
     }
-  }, [token, session, kind, acceptInvite, navigate])
+  }, [token, durableUserId, session, kind, acceptInvite, navigate])
 
   const doLogin = useCallback(
     async (provider: 'line' | 'google') => {
