@@ -6,6 +6,9 @@
 
 ## [Unreleased]
 
+### Added
+- 公開 API のフィールド定義を `DATA.md` に追加。各項目の型・収録条件・説明に加え、列挙値（学校種 / 設置者 / 共学別学 / 課程 / 校地種別 / 学校状態 / 募集状態）の意味と、`provenance`・`lifecycle` の読み方を掲載。内容は `src/types/school.ts` と `scripts/lib/public-api.mjs` から生成し、実装とずれたらテストで落ちる
+
 ## [v0.6.0] - 2026-08-07
 
 ### Added
