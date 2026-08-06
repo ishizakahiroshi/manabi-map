@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import datasetClaims from '../../data/dataset-claims.json'
 import { useI18n } from '../contexts/I18nContext'
 import { useGoBack } from '../hooks/useGoBack'
 import { PREFECTURES } from '../lib/prefecture'
@@ -6,9 +7,9 @@ import { PREFECTURES } from '../lib/prefecture'
 type DatasetMetadata = {
   school_count: number
   prefecture_count: number
+  /** slug → 収録校数。県別エンドポイント一覧の正典。 */
+  prefectures?: Record<string, number>
 }
-
-const DATASET_CLAIM = '一次資料 100%・出典明示 100%・商用サイトからの転載ゼロ'
 
 export function DataPage() {
   const goBack = useGoBack('/')
@@ -33,6 +34,17 @@ export function DataPage() {
     }
   }, [])
 
+  // 県別エンドポイントは 1 件の例示だと残り 46 件の綴りを読者に推測させる。
+  // dataset.json の実収録（slug→校数）だけを列挙し、生成物と一覧を必ず一致させる。
+  const datasetPrefCounts = metadata?.prefectures
+  const prefectureApiLinks = datasetPrefCounts
+    ? PREFECTURES.filter((p) => datasetPrefCounts[p.slug] != null).map((p) => ({
+        slug: p.slug,
+        name: p.name,
+        count: Number(datasetPrefCounts[p.slug]),
+      }))
+    : []
+
   const coverage = metadata
     ? `${metadata.prefecture_count === PREFECTURES.length ? '全国 ' : ''}` +
       `${metadata.prefecture_count.toLocaleString('en-US')} 都道府県・` +
@@ -50,7 +62,7 @@ export function DataPage() {
       <main id="main-content" className="content legal-content" tabIndex={-1}>
         <h1 style={{ marginTop: 0 }}>学校基本情報データセット・公開 API</h1>
         <p>{coverage}の学校基本情報を、出典へ戻れる形で公開しています。</p>
-        <p><strong>{DATASET_CLAIM}</strong></p>
+        <p><strong>{datasetClaims.claim}</strong></p>
 
         <h2>収録基準</h2>
         <p>
@@ -65,7 +77,7 @@ export function DataPage() {
         <h2>安定エンドポイント</h2>
         <ul>
           <li><a href="/api/v1/schools.json">全都道府県: /api/v1/schools.json</a></li>
-          <li><a href="/api/v1/schools/gunma.json">県別の例: /api/v1/schools/gunma.json</a></li>
+          <li><a href="/api/v1/schools/{'{prefecture}'}.json">県別: /api/v1/schools/{'{prefecture}'}.json</a></li>
           <li><a href="/api/v1/dataset.json">メタデータ: /api/v1/dataset.json</a></li>
         </ul>
         <p>
@@ -73,10 +85,27 @@ export function DataPage() {
           互換性を壊す変更が必要な場合は /api/v2/ を新設し、/api/v1/ は維持します。
         </p>
 
+        {prefectureApiLinks.length > 0 && (
+          <>
+            <h2>県別エンドポイント一覧</h2>
+            <p>{prefectureApiLinks.length} 件すべてを列挙します。括弧内は収録校数です。</p>
+            <ul>
+              {prefectureApiLinks.map((pref) => (
+                <li key={pref.slug}>
+                  <a href={`/api/v1/schools/${pref.slug}.json`}>
+                    {pref.name}: /api/v1/schools/{pref.slug}.json
+                  </a>
+                  （{pref.count.toLocaleString('en-US')} 校）
+                </li>
+              ))}
+            </ul>
+          </>
+        )}
+
         <h2>ライセンスと出典表記</h2>
         <p>
-          データは <a href="https://creativecommons.org/licenses/by-sa/4.0/">CC BY-SA 4.0</a> です。
-          利用・再配布時は「出典: Manabi Map（まなびマップ） https://manabi-map.app （CC BY-SA 4.0）」と表記してください。
+          データは <a href={datasetClaims.licenseUrl}>CC BY-SA 4.0</a> です。
+          利用・再配布時は「{datasetClaims.attribution}」と表記してください。
         </p>
         <p>
           <a href="https://github.com/ishizakahiroshi/manabi-map/blob/main/DATA.md" target="_blank" rel="noopener noreferrer">

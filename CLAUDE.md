@@ -127,7 +127,7 @@ Cloudflare / Supabase / Google Search Console / GitHub Secrets の設定は、**
 
 | 用途 | skill | 起動語 |
 |---|---|---|
-| バージョンリリース全体（backup → migration → データ投入 → 検証 → プレビュー → main マージ → タグ） | `manabi-map-deploy` | 「manabi-map リリース」「v0.x.y 出して」「関東の次のリリース」 |
+| 本番反映全体（versioned / no-tag、backup → migration → データ投入 → 検証 → プレビュー → main マージ → 条件付きタグ） | `manabi-map-deploy` | 「manabi-map リリース」「タグなしで本番反映」「DB migration の続き」 |
 | 新県データ投入（schools SQL + deviation SQL + 校パターン再分類 + course_type_master 確認） | `manabi-map-add-prefecture` | 「◯◯県 追加」「manabi-map に◯◯県入れて」「新県 データ投入」 |
 | nullable な学校情報を「情報提供募集中」型で追加（テンプレ・i18n・CSS・実装メモ生成） | `manabi-map-info-wanted-field` | 「情報提供募集中 field 追加」「空欄可能フィールド」「manabi-map-info-wanted-field」 |
 | 欠損項目の一括補完（公式カタログから抽出 → 出典つき SQL 生成 → gap を理由つきで記録） | `manabi-map-field-backfill` | 「欠損項目 補完」「学科 埋めて」「ふりがな 補完」「一括補完」 |
