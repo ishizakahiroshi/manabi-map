@@ -218,7 +218,7 @@ export function Sidebar({ favCount, noteCount, isAdmin }: SidebarProps) {
               </a>
               ・
               <a href="/press" onClick={(e) => { e.preventDefault(); go('/press') }}>
-                配布素材・プレスキット
+                {siteLinkLabel('/press')}
               </a>
             </div>
           </div>
