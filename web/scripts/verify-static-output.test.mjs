@@ -745,3 +745,38 @@ test('the public API allowlist omits deviation data and unsourced optional field
   assert.equal(result.provenance.field_sources.length, 1)
   assert.equal(result.provenance.last_built_at, builtAt)
 })
+
+// --- DATA.md のフィールド定義（plan_dataset-field-reference C3）--------------
+// master / 型に値が増えたのに DATA.md が古い、を機械で落とす。
+// 生成は repo 内だけで完結する（DB 接続不要）ので CI でもそのまま動く。
+
+test('DATA.md の生成済みフィールド定義が最新の生成結果と一致する', async () => {
+  const { buildMarkdown, BEGIN_MARKER, END_MARKER, DATA_MD_PATH } =
+    await import('./gen-dataset-fields.mjs')
+  const dataMd = await readFile(DATA_MD_PATH, 'utf8')
+  const begin = dataMd.indexOf(BEGIN_MARKER)
+  const end = dataMd.indexOf(END_MARKER)
+  assert.ok(begin >= 0, 'DATA.md に BEGIN マーカーが無い')
+  assert.ok(end > begin, 'DATA.md に END マーカーが無い')
+
+  const embedded = dataMd.slice(begin + BEGIN_MARKER.length, end).trim()
+  const generated = (await buildMarkdown()).trim()
+  assert.equal(
+    embedded,
+    generated,
+    'DATA.md のフィールド定義が古い。web で pnpm gen:dataset-fields --write を実行する',
+  )
+})
+
+test('DATA.md のフィールド定義が公開 API の全フィールドを説明している', async () => {
+  const { BASIC_FIELDS, SOURCED_SCHOOL_FIELDS } = await import('./lib/public-api.mjs')
+  const { DATA_MD_PATH } = await import('./gen-dataset-fields.mjs')
+  const dataMd = await readFile(DATA_MD_PATH, 'utf8')
+  const names = [...BASIC_FIELDS, ...SOURCED_SCHOOL_FIELDS.map(([column]) => column)]
+  for (const name of names) {
+    assert.ok(
+      dataMd.includes(`| \`${name}\` |`),
+      `DATA.md に ${name} の説明が無い`,
+    )
+  }
+})
