@@ -1,4 +1,5 @@
 import { useRef } from 'react'
+import siteFooterLinks from '../../data/site-footer-links.json'
 import { useNavigate } from 'react-router-dom'
 import { useApp } from '../contexts/AppContext'
 import { useAuth } from '../contexts/AuthContext'
@@ -25,6 +26,11 @@ export function Sidebar({ favCount, noteCount, isAdmin }: SidebarProps) {
 
   useFocusTrap(asideRef, sidebarOpen)
   useEscapeKey(() => setSidebarOpen(false), sidebarOpen)
+
+  // サイドバーとフッターは別コンポーネントだが、外向けページの表示名は同じ実体を使う。
+  // ラベルの実体は web/data/site-footer-links.json（ここに文字列を直書きしない）。
+  const siteLinkLabel = (path: string) =>
+    siteFooterLinks.links.find((link) => link.path === path)?.[locale] ?? ''
 
   const close = () => setSidebarOpen(false)
   const go = (path: string) => {
@@ -149,7 +155,12 @@ export function Sidebar({ favCount, noteCount, isAdmin }: SidebarProps) {
             </button>
             <button className="sb-item" onClick={() => go('/press')}>
               <span className="ic" aria-hidden="true">📰</span>
-              <span className="tx">配布素材・プレスキット</span>
+              <span className="tx">{siteLinkLabel('/press')}</span>
+              <span className="arrow" aria-hidden="true">›</span>
+            </button>
+            <button className="sb-item" onClick={() => go('/data')}>
+              <span className="ic" aria-hidden="true">🗂️</span>
+              <span className="tx">{siteLinkLabel('/data')}</span>
               <span className="arrow" aria-hidden="true">›</span>
             </button>
           </div>
