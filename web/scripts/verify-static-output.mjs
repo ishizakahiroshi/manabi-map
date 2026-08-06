@@ -149,10 +149,33 @@ const FORBIDDEN_SOURCE_HOSTS = [
   /(^|\.)zyuken\.net$/,
 ]
 
+// 私学協会・教育情報ポータル等は一次資料の発行主体でも、自治体向けの
+// ed/ac/lg/go.jp suffix を持たない。任意の .or.jp / .gr.jp を広く許可せず、
+// 収集時に確認した公式カタログの host だけを明示する。
+const TRUSTED_OFFICIAL_SOURCE_HOSTS = new Set([
+  'iwakisogo-hs.note.jp',
+  'k-shigaku.com',
+  'kagoshima-shigaku.com',
+  'kumamoto-pref-hs.jp',
+  'www.aichi-shigaku.gr.jp',
+  'www.f-sigaku.com',
+  'www.hyogo-shigaku.or.jp',
+  'www.kagawa-shigaku.jp',
+  'www.kyotoshigaku.gr.jp',
+  'www.miyazaki-shigaku.jp',
+  'www.nagasaki-shigaku.jp',
+  'www.oitachuko.info',
+  'www.osaka-shigaku.gr.jp',
+  'www.saga-ed.jp',
+  'www.shizuoka-shigaku.net',
+])
+
 function isInstitutionalHost(host) {
   return (
     /\.(?:ed|ac|lg|go)\.jp$/.test(host) ||
-    /(^|\.)pref\.[a-z0-9-]+\.jp$/.test(host)
+    /(^|\.)pref\.[a-z0-9-]+\.jp$/.test(host) ||
+    /(^|\.)city(?:[.-])[a-z0-9-]+(?:\.[a-z0-9-]+)*\.jp$/.test(host) ||
+    TRUSTED_OFFICIAL_SOURCE_HOSTS.has(host)
   )
 }
 
