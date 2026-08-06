@@ -27,6 +27,12 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import Markdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { loadCivicData, groupSchoolsByCity, resolveCityGroup } from './lib/municipalities.mjs'
+import {
+  DATASET_ATTRIBUTION,
+  DATASET_CLAIM,
+  DATASET_LICENSE_URL,
+  formatDatasetCoverage,
+} from './lib/public-api.mjs'
 // 近隣校の選定・距離計算と選抜実績の集計・後継校の逆引きは React 側と同一実装を共有する
 // （tsx 経由で .ts を直 import（package.json の scripts が tsx で起動する。Node の type stripping には依存しない — Cloudflare Pages のビルドイメージは pnpm 同梱の preinstall Node しか使えないため）。フォーク禁止 —
 // 静的 HTML と JS mount 後で校名・距離・倍率が食い違う事故を防ぐ。
@@ -70,6 +76,7 @@ const schoolsText = schoolsPath.endsWith('.gz') ? gunzipSync(schoolsFile).toStri
 const schoolsPayload = JSON.parse(schoolsText)
 const schools = Array.isArray(schoolsPayload) ? schoolsPayload : schoolsPayload.schools
 if (!Array.isArray(schools)) throw new Error('schools payload has an unsupported format')
+const publicDataset = JSON.parse(await readFile(join(distDir, 'api', 'v1', 'dataset.json'), 'utf8'))
 
 // gen-schools-json.mjs は出典 object を sourceCatalog の index へ圧縮している。
 // 選抜実績の出典脚注に使うため、useSchools.ts の hydrateUnitSources と同様に
@@ -263,10 +270,19 @@ function renderSchoolPage(school) {
   const url = `${SITE_ORIGIN}/school/${school.id}/`
   const place = placeLabel(school.prefecture, school.city)
   const typeLabel = school.type === 'kosen' ? '高等専門学校' : '高校'
-  const title = `${school.name}（${place}）の地図・アクセス・学科 | Manabi Map`
-  const description =
-    `${school.name}（${place}）の場所・学科情報。住所を入れると通える${typeLabel}が地図に表示され、` +
-    '通学時間の目安の確認や見学メモの家族共有ができる無料の学校選びサービスです。'
+  // 学科データを持たない学校では title / description で「学科」を約束しない。
+  // 2026-08-06 実測で 605 校が学科 0 件のまま「…の地図・アクセス・学科」と
+  // 名乗っていた（docs/local/plan_open-issues-triage.md P0-1）。
+  const departmentNames = (school.school_departments ?? []).map((d) => d.name).filter(Boolean)
+  const hasDepartments = departmentNames.length > 0
+  const title = hasDepartments
+    ? `${school.name}（${place}）の地図・アクセス・学科 | Manabi Map`
+    : `${school.name}（${place}）の地図・アクセス | Manabi Map`
+  const description = hasDepartments
+    ? `${school.name}（${place}）の場所・学科情報。住所を入れると通える${typeLabel}が地図に表示され、` +
+      '通学時間の目安の確認や見学メモの家族共有ができる無料の学校選びサービスです。'
+    : `${school.name}（${place}）の場所とアクセス。住所を入れると通える${typeLabel}が地図に表示され、` +
+      '通学時間の目安の確認や見学メモの家族共有ができる無料の学校選びサービスです。'
 
   const rows = []
   // address は既に prefecture + city を含む完全表記が入っている想定。
@@ -283,8 +299,7 @@ function renderSchoolPage(school) {
     .map((c) => COURSE_LABELS[c])
     .filter(Boolean)
   if (courses.length) rows.push(['課程', courses.join('・')])
-  const departments = (school.school_departments ?? []).map((d) => d.name).filter(Boolean)
-  if (departments.length) rows.push(['学科', departments.join('、')])
+  if (hasDepartments) rows.push(['学科', departmentNames.join('、')])
 
   // 学校規模（c4 C4）: 事実の数値のみを出す。「大規模校」等のラベル付けはしない
   // （plan_school-scale-band.md の分類方針と衝突させない）。文言は
@@ -495,6 +510,8 @@ function renderSchoolPage(school) {
     url,
     description,
     image: `${SITE_ORIGIN}/og-hero.png`,
+    license: DATASET_LICENSE_URL,
+    creditText: DATASET_ATTRIBUTION,
     address: {
       '@type': 'PostalAddress',
       addressCountry: 'JP',
@@ -810,6 +827,73 @@ const ORGANIZATION_JSON_LD = {
   ],
 }
 
+function renderDataPage() {
+  const url = `${SITE_ORIGIN}/data/`
+  const title = '学校基本情報データセット・公開 API | Manabi Map'
+  const datasetCoverage = formatDatasetCoverage(
+    Number(publicDataset.prefecture_count),
+    Number(publicDataset.school_count),
+    prefectures.length,
+  )
+  const description =
+    `${datasetCoverage}の学校基本情報を、` +
+    '出典 URL とともに CC BY-SA 4.0 で公開する静的 JSON API です。'
+  const datasetJsonLd = {
+    '@context': 'https://schema.org',
+    '@type': 'Dataset',
+    '@id': `${url}#dataset`,
+    name: 'Manabi Map 学校基本情報データセット',
+    description,
+    url,
+    license: DATASET_LICENSE_URL,
+    creator: {
+      '@type': 'Organization',
+      '@id': ORGANIZATION_JSON_LD['@id'],
+      name: ORGANIZATION_JSON_LD.name,
+      url: ORGANIZATION_JSON_LD.url,
+    },
+    distribution: [
+      {
+        '@type': 'DataDownload',
+        contentUrl: `${SITE_ORIGIN}/api/v1/schools.json`,
+        encodingFormat: 'application/json',
+      },
+    ],
+    temporalCoverage: '2026/..',
+    isAccessibleForFree: true,
+    measurementTechnique: '学校・教育委員会・官公庁が公表した一次資料を項目単位で記録し、出典 URL を同梱',
+  }
+  const main =
+    '<main>' +
+    '<h1>学校基本情報データセット・公開 API</h1>' +
+    `<p>${datasetCoverage}の学校基本情報を、` +
+    '出典へ戻れる形で公開しています。</p>' +
+    `<p><strong>${escapeHtml(DATASET_CLAIM)}</strong></p>` +
+    '<h2>収録基準</h2>' +
+    '<p>学校公式 URL を確認できる学校と、学校・教育委員会・官公庁の一次資料へたどれる項目だけを収録します。' +
+    '出典を確認できない項目は公開側へ出しません。</p>' +
+    '<p>偏差値の編集推計は、数値だけを切り出した序列化を避けるため公開 API には含めません。' +
+    'アプリ上では方法と限界の説明と組み合わせて扱います。</p>' +
+    '<h2>安定エンドポイント</h2>' +
+    '<ul>' +
+    '<li><a href="/api/v1/schools.json">全都道府県: /api/v1/schools.json</a></li>' +
+    '<li><a href="/api/v1/schools/gunma.json">県別の例: /api/v1/schools/gunma.json</a></li>' +
+    '<li><a href="/api/v1/dataset.json">メタデータ: /api/v1/dataset.json</a></li>' +
+    '</ul>' +
+    '<p>いずれも静的 JSON です。検索条件付きリクエストや POST は提供しません。' +
+    '互換性を壊す変更が必要な場合は /api/v2/ を新設し、/api/v1/ は維持します。</p>' +
+    '<h2>ライセンスと出典表記</h2>' +
+    `<p>データは <a href="${DATASET_LICENSE_URL}">CC BY-SA 4.0</a> です。` +
+    `利用・再配布時は「${escapeHtml(DATASET_ATTRIBUTION)}」と表記してください。</p>` +
+    '<p><a href="https://github.com/ishizakahiroshi/manabi-map/blob/main/DATA.md" rel="noopener">' +
+    '生成方法と詳しい収録方針（DATA.md）</a></p>' +
+    '<h2>訂正窓口</h2>' +
+    '<p>掲載情報の削除・訂正は <a href="mailto:takedown@manabi-map.app">takedown@manabi-map.app</a> へお知らせください。</p>' +
+    '</main>'
+  const withHead = renderHead(template, { title, description, url })
+  return withRootContent(withJsonLd(withHead, datasetJsonLd), main + FOOTER_HTML)
+}
+
 function renderPressPage() {
   const url = `${SITE_ORIGIN}/press/`
   const title = '配布素材・プレスキット | Manabi Map'
@@ -854,9 +938,11 @@ function renderPressPage() {
     '（24 時間以内に受信確認 ／ 7 日以内に対応）</li>' +
     '</ul>' +
     '<h2>掲載データについて</h2>' +
-    '<p>収録データは公的資料を根拠に編集しています。商用サイトからの数値転載は行いません。' +
+    `<p><strong>${escapeHtml(DATASET_CLAIM)}</strong>を公開方針としています。` +
+    '学校・教育委員会・官公庁が自ら公表した資料を根拠に編集しています。' +
     '数値の考え方と限界は <a href="/legal/deviation-methodology/">偏差値の方法と限界</a> で公開しています。' +
-    'コードは <a href="https://github.com/ishizakahiroshi/manabi-map" rel="noopener">GitHub</a> で公開中です。</p>' +
+    'コードは <a href="https://github.com/ishizakahiroshi/manabi-map" rel="noopener">GitHub</a> で公開中です。' +
+    '<a href="/data/">公開データセットと API</a> も参照できます。</p>' +
     '</main>'
   const withHead = renderHead(template, { title, description, url })
   return withRootContent(withJsonLd(withHead, ORGANIZATION_JSON_LD), main + FOOTER_HTML)
@@ -947,6 +1033,9 @@ await writeFile(join(distDir, 'schools', 'index.html'), renderSchoolsHubPage())
 await mkdir(join(distDir, 'press'), { recursive: true })
 await writeFile(join(distDir, 'press', 'index.html'), renderPressPage())
 
+await mkdir(join(distDir, 'data'), { recursive: true })
+await writeFile(join(distDir, 'data', 'index.html'), renderDataPage())
+
 for (const { doc, title } of LEGAL_DOCS) {
   const url = `${SITE_ORIGIN}/legal/${doc}/`
   const description = `Manabi Map（まなびマップ）の${title}。運営方針・データの扱い・お問い合わせ窓口を公開しています。`
@@ -980,6 +1069,7 @@ const urls = [
   { path: '/' },
   { path: '/schools/' },
   ...prefPages.map((path) => ({ path })),
+  { path: '/data/' },
   { path: '/press/' },
   ...LEGAL_DOCS.map(({ doc }) => ({ path: `/legal/${doc}/` })),
   ...GUIDES.map((guide) => ({ path: `/guide/${guide.slug}/` })),
@@ -1008,7 +1098,7 @@ if (pageStats.admissionTablesWithoutSource > 0) {
 
 console.log(
   `wrote ${targets.length} school pages, ${prefPages.length} pref hubs, ` +
-  `${LEGAL_DOCS.length} legal pages, ${GUIDES.length} guides, press, 404 and sitemap.xml (${urls.length} urls) to ${distDir}`,
+  `${LEGAL_DOCS.length} legal pages, ${GUIDES.length} guides, data, press, 404 and sitemap.xml (${urls.length} urls) to ${distDir}`,
 )
 
 const llms = [
@@ -1022,6 +1112,7 @@ const llms = [
   '## 主要ページ',
   '',
   '- [トップ](https://manabi-map.app/): 地図と学校検索',
+  '- [公開データセットと API](https://manabi-map.app/data/): 収録基準・ライセンス・安定エンドポイント',
   '- [プレスキット](https://manabi-map.app/press/): サービスの基礎情報と配布素材',
   '- [編集推計の方法と限界](https://manabi-map.app/legal/deviation-methodology/): 根拠と限界',
   '- [利用規約](https://manabi-map.app/legal/terms/)',
@@ -1031,7 +1122,12 @@ const llms = [
   '',
   '- コード: AGPL-3.0-or-later',
   '- 学校基本情報: CC BY-SA 4.0',
+  `- 収録方針: ${DATASET_CLAIM}`,
   '- 出典表記: 出典: Manabi Map（まなびマップ） https://manabi-map.app （CC BY-SA 4.0）',
+  '- 全件 API: https://manabi-map.app/api/v1/schools.json',
+  '- 県別 API: https://manabi-map.app/api/v1/schools/{prefecture}.json',
+  '- API メタデータ: https://manabi-map.app/api/v1/dataset.json',
+  '- 偏差値の編集推計は公開 API に含めません。',
   '- データセットの説明: https://github.com/ishizakahiroshi/manabi-map/blob/main/DATA.md',
   '',
   '## お問い合わせ',
