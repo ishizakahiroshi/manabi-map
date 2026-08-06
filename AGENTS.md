@@ -11,7 +11,7 @@
 
 作者環境では以下の専用 skill が用意されている（詳細は `CLAUDE.md` の「利用可能な skill」節）:
 
-- `manabi-map-deploy` — バージョンリリース全体（backup → migration → データ投入 → 検証 → main マージ → タグ）
+- `manabi-map-deploy` — 本番反映全体（versioned / no-tag、backup → migration → データ投入 → 検証 → main マージ → 条件付きタグ）
 - `manabi-map-add-prefecture` — 新県データ投入（schools SQL + deviation SQL + 校パターン再分類）
 - `supabase-migrate` — Supabase 本番 migration 適用（Docker 不要）
 - `taxonomy-refactor` — 分類列の master + FK + trigger 化 refactor
