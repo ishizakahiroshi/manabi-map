@@ -149,6 +149,17 @@ const FORBIDDEN_SOURCE_HOSTS = [
   /(^|\.)zyuken\.net$/,
 ]
 
+// URL ではなく本文に出典名が書かれていても、公開データの出典方針に反する。
+// ホスト名の検査（FORBIDDEN_SOURCE_HOSTS）とは別に、すべての文字列値を走査する。
+const FORBIDDEN_SOURCE_TEXT_PATTERNS = [
+  { label: 'Wikipedia', pattern: /wikipedia(?:\.org)?/iu },
+  { label: 'ウィキペディア', pattern: /ウィキペディア/iu },
+  { label: 'みんこう', pattern: /(?:みんこう|minkou\.jp)/iu },
+  { label: 'みんなの高校情報', pattern: /みんなの高校情報/iu },
+  { label: 'スタディサプリ', pattern: /(?:スタディサプリ|shingakunet\.com)/iu },
+  { label: '高校受験ナビ', pattern: /(?:高校受験ナビ|zyuken\.net)/iu },
+]
+
 // 私学協会・教育情報ポータル等は一次資料の発行主体でも、自治体向けの
 // ed/ac/lg/go.jp suffix を持たない。任意の .or.jp / .gr.jp を広く許可せず、
 // 収集時に確認した公式カタログの host だけを明示する。
@@ -203,6 +214,26 @@ function findDeviationLeak(value, path = '$') {
   for (const [key, item] of Object.entries(value)) {
     if (/deviation/i.test(key)) return `${path}.${key}`
     const leak = findDeviationLeak(item, `${path}.${key}`)
+    if (leak) return leak
+  }
+  return null
+}
+
+function findForbiddenSourceMention(value, path = '$') {
+  if (typeof value === 'string') {
+    const match = FORBIDDEN_SOURCE_TEXT_PATTERNS.find(({ pattern }) => pattern.test(value))
+    return match ? { label: match.label, path } : null
+  }
+  if (Array.isArray(value)) {
+    for (let index = 0; index < value.length; index += 1) {
+      const leak = findForbiddenSourceMention(value[index], `${path}[${index}]`)
+      if (leak) return leak
+    }
+    return null
+  }
+  if (!value || typeof value !== 'object') return null
+  for (const [key, item] of Object.entries(value)) {
+    const leak = findForbiddenSourceMention(item, `${path}.${key}`)
     if (leak) return leak
   }
   return null
@@ -505,6 +536,12 @@ export async function verifyStaticOutput({
       if (!isInstitutionalHost(host) && !registeredOfficialHosts.has(host)) {
         throw new Error(`unregistered source domain in ${file.relativePath}: ${host}`)
       }
+    }
+    const sourceMention = findForbiddenSourceMention(value)
+    if (sourceMention) {
+      throw new Error(
+        `forbidden source mention "${sourceMention.label}" in ${file.relativePath} at ${sourceMention.path}`,
+      )
     }
   }
 

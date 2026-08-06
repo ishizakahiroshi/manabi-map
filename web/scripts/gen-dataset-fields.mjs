@@ -75,9 +75,13 @@ const FIELD_DOCS = {
   course_times: ['string[] | null', '任意', '課程。値は下記「課程（course_times）」。複数持つ学校がある'],
   campus_type: ['string (enum) | null', '任意', '校地の種別。値は下記「校地種別（campus_type）」'],
   is_integrated: ['boolean', '必須', '中高一貫かどうか。`type`（高校 / 高専）とは別軸の属性。**true でも高校段階の外部募集を行う学校（併設型）はある**ので、募集の有無は `lifecycle.recruitment_status_code` で確認する'],
+  main_school_name: ['string | null', '任意', '本校の名称。`campus_type` が `main` 以外（サテライト校地・連携校・サポート校）のとき、どの本校に属するかを示す'],
+  legally_established_on: ['string (date) | null', '任意', '法的な設置日。`lifecycle.opened_on`（開校日）とは別概念で、学校再編では設置日が先行することがある'],
+  updated_at: ['string (ISO 8601) | null', '任意', 'このレコードの最終更新時刻。`provenance.last_built_at` はビルド全体の時刻なので、学校ごとの鮮度はこちらで見る'],
   total_students: ['number | null', '出典があるときのみ', '全校生徒数。出典が登録された学校だけに出る'],
   enrollment_year: ['number | null', '出典があるときのみ', '`total_students` / `male_ratio` の基準年度'],
   male_ratio: ['number | null', '出典があるときのみ', '男子比率（0〜1）。出典が登録された学校だけに出る'],
+  status_description: ['string | null', '出典があるときのみ', '一次資料で確認した学校状態の公開用説明。収集作業の内部記録である `status_note` とは別で、出典が登録された学校だけに出る'],
 }
 
 /**
@@ -91,6 +95,8 @@ const OBJECT_DOCS = [
   ['lifecycle', 'object', '`status_official_url` があるときのみ', '学校の状態。読み方は下記「lifecycle の読み方」'],
   ['departments', 'object[]', '学科名の出典があるときのみ', '学科の一覧。読み方は下記「departments の読み方」'],
   ['admission_recruitment_units', 'object[]', '出典つきの入試統計があるときのみ', '募集単位ごとの入試統計。読み方は下記「admission_recruitment_units の読み方」'],
+  ['name_history', 'object[]', '旧校名があるときのみ', '改称の履歴。読み方は下記「name_history の読み方」'],
+  ['predecessors', 'object[]', '前身校があるときのみ', '統合・改組の前身校。読み方は下記「predecessors の読み方」'],
 ]
 
 /** 列挙値の説明。型に値を足したらここも埋めないと生成が落ちる。 */
@@ -309,7 +315,46 @@ function renderLifecycleSection() {
     '| `opened_on` | 開校日（不明なら null） |',
     '| `closed_on` | 閉校日（不明なら null） |',
     '| `recruitment_ended_on` | 募集終了日（不明なら null） |',
+    '| `recruitment_ended_year` | 募集終了年度。日付まで特定できない資料のときはこちらだけ入る |',
     '| `status_official_url` | 状態の根拠にした一次資料の URL |',
+  ].join('\n')
+}
+
+function renderNameHistorySection() {
+  return [
+    '#### `name_history` の読み方',
+    '',
+    '改称の履歴。旧校名で持っている外部データと突き合わせるために使う。**旧校名がある学校にだけ現れる**。',
+    '',
+    '| キー | 説明 |',
+    '|---|---|',
+    '| `name` | そのときの学校名 |',
+    '| `name_kana` | ふりがな（不明なら null） |',
+    '| `valid_from` / `valid_to` | その名称が有効だった期間 |',
+    '| `official_url` | 改称の根拠にした一次資料の URL |',
+    '| `notes` | 補足 |',
+  ].join('\n')
+}
+
+function renderPredecessorsSection() {
+  return [
+    '#### `predecessors` の読み方',
+    '',
+    '統合・改組の前身校。**前身校がある学校にだけ現れる**。',
+    '学校統合では前身校と後継校を法的に別の学校として扱うため、過年度の入試実績を',
+    '現行校の倍率へ混ぜないよう分離している。前身校側の詳細は `predecessor.record_key` で引く。',
+    '',
+    '| キー | 説明 |',
+    '|---|---|',
+    '| `relationship_type_code` | 関係の種別（改称 / 統合 / 分割 / 改組 / 承継） |',
+    '| `effective_on` | その関係が発生した日 |',
+    '| `official_url` | 関係の根拠にした一次資料の URL |',
+    '| `notes` | 補足 |',
+    '| `predecessor` | 前身校の識別情報。下 4 行 |',
+    '| `predecessor.record_key` | 前身校の安定キー。データセット内の別レコードを指す |',
+    '| `predecessor.name` | 前身校の名称 |',
+    '| `predecessor.closed_on` | 前身校の閉校日 |',
+    '| `predecessor.lifecycle_status_code` | 前身校の状態 |',
   ].join('\n')
 }
 
@@ -340,6 +385,10 @@ async function buildMarkdown() {
     renderDepartmentsSection(),
     '',
     renderAdmissionSection(),
+    '',
+    renderNameHistorySection(),
+    '',
+    renderPredecessorsSection(),
     '',
     renderNotIncludedSection(),
   ].join('\n')
