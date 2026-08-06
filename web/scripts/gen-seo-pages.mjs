@@ -47,6 +47,7 @@ const SITE_ORIGIN = 'https://manabi-map.app'
 
 const here = dirname(fileURLToPath(import.meta.url))
 const webRoot = join(here, '..')
+const siteFooterLinks = JSON.parse(await readFile(join(webRoot, 'data', 'site-footer-links.json'), 'utf8'))
 
 const distArgIndex = process.argv.indexOf('--dist')
 const distDir = distArgIndex >= 0 ? process.argv[distArgIndex + 1] : join(webRoot, 'dist')
@@ -647,12 +648,9 @@ const REGION_LABELS = {
 /** サイト共通フッター（プリレンダー用）。React の SiteFooter と項目を一致させる。 */
 const FOOTER_HTML =
   '<footer><nav aria-label="サイト情報">' +
-  '<a href="/press/">プレスキット</a> ' +
-  '<a href="/legal/terms/">利用規約</a> ' +
-  '<a href="/legal/privacy/">プライバシーポリシー</a> ' +
-  '<a href="/legal/deviation-methodology/">偏差値の方法と限界</a> ' +
-  '<a href="/legal/third-party/">サードパーティライセンス</a> ' +
-  '<a href="/guide/school-visit/">学校選びガイド</a>' +
+  siteFooterLinks.links
+    .map(({ path, ja }) => `<a href="${escapeHtml(path)}/">${escapeHtml(ja)}</a>`)
+    .join(' ') +
   '</nav></footer>'
 
 /** 設置区分・課程・共学別学の内訳（県ハブの事実の集計。序列は作らない）。 */
@@ -838,6 +836,18 @@ function renderDataPage() {
   const description =
     `${datasetCoverage}の学校基本情報を、` +
     '出典 URL とともに CC BY-SA 4.0 で公開する静的 JSON API です。'
+  // 県別エンドポイントは 1 件の例示だと残り 46 件の綴りを読者に推測させる。
+  // dataset.json の実収録（slug→校数）だけを列挙し、生成物と一覧を必ず一致させる。
+  const datasetPrefCounts = publicDataset.prefectures ?? {}
+  const prefectureApiLinks = prefectures
+    .filter((p) => datasetPrefCounts[p.slug] != null)
+    .map((p) => {
+      const count = Number(datasetPrefCounts[p.slug]).toLocaleString('en-US')
+      return (
+        `<li><a href="/api/v1/schools/${p.slug}.json">` +
+        `${escapeHtml(p.name)}: /api/v1/schools/${p.slug}.json</a>（${count} 校）</li>`
+      )
+    })
   const datasetJsonLd = {
     '@context': 'https://schema.org',
     '@type': 'Dataset',
@@ -877,11 +887,14 @@ function renderDataPage() {
     '<h2>安定エンドポイント</h2>' +
     '<ul>' +
     '<li><a href="/api/v1/schools.json">全都道府県: /api/v1/schools.json</a></li>' +
-    '<li><a href="/api/v1/schools/gunma.json">県別の例: /api/v1/schools/gunma.json</a></li>' +
+    '<li><a href="/api/v1/schools/{prefecture}.json">県別: /api/v1/schools/{prefecture}.json</a></li>' +
     '<li><a href="/api/v1/dataset.json">メタデータ: /api/v1/dataset.json</a></li>' +
     '</ul>' +
     '<p>いずれも静的 JSON です。検索条件付きリクエストや POST は提供しません。' +
     '互換性を壊す変更が必要な場合は /api/v2/ を新設し、/api/v1/ は維持します。</p>' +
+    '<h2>県別エンドポイント一覧</h2>' +
+    `<p>${prefectureApiLinks.length} 件すべてを列挙します。括弧内は収録校数です。</p>` +
+    `<ul>${prefectureApiLinks.join('')}</ul>` +
     '<h2>ライセンスと出典表記</h2>' +
     `<p>データは <a href="${DATASET_LICENSE_URL}">CC BY-SA 4.0</a> です。` +
     `利用・再配布時は「${escapeHtml(DATASET_ATTRIBUTION)}」と表記してください。</p>` +
@@ -1123,7 +1136,7 @@ const llms = [
   '- コード: AGPL-3.0-or-later',
   '- 学校基本情報: CC BY-SA 4.0',
   `- 収録方針: ${DATASET_CLAIM}`,
-  '- 出典表記: 出典: Manabi Map（まなびマップ） https://manabi-map.app （CC BY-SA 4.0）',
+  `- 出典表記: ${DATASET_ATTRIBUTION}`,
   '- 全件 API: https://manabi-map.app/api/v1/schools.json',
   '- 県別 API: https://manabi-map.app/api/v1/schools/{prefecture}.json',
   '- API メタデータ: https://manabi-map.app/api/v1/dataset.json',

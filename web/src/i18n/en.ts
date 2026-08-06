@@ -117,9 +117,6 @@ export const en: MessageTree = {
   },
   footer: {
     navLabel: 'Site info',
-    press: 'Press kit',
-    privacy: 'Privacy policy',
-    guide: 'School choice guides',
   },
   schoolsHub: {
     title: 'Prefectures',

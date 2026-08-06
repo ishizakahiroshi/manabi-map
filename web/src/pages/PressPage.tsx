@@ -1,4 +1,5 @@
 import { useNavigate } from 'react-router-dom'
+import datasetClaims from '../../data/dataset-claims.json'
 import { useI18n } from '../contexts/I18nContext'
 import { useGoBack } from '../hooks/useGoBack'
 
@@ -177,7 +178,7 @@ export function PressPage() {
           広告は進路・教育関連のみ、無差別アドネットワークは使用しません。
         </p>
         <p>
-          収録データは<b>一次資料 100%・出典明示 100%・商用サイトからの転載ゼロ</b>を公開方針としています。
+          収録データは<b>{datasetClaims.claim}</b>を公開方針としています。
           <a href="/data" onClick={(event) => { event.preventDefault(); navigate('/data') }}>公開データセットと API</a>で、
           収録基準・出典・安定エンドポイントを確認できます。
         </p>
