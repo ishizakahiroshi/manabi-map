@@ -10,6 +10,7 @@
     "build": "pnpm fetch:tags && pnpm gen:schools-json && vite build && tsx scripts/gen-seo-pages.mjs && pnpm verify:static",
     "fetch:tags": "git fetch --unshallow --tags 2>/dev/null || git fetch --deepen=200 --tags 2>/dev/null || git fetch --tags || true",
     "gen:schools-json": "tsx scripts/gen-schools-json.mjs",
+    "gen:dataset-fields": "node scripts/gen-dataset-fields.mjs",
     "typecheck": "tsc --noEmit -p tsconfig.app.json",
     "lint": "oxlint",
     "test": "vitest run && pnpm test:static && pnpm test:functions",
