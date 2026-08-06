@@ -12,6 +12,7 @@ import { FamilyJoinPage } from './pages/FamilyJoinPage'
 import { LegalPage } from './pages/LegalPage'
 import { GuidePage } from './pages/GuidePage'
 import { PressPage } from './pages/PressPage'
+import { DataPage } from './pages/DataPage'
 import { MyPage } from './pages/MyPage'
 import { SchoolsHubPage } from './pages/SchoolsHubPage'
 import { PrefecturePage } from './pages/PrefecturePage'
@@ -60,7 +61,8 @@ export default function App() {
     path === '/family/join' ||
     path.startsWith('/legal/') ||
     path.startsWith('/guide/') ||
-    path === '/press'
+    path === '/press' ||
+    path === '/data'
   )
 
   return (
@@ -94,6 +96,7 @@ export default function App() {
           <Route path="/legal/deviation-methodology" element={<LegalPage doc="deviation-methodology" />} />
           <Route path="/guide/:slug" element={<GuideRoute />} />
           <Route path="/press" element={<PressPage />} />
+          <Route path="/data" element={<DataPage />} />
           <Route path="/schools" element={<SchoolsHubPage />} />
           <Route path="/pref/:pref" element={<PrefecturePage userData={userData} />} />
           <Route path="/dashboard" element={<DashboardRoute isAdmin={isAdmin} checking={checkingAdmin} />} />

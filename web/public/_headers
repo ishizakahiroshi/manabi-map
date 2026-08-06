@@ -27,3 +27,7 @@
 # 永久キャッシュ可
 /school-data/*
   Cache-Control: public, max-age=31536000, immutable
+
+# 出典追跡可能な公開 API。固定 URL のため 1 時間で再検証する。
+/api/v1/*
+  Cache-Control: public, max-age=3600
