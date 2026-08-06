@@ -548,6 +548,39 @@ test('a Wikipedia field source in the public API is rejected', async (t) => {
   )
 })
 
+test('a reviewed private-school association source host is accepted', async (t) => {
+  const dir = await syntheticDist()
+  t.after(() => rm(dir, { recursive: true, force: true }))
+  for (const path of [
+    join(dir, 'api', 'v1', 'schools.json'),
+    join(dir, 'api', 'v1', 'schools', 'gunma.json'),
+  ]) {
+    const payload = JSON.parse(await readFile(path, 'utf8'))
+    payload.schools[0].provenance.field_sources.push({
+      field_name: 'school_departments.name',
+      official_url: 'https://www.aichi-shigaku.gr.jp/official-catalog.pdf',
+    })
+    await writeFile(path, JSON.stringify(payload))
+  }
+  await verifyStaticOutput({ distDir: dir, maxFileBytes: 1024 * 1024 })
+})
+
+test('an unreviewed gr.jp source host is rejected', async (t) => {
+  const dir = await syntheticDist()
+  t.after(() => rm(dir, { recursive: true, force: true }))
+  const path = join(dir, 'api', 'v1', 'schools.json')
+  const payload = JSON.parse(await readFile(path, 'utf8'))
+  payload.schools[0].provenance.field_sources.push({
+    field_name: 'school_departments.name',
+    official_url: 'https://unreviewed-example.gr.jp/catalog.pdf',
+  })
+  await writeFile(path, JSON.stringify(payload))
+  await assert.rejects(
+    verifyStaticOutput({ distDir: dir, maxFileBytes: 1024 * 1024 }),
+    /unregistered source domain/,
+  )
+})
+
 test('/data/ without Dataset JSON-LD is rejected', async (t) => {
   const dir = await syntheticDist()
   t.after(() => rm(dir, { recursive: true, force: true }))
