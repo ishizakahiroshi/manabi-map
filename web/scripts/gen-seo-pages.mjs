@@ -583,7 +583,7 @@ if (targets.length < MIN_EXPECTED) {
 // --- 近隣校インデックス / 沿革の逆引き（plan_seo-growth-strategy_c4 C1 / C2） ----
 
 // 全校の緯度経度から、各校の近隣校を 1 回だけ計算する（2026-08-04 実測:
-// 5,095 校の総当たり ≒ 2,600 万回でも Node で数秒）。空間索引は不要。
+// 約 5,100 校の総当たり ≒ 2,600 万回でも Node で数秒）。空間索引は不要。
 // 選定・並び順のロジックは src/lib/neighbors.ts（React 側と共有）にあり、
 // 距離順ソートのみ。偏差値順・倍率順は実装しない（ランキングサイト化の禁止線・
 // docs/local/plan_seo-growth-strategy.md §やらないこと）。
