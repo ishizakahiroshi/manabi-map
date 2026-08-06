@@ -780,3 +780,86 @@ test('DATA.md のフィールド定義が公開 API の全フィールドを説�
     )
   }
 })
+
+// 公開レコードが実際に出しうる全キーが DATA.md で説明されているか。
+// FIELD_DOCS は BASIC_FIELDS から導けるが、条件付きで足されるキー
+// （departments / lifecycle / admission_recruitment_units）は手書きなので
+// 書き漏らせる。実際の出力から突き合わせて検出する。
+test('公開レコードが出す全キーが DATA.md で説明されている', async () => {
+  const { DATA_MD_PATH } = await import('./gen-dataset-fields.mjs')
+  const builtAt = '2026-08-07T00:00:00.000Z'
+  const source = (fieldName) => ({
+    field_name: fieldName,
+    official_url: 'https://example.ed.jp/doc',
+    doc_title: 'x',
+    is_official_source: true,
+  })
+  // 条件分岐をすべて満たす最大構成の行
+  const row = {
+    is_active: true,
+    official_url: 'https://example.ed.jp/',
+    status_official_url: 'https://example.ed.jp/status',
+    lifecycle_status_code: 'active',
+    recruitment_status_code: 'recruiting',
+    total_students: 300,
+    enrollment_year: 2026,
+    male_ratio: 0.5,
+    school_field_sources: [
+      source('schools.total_students'),
+      source('schools.enrollment_year'),
+      source('schools.male_ratio'),
+      source('school_departments.name'),
+      source('school_departments.course_type'),
+    ],
+    school_departments: [{ name: '普通科', course_type: 'general' }],
+    admission_recruitment_units: [
+      {
+        unit_key: 'u1',
+        unit_kind_code: 'k',
+        label: '一般',
+        school_admission_selection_stats: [
+          {
+            year: 2026,
+            capacity: 100,
+            school_admission_stat_sources: [
+              { fact_kind_code: 'capacity', official_url: 'https://example.ed.jp/s' },
+            ],
+          },
+        ],
+      },
+    ],
+  }
+  const record = toPublicSchoolRecord(row, [], builtAt)
+  assert.ok(record, '最大構成の行が公開対象にならない')
+  // 分岐がすべて発火していることを先に確かめる（発火しなければ検査の意味がない）
+  for (const key of ['departments', 'lifecycle', 'admission_recruitment_units']) {
+    assert.ok(key in record, `テスト行が ${key} を発火させていない`)
+  }
+
+  const dataMd = await readFile(DATA_MD_PATH, 'utf8')
+  for (const key of Object.keys(record)) {
+    assert.ok(
+      dataMd.includes(`| \`${key}\` |`),
+      `DATA.md に ${key} の説明が無い（gen-dataset-fields.mjs の OBJECT_DOCS / FIELD_DOCS に追記する）`,
+    )
+  }
+
+  // ネストしたキーも検出する。statistics の 1 項目が増えただけでも
+  // 説明の無いフィールドが公開されるため、トップレベルだけでは足りない。
+  const nestedKeys = new Set()
+  const walk = (value) => {
+    if (Array.isArray(value)) return value.forEach(walk)
+    if (!value || typeof value !== 'object') return
+    for (const [key, child] of Object.entries(value)) {
+      nestedKeys.add(key)
+      walk(child)
+    }
+  }
+  walk(record)
+  for (const key of nestedKeys) {
+    assert.ok(
+      dataMd.includes(`\`${key}\``),
+      `DATA.md に ${key} の説明が無い（ネストしたキー。gen-dataset-fields.mjs へ追記する）`,
+    )
+  }
+})
