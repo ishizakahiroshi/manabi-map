@@ -4,7 +4,7 @@ Manabi Map（まなびマップ）は、親子で学校選びを考えるため�
 
 ## 収録内容
 
-公開用データセットには、学校名、所在地、座標、設置区分、学校種、課程、学科、学校状態、公式サイト URL などを収録します。更新のたびにリポジトリの `web/public/` にある学校データから、公開用 JSON と CSV を生成します。
+公開用データセットには、学校名、所在地、座標、設置区分、学校種、共学別学、中高一貫かどうか、課程、校地種別、学科、学校状態、入試統計（募集人員・志願者・受検者・合格者）、公式サイト URL などを収録します。各項目の型と意味は下記「フィールド定義」を参照してください。更新のたびにリポジトリの `web/public/` にある学校データから、公開用 JSON と CSV を生成します。
 
 偏差値の編集推計は含めません。数値だけを切り出した序列化や二次利用を避け、方法と限界を文脈とともに扱うためです。
 
@@ -53,11 +53,14 @@ Manabi Map（まなびマップ）は、親子で学校選びを考えるため�
 | `official_url` | string | 必須 | 学校公式サイトの URL。**これが確認できない学校は公開 API に収録しない** |
 | `course_times` | string[] \| null | 任意 | 課程。値は下記「課程（course_times）」。複数持つ学校がある |
 | `campus_type` | string (enum) \| null | 任意 | 校地の種別。値は下記「校地種別（campus_type）」 |
+| `is_integrated` | boolean | 必須 | 中高一貫かどうか。`type`（高校 / 高専）とは別軸の属性。**true でも高校段階の外部募集を行う学校（併設型）はある**ので、募集の有無は `lifecycle.recruitment_status_code` で確認する |
 | `total_students` | number \| null | 出典があるときのみ | 全校生徒数。出典が登録された学校だけに出る |
 | `enrollment_year` | number \| null | 出典があるときのみ | `total_students` / `male_ratio` の基準年度 |
 | `male_ratio` | number \| null | 出典があるときのみ | 男子比率（0〜1）。出典が登録された学校だけに出る |
 | `provenance` | object | 必須 | 出典情報。読み方は下記「provenance の読み方」 |
-| `lifecycle` | object | 必須 | 学校の状態。読み方は下記「lifecycle の読み方」 |
+| `lifecycle` | object | `status_official_url` があるときのみ | 学校の状態。読み方は下記「lifecycle の読み方」 |
+| `departments` | object[] | 学科名の出典があるときのみ | 学科の一覧。読み方は下記「departments の読み方」 |
+| `admission_recruitment_units` | object[] | 出典つきの入試統計があるときのみ | 募集単位ごとの入試統計。読み方は下記「admission_recruitment_units の読み方」 |
 
 ### 列挙値
 
@@ -158,6 +161,49 @@ Manabi Map（まなびマップ）は、親子で学校選びを考えるため�
 | `closed_on` | 閉校日（不明なら null） |
 | `recruitment_ended_on` | 募集終了日（不明なら null） |
 | `status_official_url` | 状態の根拠にした一次資料の URL |
+
+#### `departments` の読み方
+
+学科名の出典（`school_departments.name`）が登録されている学校にだけ現れる配列。
+
+| キー | 説明 |
+|---|---|
+| `name` | 学科名（学校が公表している表記） |
+| `course_type` | 学科分類。**分類の出典（`school_departments.course_type`）が別途登録されている場合にだけ現れる** |
+
+#### `admission_recruitment_units` の読み方
+
+募集単位ごとの入試統計。**出典が確認できた統計が 1 件以上ある学校にだけ現れる**。
+品質フラグが立っている統計は除外する。
+
+| キー | 説明 |
+|---|---|
+| `unit_key` | 募集単位の安定キー |
+| `unit_kind_code` | 募集単位の種別 |
+| `label` | 募集単位の表示名 |
+| `course_time` | 対象の課程 |
+| `valid_from_year` / `valid_to_year` | この募集単位が有効な年度の範囲 |
+| `statistics` | 年度ごとの統計。下表 |
+
+`statistics` の各要素:
+
+| キー | 説明 |
+|---|---|
+| `year` | 年度 |
+| `selection_stage_code` / `selection_track_code` | 選抜の段階・区分 |
+| `stage_label_raw` / `track_label_raw` | 一次資料での表記そのまま |
+| `selection_scope_raw` / `population_scope_raw` / `scope_key` | 集計範囲 |
+| `map_role_code` | 地図・一覧で代表値として使う役割 |
+| `is_ratio_comparable` | 倍率として他年度と比較してよいか |
+| `capacity` / `applicants` / `examinees` / `admitted` | 募集人員 / 志願者 / 受検者 / 合格者。**その指標の出典があるものだけ現れる** |
+| `sources` | この統計の出典。`fact_kind_code` が対応する指標を示す |
+
+### 収録しない項目
+
+| 項目 | 理由 |
+|---|---|
+| 偏差値の編集推計 | 数値だけを切り出した序列化を避けるため。方法と限界の説明とあわせてアプリ上でのみ扱う |
+| 出典を確認できない項目 | 収録基準のとおり。値があっても公開側へは出さない |
 
 <!-- END GENERATED: dataset-fields -->
 

@@ -23,6 +23,9 @@ export const BASIC_FIELDS = [
   'official_url',
   'course_times',
   'campus_type',
+  // 中高一貫かどうかは学校選びの一次情報。type（高校 / 高専）とは別軸で、
+  // これが無いと併設型・中等教育学校を利用者側で見分けられない。
+  'is_integrated',
 ]
 
 export const SOURCED_SCHOOL_FIELDS = [
