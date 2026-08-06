@@ -4,7 +4,9 @@ const datasetClaims = JSON.parse(
   readFileSync(new URL('../../data/dataset-claims.json', import.meta.url), 'utf8'),
 )
 
-const BASIC_FIELDS = [
+// gen-dataset-fields.mjs が DATA.md のフィールド定義を作るために import する。
+// 値を複製させないため export する（複製すると公開 API と説明書がずれる）。
+export const BASIC_FIELDS = [
   'id',
   'record_key',
   'name',
@@ -23,13 +25,13 @@ const BASIC_FIELDS = [
   'campus_type',
 ]
 
-const SOURCED_SCHOOL_FIELDS = [
+export const SOURCED_SCHOOL_FIELDS = [
   ['total_students', 'schools.total_students'],
   ['enrollment_year', 'schools.enrollment_year'],
   ['male_ratio', 'schools.male_ratio'],
 ]
 
-const BASIC_FIELD_SOURCE_CODES = [
+export const BASIC_FIELD_SOURCE_CODES = [
   ['latitude', 'schools.latitude'],
   ['longitude', 'schools.longitude'],
   ['course_times', 'schools.course_times'],
