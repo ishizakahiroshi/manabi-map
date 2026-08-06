@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict'
-import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import test from 'node:test'
 import { gzipSync } from 'node:zlib'
 
@@ -15,10 +16,50 @@ import {
 } from './lib/public-api.mjs'
 
 const ORIGIN = 'https://manabi-map.app'
+const scriptsDir = dirname(fileURLToPath(import.meta.url))
+const SITE_FOOTER_LINKS = JSON.parse(
+  await readFile(join(scriptsDir, '..', 'data', 'site-footer-links.json'), 'utf8'),
+)
+
+function syntheticFooterHtml() {
+  return '<footer><nav aria-label="サイト情報">' +
+    SITE_FOOTER_LINKS.links
+      .map(({ path, ja }) => `<a href="${path}/">${ja}</a>`)
+      .join(' ') +
+    '</nav></footer>'
+}
+
+function assertAllConfiguredFooterLinks(html) {
+  const footer = html.match(/<footer\b[\s\S]*?<\/footer>/)?.[0]
+  assert.ok(footer, 'static page is missing a footer')
+  for (const { path } of SITE_FOOTER_LINKS.links) {
+    assert.ok(footer.includes(`href="${path}/"`), `footer is missing link: ${path}`)
+  }
+}
+
+function assertNoHardCodedFooterRoutes(source) {
+  assert.doesNotMatch(source, /['"`]\/(?:press|data|legal|guide)/)
+}
+
+function assertNoHardCodedDatasetText(source) {
+  for (const value of [DATASET_CLAIM, DATASET_ATTRIBUTION, DATASET_LICENSE_URL]) {
+    assert.equal(source.includes(value), false, `React source contains shared dataset text: ${value}`)
+  }
+}
+
+async function collectTypeScriptSources(root) {
+  const files = []
+  for (const entry of await readdir(root, { withFileTypes: true })) {
+    const path = join(root, entry.name)
+    if (entry.isDirectory()) files.push(...await collectTypeScriptSources(path))
+    else if (entry.isFile() && /\.(?:ts|tsx)$/.test(entry.name)) files.push(path)
+  }
+  return files
+}
 
 /** 検証対象の骨格（canonical / og:url / title / main）を持つ最小ページを合成する。
  * jsonLd は単体 object でも配列でもよい（配列は本番同様に script タグを分けて出す）。 */
-function page({ title, canonical, main, jsonLd, noindex = false }) {
+function page({ title, canonical, main, jsonLd, noindex = false, footer = '' }) {
   const canonicalTag = canonical ? `<link rel="canonical" href="${canonical}">` : ''
   const ogUrl = canonical ? `<meta property="og:url" content="${canonical}">` : ''
   const robots = noindex ? '<meta name="robots" content="noindex" />' : ''
@@ -26,7 +67,7 @@ function page({ title, canonical, main, jsonLd, noindex = false }) {
     .map((block) => `<script type="application/ld+json">${JSON.stringify(block)}</script>`)
     .join('')
   return `<!doctype html><html><head><title>${title}</title>${robots}${canonicalTag}${ogUrl}${jsonLdTag}</head>` +
-    `<body><div id="root"><main>${main}</main></div></body></html>`
+    `<body><div id="root"><main>${main}</main></div>${footer}</body></html>`
 }
 
 /** 学校ページの BreadcrumbList JSON-LD（本番: ホーム › 県 › 市区町村 › 校名）。 */
@@ -161,6 +202,7 @@ async function syntheticDist() {
       `<p>1 都道府県・${publicSchools.length} 校の学校基本情報を公開しています。</p>` +
       `<p>${DATASET_CLAIM}</p>` +
       '<a href="/api/v1/schools.json">API</a>',
+    footer: syntheticFooterHtml(),
     jsonLd: {
       '@context': 'https://schema.org',
       '@type': 'Dataset',
@@ -248,6 +290,31 @@ test('gzip magic, manifest, sitemap, all pages and size gate pass together', asy
   assert.equal(result.prefDataCount, 1)
   assert.equal(result.publicApiSchoolCount, 2)
   assert.equal(result.publicApiPrefCount, 1)
+})
+
+test('the prerendered data page contains every configured footer link', async (t) => {
+  const dir = await syntheticDist()
+  t.after(() => rm(dir, { recursive: true, force: true }))
+  const path = join(dir, 'data', 'index.html')
+  const html = await readFile(path, 'utf8')
+  assertAllConfiguredFooterLinks(html)
+
+  const missingPath = SITE_FOOTER_LINKS.links[0].path
+  const brokenHtml = html.replace(`href="${missingPath}/"`, 'href="/missing/"')
+  assert.throws(() => assertAllConfiguredFooterLinks(brokenHtml), /footer is missing link/)
+})
+
+test('SiteFooter has no hard-coded footer route literals', async () => {
+  const source = await readFile(join(scriptsDir, '..', 'src', 'components', 'SiteFooter.tsx'), 'utf8')
+  assertNoHardCodedFooterRoutes(source)
+  assert.throws(() => assertNoHardCodedFooterRoutes(`${source}\nconst path = '/press'`))
+})
+
+test('React sources do not hard-code dataset claim text', async () => {
+  const sourceFiles = await collectTypeScriptSources(join(scriptsDir, '..', 'src'))
+  const sourceText = (await Promise.all(sourceFiles.map((path) => readFile(path, 'utf8')))).join('\n')
+  assertNoHardCodedDatasetText(sourceText)
+  assert.throws(() => assertNoHardCodedDatasetText(`${sourceText}\nconst claim = '${DATASET_CLAIM}'`))
 })
 
 test('a file exactly at the limit is rejected because the contract is strictly under 25 MiB', async (t) => {
