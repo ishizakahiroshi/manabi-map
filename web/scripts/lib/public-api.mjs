@@ -1,3 +1,9 @@
+import { readFileSync } from 'node:fs'
+
+const datasetClaims = JSON.parse(
+  readFileSync(new URL('../../data/dataset-claims.json', import.meta.url), 'utf8'),
+)
+
 const BASIC_FIELDS = [
   'id',
   'record_key',
@@ -32,10 +38,9 @@ const BASIC_FIELD_SOURCE_CODES = [
 
 const ADMISSION_METRICS = ['capacity', 'applicants', 'examinees', 'admitted']
 
-export const DATASET_CLAIM = '一次資料 100%・出典明示 100%・商用サイトからの転載ゼロ'
-export const DATASET_LICENSE_URL = 'https://creativecommons.org/licenses/by-sa/4.0/'
-export const DATASET_ATTRIBUTION =
-  '出典: Manabi Map（まなびマップ） https://manabi-map.app （CC BY-SA 4.0）'
+export const DATASET_CLAIM = datasetClaims.claim
+export const DATASET_LICENSE_URL = datasetClaims.licenseUrl
+export const DATASET_ATTRIBUTION = datasetClaims.attribution
 
 /** 公開県数が正典の全県数と一致するときだけ「全国」を名乗る。 */
 export function formatDatasetCoverage(prefectureCount, schoolCount, nationwidePrefectureCount) {
