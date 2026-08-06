@@ -26,12 +26,20 @@ export const BASIC_FIELDS = [
   // 中高一貫かどうかは学校選びの一次情報。type（高校 / 高専）とは別軸で、
   // これが無いと併設型・中等教育学校を利用者側で見分けられない。
   'is_integrated',
+  // サテライト校地・連携校がどの本校に属するかは campus_type だけでは分からない。
+  'main_school_name',
+  // 法的設立日。lifecycle.opened_on（開校日）とは別概念。
+  'legally_established_on',
+  // レコードの最終更新時刻。provenance.last_built_at はビルド時刻なので、
+  // 学校ごとの鮮度はこちらでしか分からない。
+  'updated_at',
 ]
 
 export const SOURCED_SCHOOL_FIELDS = [
   ['total_students', 'schools.total_students'],
   ['enrollment_year', 'schools.enrollment_year'],
   ['male_ratio', 'schools.male_ratio'],
+  ['status_description', 'schools.status_description'],
 ]
 
 export const BASIC_FIELD_SOURCE_CODES = [
@@ -205,9 +213,47 @@ export function toPublicSchoolRecord(row, sourceCatalog, builtAt) {
       opened_on: row.opened_on ?? null,
       closed_on: row.closed_on ?? null,
       recruitment_ended_on: row.recruitment_ended_on ?? null,
+      recruitment_ended_year: row.recruitment_ended_year ?? null,
+      // status_note は公開しない。収集作業の作業記録として書かれた自由記述で、
+      // 工程の段階名（S1/S2/S3）や未確認の断り書きが同居しており、散文の中に
+      // Wikipedia 参照が 14 件混ざっている（構造化された出典ゲートを素通りする）。
+      // 公開用の説明は出典管理に乗せた status_description として別途用意する。
+      // docs/local/plan_status-description-and-source-hygiene.md
       status_official_url: row.status_official_url,
     }
   }
+
+  // 旧校名の履歴。改称前の名前で持っている外部データと突き合わせるために要る。
+  const nameHistory = (row.school_name_history ?? [])
+    .filter((entry) => entry?.name)
+    .map((entry) => ({
+      name: entry.name,
+      name_kana: entry.name_kana ?? null,
+      valid_from: entry.valid_from ?? null,
+      valid_to: entry.valid_to ?? null,
+      official_url: isHttpUrl(entry.official_url) ? entry.official_url : null,
+      notes: entry.notes ?? null,
+    }))
+  if (nameHistory.length > 0) record.name_history = nameHistory
+
+  // 前身校。アプリ側の行には前身校の入試実績まで入れ子で載っているが、
+  // そのまま出すとレコードが重複して肥大するので識別子と関係だけに絞る。
+  // 後継校側は record_key で逆引きできる。
+  const predecessors = (row.predecessor_relationships ?? [])
+    .filter((relation) => relation?.predecessor?.record_key)
+    .map((relation) => ({
+      relationship_type_code: relation.relationship_type_code ?? null,
+      effective_on: relation.effective_on ?? null,
+      official_url: isHttpUrl(relation.official_url) ? relation.official_url : null,
+      notes: relation.notes ?? null,
+      predecessor: {
+        record_key: relation.predecessor.record_key,
+        name: relation.predecessor.name ?? null,
+        closed_on: relation.predecessor.closed_on ?? null,
+        lifecycle_status_code: relation.predecessor.lifecycle_status_code ?? null,
+      },
+    }))
+  if (predecessors.length > 0) record.predecessors = predecessors
 
   const admissionUnits = publicAdmissionUnits(row, sourceCatalog)
   if (admissionUnits.length > 0) record.admission_recruitment_units = admissionUnits
