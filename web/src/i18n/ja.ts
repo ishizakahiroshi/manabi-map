@@ -117,9 +117,6 @@ export const ja: MessageTree = {
   },
   footer: {
     navLabel: 'サイト情報',
-    press: 'プレスキット',
-    privacy: 'プライバシーポリシー',
-    guide: '学校選びガイド',
   },
   schoolsHub: {
     title: '都道府県一覧',
