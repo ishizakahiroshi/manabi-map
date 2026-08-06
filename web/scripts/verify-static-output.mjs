@@ -14,6 +14,12 @@ import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { gunzipSync } from 'node:zlib'
 import { loadCivicData, resolveCityGroup } from './lib/municipalities.mjs'
+import {
+  DATASET_CLAIM,
+  DATASET_LICENSE_URL,
+  formatDatasetCoverage,
+  isPublicSchoolRecord,
+} from './lib/public-api.mjs'
 
 const DEFAULT_MAX_FILE_MIB = 25
 const SITE_ORIGIN = 'https://manabi-map.app'
@@ -85,6 +91,9 @@ const FORBIDDEN_WORDS = ['ランキング', 'TOP', '狙い目', 'おすすめ', 
 // ガイドは「通学時間」「偏差値」を説明する一次目的のページなので、その二語だけは対象外。
 // 序列化を助長する語は、本文にも引き続き出さない。
 const GUIDE_FORBIDDEN_WORDS = ['ランキング', 'TOP', '狙い目', 'おすすめ']
+// /data/ と llms.txt は「偏差値を API に含めない」という除外方針を説明するため、
+// 語そのものは許可する。序列化を促す語は引き続き禁止する。
+const DATASET_FORBIDDEN_WORDS = ['ランキング', 'TOP', '狙い目']
 // 「◯◯市から通える」型の断定は学区データを保有するまで禁止（/pref/ 配下と全域ハブ）。
 // トップ・学校ページの定型文「住所を入れると通える高校が…」はサービス説明なので対象外。
 const FORBIDDEN_COMMUTE_PHRASE = 'から通える'
@@ -121,6 +130,82 @@ function checkSafeHrefAttributes(html, pageLabel) {
       throw new Error(`unsafe href scheme on ${pageLabel}: ${href}`)
     }
   }
+}
+
+function urlHost(value, label) {
+  try {
+    const parsed = new URL(value)
+    if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') throw new Error('unsupported protocol')
+    return parsed.hostname.toLowerCase()
+  } catch {
+    throw new Error(`invalid source URL in ${label}: ${value}`)
+  }
+}
+
+const FORBIDDEN_SOURCE_HOSTS = [
+  /(^|\.)wikipedia\.org$/,
+  /(^|\.)minkou\.jp$/,
+  /(^|\.)shingakunet\.com$/,
+  /(^|\.)zyuken\.net$/,
+]
+
+// 私学協会・教育情報ポータル等は一次資料の発行主体でも、自治体向けの
+// ed/ac/lg/go.jp suffix を持たない。任意の .or.jp / .gr.jp を広く許可せず、
+// 収集時に確認した公式カタログの host だけを明示する。
+const TRUSTED_OFFICIAL_SOURCE_HOSTS = new Set([
+  'iwakisogo-hs.note.jp',
+  'k-shigaku.com',
+  'kagoshima-shigaku.com',
+  'kumamoto-pref-hs.jp',
+  'www.aichi-shigaku.gr.jp',
+  'www.f-sigaku.com',
+  'www.hyogo-shigaku.or.jp',
+  'www.kagawa-shigaku.jp',
+  'www.kyotoshigaku.gr.jp',
+  'www.miyazaki-shigaku.jp',
+  'www.nagasaki-shigaku.jp',
+  'www.oitachuko.info',
+  'www.osaka-shigaku.gr.jp',
+  'www.saga-ed.jp',
+  'www.shizuoka-shigaku.net',
+])
+
+function isInstitutionalHost(host) {
+  return (
+    /\.(?:ed|ac|lg|go)\.jp$/.test(host) ||
+    /(^|\.)pref\.[a-z0-9-]+\.jp$/.test(host) ||
+    /(^|\.)city(?:[.-])[a-z0-9-]+(?:\.[a-z0-9-]+)*\.jp$/.test(host) ||
+    TRUSTED_OFFICIAL_SOURCE_HOSTS.has(host)
+  )
+}
+
+function collectOfficialUrls(value, urls = []) {
+  if (Array.isArray(value)) {
+    for (const item of value) collectOfficialUrls(item, urls)
+  } else if (value && typeof value === 'object') {
+    for (const [key, item] of Object.entries(value)) {
+      if (key === 'official_url' || key === 'status_official_url') urls.push(item)
+      collectOfficialUrls(item, urls)
+    }
+  }
+  return urls
+}
+
+function findDeviationLeak(value, path = '$') {
+  if (Array.isArray(value)) {
+    for (let index = 0; index < value.length; index += 1) {
+      const leak = findDeviationLeak(value[index], `${path}[${index}]`)
+      if (leak) return leak
+    }
+    return null
+  }
+  if (!value || typeof value !== 'object') return null
+  for (const [key, item] of Object.entries(value)) {
+    if (/deviation/i.test(key)) return `${path}.${key}`
+    const leak = findDeviationLeak(item, `${path}.${key}`)
+    if (leak) return leak
+  }
+  return null
 }
 
 async function readPage(absoluteDist, relativePath, label) {
@@ -216,6 +301,7 @@ export async function verifyStaticOutput({
   const staticRoutes = [
     '/schools/',
     ...activePrefectures.map((p) => `/pref/${p.slug}/`),
+    '/data/',
     '/press/',
     ...LEGAL_DOCS.map((doc) => `/legal/${doc}/`),
     ...GUIDE_SLUGS.map((slug) => `/guide/${slug}/`),
@@ -311,6 +397,160 @@ export async function verifyStaticOutput({
     throw new Error(`pref split total mismatch: prefTotal=${prefRowTotal} schools=${schools.length}`)
   }
 
+  // NULL 自体は段階的な収集を妨げないが、公開 API の対象外になるため見逃さない。
+  const officialUrlGaps = schools.filter((school) => school.is_active !== false && !school.official_url)
+  if (officialUrlGaps.length > 0) {
+    const byPrefecture = Object.entries(Object.groupBy(officialUrlGaps, (school) => school.prefecture))
+      .map(([prefecture, rows]) => `${prefecture}:${rows.length}`)
+      .join('、')
+    console.warn(
+      `[official_url] static output に未登録の現行校が ${officialUrlGaps.length}/${schools.length} 校あります` +
+      `（${byPrefecture}）。公開 API からは除外されます。`,
+    )
+  }
+
+  // --- 出典追跡可能な公開 API（plan_public-api-readiness C3/C4） ---
+  const apiRoot = join(absoluteDist, 'api', 'v1')
+  const datasetMetadata = JSON.parse(await readFile(join(apiRoot, 'dataset.json'), 'utf8'))
+  const publicPayload = JSON.parse(await readFile(join(apiRoot, 'schools.json'), 'utf8'))
+  if (!Array.isArray(publicPayload?.schools) || publicPayload.count !== publicPayload.schools.length) {
+    throw new Error('/api/v1/schools.json count is invalid')
+  }
+  if (
+    datasetMetadata.school_count !== publicPayload.schools.length ||
+    datasetMetadata.provenance_policy !== DATASET_CLAIM ||
+    datasetMetadata.license_url !== DATASET_LICENSE_URL
+  ) {
+    throw new Error('/api/v1/dataset.json metadata does not match the public payload contract')
+  }
+
+  const publicIds = new Set()
+  const registeredOfficialHosts = new Set()
+  for (const record of publicPayload.schools) {
+    if (!record?.id || publicIds.has(record.id)) throw new Error(`duplicate or missing public school id: ${record?.id}`)
+    publicIds.add(record.id)
+    if (!record.official_url || record.provenance?.official_url !== record.official_url) {
+      throw new Error(`public API record is missing official_url or provenance: ${record.id}`)
+    }
+    registeredOfficialHosts.add(urlHost(record.official_url, `school:${record.id}`))
+    if (record.provenance?.last_built_at !== publicPayload.generated_at) {
+      throw new Error(`public API record has inconsistent build provenance: ${record.id}`)
+    }
+    for (const unit of record.admission_recruitment_units ?? []) {
+      for (const stat of unit.statistics ?? []) {
+        if (!Array.isArray(stat.sources) || stat.sources.length === 0) {
+          throw new Error(`public admission statistic is missing sources: ${record.id}`)
+        }
+        for (const metric of ['capacity', 'applicants', 'examinees', 'admitted']) {
+          if (
+            stat[metric] != null &&
+            !stat.sources.some((source) => source?.fact_kind_code === metric && source?.official_url)
+          ) {
+            throw new Error(`public admission metric is missing its source: ${record.id}/${metric}`)
+          }
+        }
+      }
+    }
+  }
+
+  // 生成側と同じ唯一のゲートを再利用し、対象校の欠落・余分な混入の両方を防ぐ。
+  // public payload だけの自己整合では、全件 JSON と県別 JSON から同じ学校を
+  // 丸ごと落とした場合に検知できないため、アプリ用の元 payload と突き合わせる。
+  const expectedPublicIds = new Set(schools.filter(isPublicSchoolRecord).map((school) => school.id))
+  if (
+    expectedPublicIds.size !== publicIds.size ||
+    [...expectedPublicIds].some((id) => !publicIds.has(id)) ||
+    [...publicIds].some((id) => !expectedPublicIds.has(id))
+  ) {
+    throw new Error(
+      `public API inclusion gate mismatch: expected=${expectedPublicIds.size} actual=${publicIds.size}`,
+    )
+  }
+
+  const apiJsonFiles = files.filter(
+    (file) => file.relativePath.startsWith('api/v1/') && file.relativePath.endsWith('.json'),
+  )
+  const expectedPrefApiSlugs = new Set(
+    prefectures
+      .filter((prefecture) =>
+        schools.some(
+          (school) => school.is_active !== false && school.prefecture === prefecture.name,
+        ),
+      )
+      .map((prefecture) => prefecture.slug),
+  )
+  const actualPrefApiSlugs = new Set(
+    apiJsonFiles
+      .map((file) => file.relativePath.match(/^api\/v1\/schools\/([^/]+)\.json$/)?.[1])
+      .filter(Boolean),
+  )
+  const missingPrefApiSlugs = [...expectedPrefApiSlugs].filter(
+    (slug) => !actualPrefApiSlugs.has(slug),
+  )
+  if (missingPrefApiSlugs.length > 0) {
+    throw new Error(
+      `public prefecture API is missing source prefectures: ${missingPrefApiSlugs.join(', ')}`,
+    )
+  }
+  if (apiJsonFiles.length < 3) throw new Error('/api/v1/ static JSON files are missing')
+  for (const file of apiJsonFiles) {
+    const value = JSON.parse(await readFile(file.path, 'utf8'))
+    const leakPath = findDeviationLeak(value)
+    if (leakPath) throw new Error(`deviation data found in ${file.relativePath} at ${leakPath}`)
+    for (const sourceUrl of collectOfficialUrls(value)) {
+      const host = urlHost(sourceUrl, file.relativePath)
+      if (FORBIDDEN_SOURCE_HOSTS.some((pattern) => pattern.test(host))) {
+        throw new Error(`forbidden source domain in ${file.relativePath}: ${host}`)
+      }
+      if (!isInstitutionalHost(host) && !registeredOfficialHosts.has(host)) {
+        throw new Error(`unregistered source domain in ${file.relativePath}: ${host}`)
+      }
+    }
+  }
+
+  const prefApiFiles = apiJsonFiles.filter((file) => /^api\/v1\/schools\/[^/]+\.json$/.test(file.relativePath))
+  let publicPrefTotal = 0
+  const publicPrefIds = new Set()
+  const actualPrefCounts = {}
+  for (const file of prefApiFiles) {
+    const value = JSON.parse(await readFile(file.path, 'utf8'))
+    if (!Array.isArray(value?.schools) || value.count !== value.schools.length) {
+      throw new Error(`public prefecture API count is invalid: ${file.relativePath}`)
+    }
+    if (value.api_version !== publicPayload.api_version || value.generated_at !== publicPayload.generated_at) {
+      throw new Error(`public prefecture API version or generated_at mismatch: ${file.relativePath}`)
+    }
+    const slug = file.relativePath.match(/^api\/v1\/schools\/([^/]+)\.json$/)?.[1]
+    actualPrefCounts[slug] = value.count
+    if (value.schools.some((record) => record.prefecture !== value.prefecture)) {
+      throw new Error(`public prefecture API contains another prefecture: ${file.relativePath}`)
+    }
+    publicPrefTotal += value.schools.length
+    for (const record of value.schools) {
+      if (publicPrefIds.has(record.id)) throw new Error(`duplicate school across prefecture APIs: ${record.id}`)
+      publicPrefIds.add(record.id)
+    }
+  }
+  if (
+    publicPrefTotal !== publicPayload.schools.length ||
+    publicPrefIds.size !== publicIds.size ||
+    [...publicIds].some((id) => !publicPrefIds.has(id))
+  ) {
+    throw new Error(`public prefecture API total mismatch: pref=${publicPrefTotal} all=${publicPayload.schools.length}`)
+  }
+  if (
+    datasetMetadata.api_version !== publicPayload.api_version ||
+    datasetMetadata.generated_at !== publicPayload.generated_at ||
+    datasetMetadata.prefecture_count !== prefApiFiles.length ||
+    !datasetMetadata.prefectures ||
+    Object.keys(datasetMetadata.prefectures).length !== Object.keys(actualPrefCounts).length ||
+    Object.entries(actualPrefCounts).some(
+      ([slug, count]) => datasetMetadata.prefectures[slug] !== count,
+    )
+  ) {
+    throw new Error('/api/v1/dataset.json prefecture metadata does not match the public API files')
+  }
+
   // --- 学校ページ全件検査 ---
   let neighborLinkTotal = 0
   for (const target of targets) {
@@ -327,8 +567,12 @@ export async function verifyStaticOutput({
       throw new Error(`missing <h1> school heading on ${pageLabel}`)
     }
     const jsonLdBlocks = extractJsonLdBlocks(html)
-    if (!jsonLdBlocks.some((block) => block?.name === target.name)) {
+    const schoolJsonLd = jsonLdBlocks.find((block) => block?.name === target.name)
+    if (!schoolJsonLd) {
       throw new Error(`JSON-LD with school name is missing or unparsable on ${pageLabel}`)
+    }
+    if (schoolJsonLd.license !== DATASET_LICENSE_URL || typeof schoolJsonLd.creditText !== 'string') {
+      throw new Error(`school JSON-LD is missing license or creditText on ${pageLabel}`)
     }
     // BreadcrumbList（UUID URL の検索結果表示の救済・c7 C4）: ホーム › 県 ›（市区町村）› 校名。
     const breadcrumb = jsonLdBlocks.find((block) => block?.['@type'] === 'BreadcrumbList')
@@ -432,11 +676,42 @@ export async function verifyStaticOutput({
     }
   }
 
-  // --- /press と /legal/* ---
+  // --- /data/・/press・/legal/* ---
+  {
+    const html = await readPage(absoluteDist, join('data', 'index.html'), '/data/')
+    const main = checkPageSkeleton(html, '/data/', `${SITE_ORIGIN}/data/`)
+    if (!/<h1[\s>]/.test(main)) throw new Error('missing <h1> on /data/')
+    checkSafeHrefAttributes(main, '/data/')
+    checkForbiddenWords(main, '/data/', { includeCommutePhrase: false, words: DATASET_FORBIDDEN_WORDS })
+    if (!main.includes(DATASET_CLAIM)) throw new Error('/data/ is missing the approved dataset claim')
+    const expectedCoverage = formatDatasetCoverage(
+      datasetMetadata.prefecture_count,
+      datasetMetadata.school_count,
+      prefectures.length,
+    )
+    if (datasetMetadata.prefecture_count !== prefectures.length && main.includes('全国')) {
+      throw new Error('/data/ must not claim nationwide coverage for a partial-prefecture dataset')
+    }
+    if (!main.includes(expectedCoverage)) {
+      throw new Error(`/data/ is missing dataset coverage: ${expectedCoverage}`)
+    }
+    const datasetLd = extractJsonLdBlocks(html).find((block) => block?.['@type'] === 'Dataset')
+    if (
+      !datasetLd ||
+      datasetLd.license !== DATASET_LICENSE_URL ||
+      !Array.isArray(datasetLd.distribution) ||
+      !datasetLd.distribution.some(
+        (item) => item?.['@type'] === 'DataDownload' && item.contentUrl === `${SITE_ORIGIN}/api/v1/schools.json`,
+      )
+    ) {
+      throw new Error('/data/ is missing required Dataset JSON-LD')
+    }
+  }
   {
     const html = await readPage(absoluteDist, join('press', 'index.html'), '/press/')
     const main = checkPageSkeleton(html, '/press/', `${SITE_ORIGIN}/press/`)
     if (!/<h1[\s>]/.test(main)) throw new Error('missing <h1> on /press/')
+    if (!main.includes(DATASET_CLAIM)) throw new Error('/press/ is missing the approved dataset claim')
     const jsonLdBlocks = extractJsonLdBlocks(html)
     if (!jsonLdBlocks.some((block) => block?.['@type'] === 'Organization')) {
       throw new Error('/press/ is missing Organization JSON-LD')
@@ -460,7 +735,14 @@ export async function verifyStaticOutput({
   if (!llms.includes('CC BY-SA') || !llms.includes('manabi-map.app')) {
     throw new Error('llms.txt is missing required license or official URL')
   }
-  for (const word of FORBIDDEN_WORDS) {
+  if (
+    !llms.includes(DATASET_CLAIM) ||
+    !llms.includes(`${SITE_ORIGIN}/data/`) ||
+    !llms.includes(`${SITE_ORIGIN}/api/v1/schools.json`)
+  ) {
+    throw new Error('llms.txt is missing dataset claim or public API URLs')
+  }
+  for (const word of DATASET_FORBIDDEN_WORDS) {
     if (llms.includes(word)) throw new Error(`forbidden word "${word}" found in llms.txt`)
   }
 
@@ -490,6 +772,8 @@ export async function verifyStaticOutput({
     neighborLinkTotal,
     schoolDataCount: perSchoolFiles.length,
     prefDataCount: activePrefectures.length,
+    publicApiSchoolCount: publicPayload.schools.length,
+    publicApiPrefCount: prefApiFiles.length,
   }
 }
 
@@ -512,9 +796,10 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1
   console.log(
     `static output verified: files=${result.fileCount} schools=${result.schoolCount} ` +
     `seo=${result.seoSchoolCount} prefHubs=${result.prefPageCount} static=${result.staticRouteCount} ` +
-    `sitemap=${result.sitemapUrlCount} neighborLinks=${result.neighborLinkTotal} ` +
-    `schoolData=${result.schoolDataCount} prefData=${result.prefDataCount} ` +
-    `largest=${result.largestFile} (${result.largestFileBytes} bytes) ` +
+      `sitemap=${result.sitemapUrlCount} neighborLinks=${result.neighborLinkTotal} ` +
+      `schoolData=${result.schoolDataCount} prefData=${result.prefDataCount} ` +
+      `publicApi=${result.publicApiSchoolCount}/${result.publicApiPrefCount} ` +
+      `largest=${result.largestFile} (${result.largestFileBytes} bytes) ` +
     `gzip=${result.schoolsPayloadGzip}`,
   )
 }

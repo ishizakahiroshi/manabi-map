@@ -5,6 +5,12 @@ import { fileURLToPath } from 'node:url'
 import { gzipSync } from 'node:zlib'
 import { createClient } from '@supabase/supabase-js'
 import { loadCivicData, resolveCityGroup } from './lib/municipalities.mjs'
+import {
+  buildPublicSchoolRecords,
+  DATASET_ATTRIBUTION,
+  DATASET_CLAIM,
+  DATASET_LICENSE_URL,
+} from './lib/public-api.mjs'
 // 近隣校の選定と後継校の逆引きは React 側・gen-seo-pages.mjs と同一実装を共有する
 // （tsx 経由で .ts を直 import（package.json の scripts が tsx で起動する。Node の type stripping には依存しない — Cloudflare Pages のビルドイメージは pnpm 同梱の preinstall Node しか使えないため）。フォーク禁止 —
 // 学校単体 JSON と静的 HTML・JS mount 後で校名・距離が食い違う事故を防ぐ。
@@ -86,7 +92,7 @@ async function runWithRetry(label, run, attempts = 4) {
 }
 
 const select =
-  '*, school_departments(id, school_id, name, course_type, ui_group), school_deviation_values(department_id, value, is_active), school_admission_stats(id, department_id, year, capacity, applicants, examinees, admitted, note, source_url), predecessor_relationships:school_relationships!school_relationships_successor_school_id_fkey(id, relationship_type_code, effective_on, official_url, notes, predecessor:schools!school_relationships_predecessor_school_id_fkey(id, record_key, name, lifecycle_status_code, closed_on)), school_name_history(id, name, name_kana, valid_from, valid_to, official_url, notes)'
+  '*, school_departments(id, school_id, name, course_type, ui_group), school_field_sources(field_name, official_url, doc_title, published_at, source_page_or_table, last_verified_at, last_http_status, is_official_source), school_deviation_values(department_id, value, is_active), school_admission_stats(id, department_id, year, capacity, applicants, examinees, admitted, note, source_url), predecessor_relationships:school_relationships!school_relationships_successor_school_id_fkey(id, relationship_type_code, effective_on, official_url, notes, predecessor:schools!school_relationships_predecessor_school_id_fkey(id, record_key, name, lifecycle_status_code, closed_on)), school_name_history(id, name, name_kana, valid_from, valid_to, official_url, notes)'
 // このページサイズは school_departments(school_id) の索引に依存する（migration 202607310101）。
 // 索引が無いと embed が親 1 行ごとに全件走査になり、全国 47 都道府県（学科 7,798 行）では
 // 250 件/ページでも 3.1 秒かかって Supabase の statement timeout（3 秒）に達する。
@@ -191,6 +197,19 @@ for (const row of rows) {
   }
 }
 
+// official_url は公開 API の学校採用ゲートでもある。NULL を許容して生成は続けるが、
+// 県追加時の取りこぼしがビルドログで必ず見えるように全件数と県別件数を警告する。
+const officialUrlGaps = rows.filter((row) => row.is_active !== false && !row.official_url)
+if (officialUrlGaps.length > 0) {
+  const byPrefecture = Object.entries(Object.groupBy(officialUrlGaps, (row) => row.prefecture))
+    .map(([prefecture, schools]) => `${prefecture}:${schools.length}`)
+    .join('、')
+  console.warn(
+    `[official_url] 現行校 ${officialUrlGaps.length}/${rows.length} 校が未登録です（${byPrefecture}）。` +
+    '公開 API から除外されるため、県教委・私学協会の公式一覧から補完してください。',
+  )
+}
+
 // --- build hash 付き URL 化 -------------------------------------------------
 // 内容から sha256 の先頭 10 桁を hash とし、`schools-<hash>.json` を出力する。
 // あわせて `schools-manifest.json` を「常に fresh に取る」ポインタとして書き、
@@ -199,6 +218,7 @@ for (const row of rows) {
 // 詳細: docs/local/plan_schools-json-cache-strategy.md
 const publicDir = join(webRoot, 'public')
 await mkdir(publicDir, { recursive: true })
+const generatedAt = new Date().toISOString()
 
 const payload = { formatVersion: 2, sourceCatalog, schools: rows }
 const body = `${JSON.stringify(payload)}\n`
@@ -213,6 +233,74 @@ const outputPath = join(publicDir, filename)
 // - 校名索引: 全収録校の校名・ふりがな・所在地・座標のみ（検索欄フォーカス時に遅延読込）。
 const { prefectures, muniByPref } = await loadCivicData(webRoot)
 const prefBySlugName = new Map(prefectures.map((p) => [p.name, p]))
+
+// --- 出典追跡可能な公開 API（plan_public-api-readiness C4） ------------------
+// アプリ用 payload は変更せず、明示的な許可リストを通した派生物だけを固定 URL で配る。
+// public/ に生成してから Vite が dist/ へコピーするため、動的 API や Pages Functions は不要。
+const publicApiRecords = buildPublicSchoolRecords(rows, sourceCatalog, generatedAt)
+const publicApiPrefectures = new Set(publicApiRecords.map((row) => row.prefecture))
+const missingPublicApiPrefectures = prefectures
+  .filter((pref) => rows.some((row) => row.prefecture === pref.name) && !publicApiPrefectures.has(pref.name))
+  .map((pref) => pref.name)
+if (missingPublicApiPrefectures.length > 0) {
+  throw new Error(
+    '公開 API の official_url ゲートで都道府県が全欠落しました。' +
+    `公開仕様を確定するまで生成を停止します: ${missingPublicApiPrefectures.join('、')}`,
+  )
+}
+const publicApiRoot = join(publicDir, 'api', 'v1')
+const publicApiSchoolsDir = join(publicApiRoot, 'schools')
+await rm(publicApiRoot, { recursive: true, force: true })
+await mkdir(publicApiSchoolsDir, { recursive: true })
+
+const publicApiPayload = {
+  api_version: 'v1',
+  generated_at: generatedAt,
+  count: publicApiRecords.length,
+  schools: publicApiRecords,
+}
+await writeFile(join(publicApiRoot, 'schools.json'), `${JSON.stringify(publicApiPayload)}\n`)
+
+const prefApiCounts = {}
+for (const pref of prefectures) {
+  const prefRecords = publicApiRecords.filter((row) => row.prefecture === pref.name)
+  if (prefRecords.length === 0) continue
+  prefApiCounts[pref.slug] = prefRecords.length
+  await writeFile(
+    join(publicApiSchoolsDir, `${pref.slug}.json`),
+    `${JSON.stringify({
+      api_version: 'v1',
+      generated_at: generatedAt,
+      prefecture: pref.name,
+      count: prefRecords.length,
+      schools: prefRecords,
+    })}\n`,
+  )
+}
+
+const packageJson = JSON.parse(await readFile(join(webRoot, 'package.json'), 'utf8'))
+await writeFile(
+  join(publicApiRoot, 'dataset.json'),
+  `${JSON.stringify({
+    name: 'Manabi Map 学校基本情報データセット',
+    version: packageJson.version,
+    api_version: 'v1',
+    generated_at: generatedAt,
+    school_count: publicApiRecords.length,
+    prefecture_count: Object.keys(prefApiCounts).length,
+    prefectures: prefApiCounts,
+    license: 'CC BY-SA 4.0',
+    license_url: DATASET_LICENSE_URL,
+    attribution: DATASET_ATTRIBUTION,
+    provenance_policy: DATASET_CLAIM,
+    inclusion_policy: '学校公式 URL を持つ現行校と、追跡可能な公式出典を伴う項目のみを収録します。',
+    exclusion_policy: '偏差値の編集推計と、出典 URL を確認できない項目は収録しません。',
+    distributions: [
+      { content_url: 'https://manabi-map.app/api/v1/schools.json', encoding_format: 'application/json' },
+      { content_url_template: 'https://manabi-map.app/api/v1/schools/{prefecture}.json', encoding_format: 'application/json' },
+    ],
+  }, null, 2)}\n`,
+)
 
 const cityGroups = new Map()
 const unresolvedByPref = new Map()
@@ -387,14 +475,15 @@ const manifest = {
   schoolDataVersion: hash,
   schoolDataCount: detailRows.length,
   prefDataUrls,
-  generatedAt: new Date().toISOString(),
+  generatedAt,
 }
 await writeFile(join(publicDir, 'schools-manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`)
 
 console.log(
   `wrote ${rows.length} schools to ${outputPath} (manifest url=${manifest.url}, ` +
   `cityIndex=${cityIndex.length}, nameIndex=${nameIndex.length}, ` +
-  `schoolData=${detailRows.length}, prefData=${Object.keys(prefDataUrls).length})`,
+  `schoolData=${detailRows.length}, prefData=${Object.keys(prefDataUrls).length}, ` +
+  `publicApi=${publicApiRecords.length})`,
 )
 
 // 市区町村を解決できず県ページの「その他」へ落ちる校数。新県データ投入後にここが
