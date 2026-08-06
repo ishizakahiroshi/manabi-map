@@ -88,6 +88,26 @@ Supabase / LINE の接続情報はリポジトリ外に保管する。既定で�
 
 ビルド・コミット禁止、secrets-scan 責務、plan/bugfix/pending md の作成ルール等の AI 作業共通ルールは、各利用者のグローバル AI 設定に従う（作者環境の例: `~/.claude/CLAUDE.md` および `~/.claude/guides/`）。
 
+### 外部サービスの設定は推測で答えない（必ず台帳を Read する）
+
+Cloudflare / Supabase / Google Search Console / GitHub Secrets の設定は、**リポジトリを grep しても分からない**（設定の実体が外部サービス側にあるため）。台帳は `docs/local/reference_external-services.md`（gitignored・作者環境のみ）。
+
+**次のいずれかに該当したら、答える前・手を動かす前に必ず Read する:**
+
+- 「〜は設定されているか」「〜は有効か」「〜入れてなかったっけ」に類する問い
+- 外部サービスの設定を変更する作業
+- 「コードに無いから未導入」と結論づけそうになったとき
+
+**推測で答えると誤診する。**2026-08-06 に Cloudflare Web Analytics を「未導入」と誤診した実例がある（Automatic setup は edge でブラウザ UA にだけ beacon を注入するため、`curl` の既定 UA では検出できない）。**bot 判定を伴う機能を curl で検証すると偽陰性が出る。**
+
+台帳を持たない環境（他人の clone・別 AI CLI）では、**推測で断定せずユーザーに確認する**こと。
+
+外部サービスの設定を変更したら、**同じターンで台帳を更新する**。誤診したら台帳の「AI が誤診した実例」節に、なぜ間違えたかとどう検証すべきだったかを追記する。
+
+### plan の進捗は親の表だけで判断しない
+
+親子構成の plan では、**親の `## context配分` の 1 行が子 plan 全体（内部 C1〜Cn）を指す**。親が `plan` でも子の大半が完了していることがある。**必ず子 plan の表と実行記録まで開く。**2026-08-06 に `plan_seo-growth-strategy.md` の C5 を未着手と誤診した実例がある（実際は内部 C1〜C5 が実装済み・本番反映済みで、残りは C6 のみ）。
+
 ### メンテナンスモードの AI トリガー
 
 - ユーザーが「メンテにして」「メンテモード ON」「メンテ入れて」等と言ったら、`node scripts/maintenance.mjs on` を実行する。
@@ -102,7 +122,7 @@ Supabase / LINE の接続情報はリポジトリ外に保管する。既定で�
 
 配置は 2 系統に分かれる:
 
-- **本リポ専用の 2 本**（`manabi-map-deploy` / `manabi-map-add-prefecture`）は **リポ内 `.claude/skills/` にある**（2026-07-23 に作者環境の横断棚から移設）。`.gitignore` が `.claude/` を丸ごと除外しているため **clone には含まれない**（作者環境固有の絶対パスを公開しないため）
+- **本リポ専用の 4 本**（`manabi-map-deploy` / `manabi-map-add-prefecture` / `manabi-map-info-wanted-field` / `manabi-map-field-backfill`）は **リポ内 `.claude/skills/` にある**（2026-07-23 に作者環境の横断棚から移設・以降ここへ新設）。`.gitignore` が `.claude/` を丸ごと除外しているため **clone には含まれない**（作者環境固有の絶対パスを公開しないため）
 - **横断 skill**（`supabase-migrate` / `taxonomy-refactor` / `changelog-freshness` など）は作者環境の `~/.claude/skills/` 配下
 
 | 用途 | skill | 起動語 |
@@ -110,6 +130,7 @@ Supabase / LINE の接続情報はリポジトリ外に保管する。既定で�
 | バージョンリリース全体（backup → migration → データ投入 → 検証 → プレビュー → main マージ → タグ） | `manabi-map-deploy` | 「manabi-map リリース」「v0.x.y 出して」「関東の次のリリース」 |
 | 新県データ投入（schools SQL + deviation SQL + 校パターン再分類 + course_type_master 確認） | `manabi-map-add-prefecture` | 「◯◯県 追加」「manabi-map に◯◯県入れて」「新県 データ投入」 |
 | nullable な学校情報を「情報提供募集中」型で追加（テンプレ・i18n・CSS・実装メモ生成） | `manabi-map-info-wanted-field` | 「情報提供募集中 field 追加」「空欄可能フィールド」「manabi-map-info-wanted-field」 |
+| 欠損項目の一括補完（公式カタログから抽出 → 出典つき SQL 生成 → gap を理由つきで記録） | `manabi-map-field-backfill` | 「欠損項目 補完」「学科 埋めて」「ふりがな 補完」「一括補完」 |
 | Supabase 本番へ migration 適用（Docker 不要・psql 直叩き・backup + schema_migrations 記録） | `supabase-migrate` | 「Supabase migration 適用」「本番 DB に SQL 流して」「pg_dump backup 取って」 |
 | フリーテキスト分類列 → master + FK + trigger 化（表記ゆれ・分類漏れ対策） | `taxonomy-refactor` | 「分類を master 化」「course_type refactor」「表記ゆれ対策」 |
 
@@ -162,4 +183,7 @@ pnpm dlx supabase db push
 | Codex/他 AI 用入口 | `AGENTS.md` |
 | フロントエンド開発ガイド | `web/README.md` |
 | 進行中の plan | `docs/local/plan_*.md` |
+| **外部サービス設定の台帳（Cloudflare / Supabase / Google / GitHub）** | `docs/local/reference_external-services.md` — 上記「外部サービスの設定は推測で答えない」の参照先 |
+| 設定済み項目・調査結果などの参照資料 | `docs/local/reference_*.md`（SEO / Search Console・Supabase provider・データ収集 playbook 等） |
+| 手順書（バックアップ・復元・メンテナンスモード・リリース） | `docs/local/manual_*.md` |
 | 過去バージョンの企画・設計・実装記録（アーカイブ・非公開） | `docs/local/archive/<version>/`（v0.1.1 に MVP 詳細企画書 / OSS 憲章 / データ取得戦略 / モック / phase-1 実装 plan / recap 等） |

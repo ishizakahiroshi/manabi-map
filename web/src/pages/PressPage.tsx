@@ -176,6 +176,11 @@ export function PressPage() {
           <b>中学生と保護者が納得して進路を選ぶための管理ツール</b>を目指した個人 OSS プロジェクトです。
           広告は進路・教育関連のみ、無差別アドネットワークは使用しません。
         </p>
+        <p>
+          収録データは<b>一次資料 100%・出典明示 100%・商用サイトからの転載ゼロ</b>を公開方針としています。
+          <a href="/data" onClick={(event) => { event.preventDefault(); navigate('/data') }}>公開データセットと API</a>で、
+          収録基準・出典・安定エンドポイントを確認できます。
+        </p>
 
         <h2>学校・保護者向け 配布素材</h2>
         <p style={{ color: 'var(--ink-soft)', fontSize: '0.9em' }}>
