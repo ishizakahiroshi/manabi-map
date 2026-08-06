@@ -615,6 +615,33 @@ test('a Wikipedia field source in the public API is rejected', async (t) => {
   )
 })
 
+test('a forbidden source name in a public API string value is rejected with its JSON path', async (t) => {
+  const dir = await syntheticDist()
+  t.after(() => rm(dir, { recursive: true, force: true }))
+  const path = join(dir, 'api', 'v1', 'schools.json')
+  const payload = JSON.parse(await readFile(path, 'utf8'))
+  payload.schools[0].status_description = '合成資料の説明（Wikipedia の記載は採用しない）'
+  await writeFile(path, JSON.stringify(payload))
+  await assert.rejects(
+    verifyStaticOutput({ distDir: dir, maxFileBytes: 1024 * 1024 }),
+    /forbidden source mention "Wikipedia" in api\/v1\/schools\.json at \$\.schools\[0\]\.status_description/,
+  )
+})
+
+test('ordinary public API string values do not trigger the forbidden source mention check', async (t) => {
+  const dir = await syntheticDist()
+  t.after(() => rm(dir, { recursive: true, force: true }))
+  for (const path of [
+    join(dir, 'api', 'v1', 'schools.json'),
+    join(dir, 'api', 'v1', 'schools', 'gunma.json'),
+  ]) {
+    const payload = JSON.parse(await readFile(path, 'utf8'))
+    payload.schools[0].status_description = '統合に伴う学校状態の説明（合成資料で確認）'
+    await writeFile(path, JSON.stringify(payload))
+  }
+  await verifyStaticOutput({ distDir: dir, maxFileBytes: 1024 * 1024 })
+})
+
 test('a reviewed private-school association source host is accepted', async (t) => {
   const dir = await syntheticDist()
   t.after(() => rm(dir, { recursive: true, force: true }))
@@ -746,6 +773,38 @@ test('the public API allowlist omits deviation data and unsourced optional field
   assert.equal(result.provenance.last_built_at, builtAt)
 })
 
+test('status_description is public only when its official field source is registered', () => {
+  const baseRow = {
+    id: 'synthetic-status-description',
+    name: '合成状態説明高等学校',
+    prefecture: '群馬県',
+    official_url: 'https://synthetic-status-description.ed.jp/',
+    is_active: true,
+    status_description: '合成資料で確認した学校状態の説明',
+  }
+  const official = toPublicSchoolRecord({
+    ...baseRow,
+    school_field_sources: [{
+      field_name: 'schools.status_description',
+      official_url: 'https://synthetic-status-description.ed.jp/status.pdf',
+      doc_title: '合成状態資料',
+      is_official_source: true,
+    }],
+  }, [], '2026-08-07T00:00:00.000Z')
+  assert.equal(official.status_description, baseRow.status_description)
+
+  const nonOfficial = toPublicSchoolRecord({
+    ...baseRow,
+    school_field_sources: [{
+      field_name: 'schools.status_description',
+      official_url: 'https://example.invalid/third-party',
+      doc_title: '合成三次資料',
+      is_official_source: false,
+    }],
+  }, [], '2026-08-07T00:00:00.000Z')
+  assert.equal('status_description' in nonOfficial, false)
+})
+
 // --- DATA.md のフィールド定義（plan_dataset-field-reference C3）--------------
 // master / 型に値が増えたのに DATA.md が古い、を機械で落とす。
 // 生成は repo 内だけで完結する（DB 接続不要）ので CI でもそのまま動く。
@@ -812,6 +871,23 @@ test('公開レコードが出す全キーが DATA.md で説明されている',
       source('school_departments.course_type'),
     ],
     school_departments: [{ name: '普通科', course_type: 'general' }],
+    main_school_name: '本校',
+    legally_established_on: '2024-11-01',
+    updated_at: '2026-08-07T00:00:00.000Z',
+    recruitment_ended_year: 2026,
+
+    school_name_history: [
+      { name: '旧・例高等学校', name_kana: 'きゅうれい', valid_from: '1950-04-01', valid_to: '2024-03-31', official_url: 'https://example.ed.jp/h', notes: 'x' },
+    ],
+    predecessor_relationships: [
+      {
+        relationship_type_code: 'merged_into',
+        effective_on: '2024-04-01',
+        official_url: 'https://example.ed.jp/r',
+        notes: 'y',
+        predecessor: { record_key: 'school-old', name: '旧・例高等学校', closed_on: '2024-03-31', lifecycle_status_code: 'closed' },
+      },
+    ],
     admission_recruitment_units: [
       {
         unit_key: 'u1',
@@ -832,7 +908,7 @@ test('公開レコードが出す全キーが DATA.md で説明されている',
   const record = toPublicSchoolRecord(row, [], builtAt)
   assert.ok(record, '最大構成の行が公開対象にならない')
   // 分岐がすべて発火していることを先に確かめる（発火しなければ検査の意味がない）
-  for (const key of ['departments', 'lifecycle', 'admission_recruitment_units']) {
+  for (const key of ['departments', 'lifecycle', 'admission_recruitment_units', 'name_history', 'predecessors']) {
     assert.ok(key in record, `テスト行が ${key} を発火させていない`)
   }
 
