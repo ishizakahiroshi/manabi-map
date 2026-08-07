@@ -246,6 +246,12 @@ export function SchoolDetailSheet({ school, onClose, userData, extras, standalon
     school.opened_on != null ||
     successors.length > 0
 
+  /**
+   * 学校ページの href。末尾スラッシュ付きにして canonical（/school/<id>/）と揃える。
+   * 付けないと Cloudflare Pages の 308 を 1 回挟むリンクになり、内部リンクが正規 URL を指さない。
+   */
+  const schoolHref = (id: string) => `/school/${id}/`
+
   /** シート内から別の学校ページへ SPA 遷移する（<a href> はクローラー・新規タブ用に残す） */
   const schoolLinkClick = (id: string) => (e: MouseEvent<HTMLAnchorElement>) => {
     if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return
@@ -617,7 +623,17 @@ export function SchoolDetailSheet({ school, onClose, userData, extras, standalon
           </button>
         )}
         <span className="grow">
-          <h3 className="detail-title">{fmt.displayName(school)}</h3>
+          {/*
+            単独ページ（/school/:id）ではこれがページの主見出しなので h1。
+            地図から開くシートではページ内の一部なので h3 のまま。
+            見た目は .detail-title が決めるので変わらない（Tailwind preflight が
+            h1/h3 の既定サイズを打ち消している）。
+          */}
+          {standalone ? (
+            <h1 className="detail-title">{fmt.displayName(school)}</h1>
+          ) : (
+            <h3 className="detail-title">{fmt.displayName(school)}</h3>
+          )}
           {school.name_kana ? (
             <span className="school-kana">{school.name_kana}</span>
           ) : (
@@ -718,7 +734,7 @@ export function SchoolDetailSheet({ school, onClose, userData, extras, standalon
                       <div>
                         {isLinkableSchool(relationship.predecessor.id) ? (
                           <a
-                            href={`/school/${relationship.predecessor.id}`}
+                            href={schoolHref(relationship.predecessor.id)}
                             onClick={schoolLinkClick(relationship.predecessor.id)}
                           >
                             {relationship.predecessor.name}
@@ -778,7 +794,7 @@ export function SchoolDetailSheet({ school, onClose, userData, extras, standalon
                 {successors.map((s, i) => (
                   <span key={s.id}>
                     {i > 0 && '、'}
-                    <a href={`/school/${s.id}`} onClick={schoolLinkClick(s.id)}>
+                    <a href={schoolHref(s.id)} onClick={schoolLinkClick(s.id)}>
                       {s.name}
                     </a>
                   </span>
@@ -1007,7 +1023,7 @@ export function SchoolDetailSheet({ school, onClose, userData, extras, standalon
             <ul>
               {neighbors.map(({ school: neighbor, distanceKm }) => (
                 <li key={neighbor.id}>
-                  <a href={`/school/${neighbor.id}`} onClick={schoolLinkClick(neighbor.id)}>
+                  <a href={schoolHref(neighbor.id)} onClick={schoolLinkClick(neighbor.id)}>
                     {neighbor.name}
                   </a>
                   <span className="neighbor-meta">

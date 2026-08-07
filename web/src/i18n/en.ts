@@ -98,7 +98,7 @@ export const en: MessageTree = {
     demo: 'Try a demo (no login)',
     demoTokyoStation: 'Chiyoda, Tokyo',
     demoTokyoStationSub: 'Tokyo Station (Marunouchi)',
-    feature1: 'See schools and deviation estimates on a map',
+    feature1: 'See schools you can commute to on a map',
     feature2: 'Save schools you are considering',
     feature3: 'Notes for open days, clubs, and commute',
     needInput: 'Enter an address, postal code, or place name',

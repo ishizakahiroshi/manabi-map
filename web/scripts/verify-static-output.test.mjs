@@ -117,9 +117,10 @@ async function syntheticDist() {
     cityIndexUrl: '/city-index-0123456789.json', nameIndexUrl: '/school-name-index-0123456789.json',
     schoolDataVersion: 'a1b2c3d4e5', schoolDataCount: SCHOOLS.length,
     prefDataUrls: { gunma: '/school-data/pref-gunma.json' },
+    prefIndexUrls: { gunma: '/school-data/pref-index-gunma.json' },
   }))
 
-  // 学校単体 JSON / 県別分割 JSON（c7 C1）
+  // 学校単体 JSON / 県別分割 JSON（c7 C1）/ 県ページ軽量インデックス（SSR）
   await mkdir(join(dir, 'school-data'), { recursive: true })
   for (const school of SCHOOLS) {
     const neighbor = SCHOOLS.find((s) => s.id !== school.id)
@@ -134,6 +135,23 @@ async function syntheticDist() {
   }
   await writeFile(join(dir, 'school-data', 'pref-gunma.json'), JSON.stringify({
     formatVersion: 2, sourceCatalog: [], schools: SCHOOLS,
+  }))
+  await writeFile(join(dir, 'school-data', 'pref-index-gunma.json'), JSON.stringify({
+    slug: 'gunma',
+    cities: ['前橋市'],
+    schools: SCHOOLS.map((s) => ({
+      i: s.id,
+      n: s.name,
+      k: null,
+      c: s.city,
+      o: 'prefectural',
+      ls: 'active',
+      rs: 'recruiting',
+      ct: ['fulltime'],
+      g: 'coed',
+      lat: s.latitude,
+      lng: s.longitude,
+    })),
   }))
 
   const publicSchools = SCHOOLS.map((school) => ({
