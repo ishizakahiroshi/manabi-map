@@ -132,7 +132,7 @@ export function PressPage() {
   const faqs: Array<{ q: string; a: React.ReactNode }> = [
     {
       q: '商用サイトの偏差値を転載していますか？',
-      a: <>いいえ。公的資料を参考にした Manabi Map の編集推計であり、公式偏差値や合格判定ではありません。現在の掲載範囲・方法・限界は <a href="/legal/deviation-methodology" onClick={(e) => { e.preventDefault(); navigate('/legal/deviation-methodology') }}>「偏差値の方法と限界」</a> で公開しています。商用偏差値サイトからの数値転載は行いません。</>,
+      a: <>いいえ。公的資料を参考にした Manabi Map の編集推計であり、公式偏差値や合格判定ではありません。現在の掲載範囲・方法・限界は <a href="/legal/deviation-methodology" onClick={(e) => { e.preventDefault(); navigate('/legal/deviation-methodology') }}>「推計の方法と限界」</a> で公開しています。商用偏差値サイトからの数値転載は行いません。</>,
     },
     {
       q: '学校側から掲載情報の修正を依頼できますか？',

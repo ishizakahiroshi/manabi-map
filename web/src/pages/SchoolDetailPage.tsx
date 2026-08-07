@@ -45,13 +45,18 @@ export function SchoolDetailPage({ userData }: Props) {
         </main>
       )}
       {school && (
-        <SchoolDetailSheet
-          school={school}
-          extras={extras}
-          standalone
-          onClose={goBack}
-          userData={userData}
-        />
+        // 直リンク着地時の本文ランドマーク。skip-link（#main-content）の着地点でもある。
+        // データが揃うと従来は <main> が消え、skip-link のリンク先が無くなっていた。
+        // .sheet は position:absolute なので、position を持たない main を挟んでも配置は変わらない。
+        <main id="main-content" tabIndex={-1}>
+          <SchoolDetailSheet
+            school={school}
+            extras={extras}
+            standalone
+            onClose={goBack}
+            userData={userData}
+          />
+        </main>
       )}
     </div>
   )
