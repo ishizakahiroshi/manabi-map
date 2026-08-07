@@ -20,6 +20,7 @@ AI からの機能追加打診を防ぐため、明示的に切り捨ててい�
 - **塾送客メディア化**: 塾アフィリは信頼を損なわない範囲の 1〜2 枠のみ（§7.5）。広告の種類は下記「広告ポリシー」に厳格に従う
 - **商用偏差値サイトからのスクレイピング・数値転載**: 絶対にしない（`plan_data-acquisition-strategy.md`）
 - **有料課金・決済の本実装**: 本サービスは無料 OSS で通す。収益は広告＋塾アフィリのみ
+- **対外的な配布・広報活動（2026-08-07 全面保留）**: 学校・教育委員会・報道機関への持ち込みや打診、告知記事の執筆、被リンク目的の外部コンタクト。**AI はこれらの着手を提案・催促しないこと。**趣味プロジェクトであり収益動機がないため、「自分から人に届けに行く」活動を止めている。サイトの公開・検索エンジンからの自然流入・受け身の問い合わせ対応は従来どおり続ける（保留の対象外）。作者環境の正典は `docs/local/pending_outreach-and-distribution.md`（gitignored）
 
 ## 広告ポリシー（Non-negotiable・絶対に守る）
 
@@ -166,7 +167,7 @@ Cloudflare / Supabase / Google Search Console / GitHub Secrets の設定は、**
 
 配置は 2 系統に分かれる:
 
-- **本リポ専用の 4 本**（`manabi-map-deploy` / `manabi-map-add-prefecture` / `manabi-map-info-wanted-field` / `manabi-map-field-backfill`）は **リポ内 `.claude/skills/` にある**（2026-07-23 に作者環境の横断棚から移設・以降ここへ新設）。`.gitignore` が `.claude/` を丸ごと除外しているため **clone には含まれない**（作者環境固有の絶対パスを公開しないため）
+- **本リポ専用の 5 本**（`manabi-map-deploy` / `manabi-map-add-prefecture` / `manabi-map-info-wanted-field` / `manabi-map-field-backfill` / `manabi-map-gsc-checkup`）は **リポ内 `.claude/skills/` にある**（2026-07-23 に作者環境の横断棚から移設・以降ここへ新設）。`.gitignore` が `.claude/` を丸ごと除外しているため **clone には含まれない**（作者環境固有の絶対パスを公開しないため）
 - **横断 skill**（`supabase-migrate` / `taxonomy-refactor` / `changelog-freshness` など）は作者環境の `~/.claude/skills/` 配下
 
 | 用途 | skill | 起動語 |
@@ -175,6 +176,7 @@ Cloudflare / Supabase / Google Search Console / GitHub Secrets の設定は、**
 | 新県データ投入（schools SQL + deviation SQL + 校パターン再分類 + course_type_master 確認） | `manabi-map-add-prefecture` | 「◯◯県 追加」「manabi-map に◯◯県入れて」「新県 データ投入」 |
 | nullable な学校情報を「情報提供募集中」型で追加（テンプレ・i18n・CSS・実装メモ生成） | `manabi-map-info-wanted-field` | 「情報提供募集中 field 追加」「空欄可能フィールド」「manabi-map-info-wanted-field」 |
 | 欠損項目の一括補完（公式カタログから抽出 → 出典つき SQL 生成 → gap を理由つきで記録） | `manabi-map-field-backfill` | 「欠損項目 補完」「学科 埋めて」「ふりがな 補完」「一括補完」 |
+| 検索インデックス状況の実測と sitemap 再送信（GSC 4 画面 → 前回値と比較 → 台帳追記。トラフィックの正体切り分けも） | `manabi-map-gsc-checkup` | 「GSC 見て」「インデックス状況どう」「sitemap 再送信」「アクセス数どう」 |
 | Supabase 本番へ migration 適用（Docker 不要・psql 直叩き・backup + schema_migrations 記録） | `supabase-migrate` | 「Supabase migration 適用」「本番 DB に SQL 流して」「pg_dump backup 取って」 |
 | フリーテキスト分類列 → master + FK + trigger 化（表記ゆれ・分類漏れ対策） | `taxonomy-refactor` | 「分類を master 化」「course_type refactor」「表記ゆれ対策」 |
 
