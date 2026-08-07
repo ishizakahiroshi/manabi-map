@@ -8,6 +8,8 @@ import { PREFECTURES } from '../lib/prefecture'
 type DatasetMetadata = {
   school_count: number
   prefecture_count: number
+  /** 生成時刻（ISO 8601）。利用者が更新を検知するための主キー。 */
+  generated_at?: string
   /** slug → 収録校数。県別エンドポイント一覧の正典。 */
   prefectures?: Record<string, number>
 }
@@ -93,6 +95,39 @@ export function DataPage() {
         <p>
           いずれも静的 JSON です。検索条件付きリクエストや POST は提供しません。
           互換性を壊す変更が必要な場合は /api/v2/ を新設し、/api/v1/ は維持します。
+        </p>
+
+        <h2>更新されたかを知る方法</h2>
+        <p>
+          データはビルドのたびに作り直します。更新の有無は、全件 JSON（22MB 前後）を
+          毎回ダウンロードしなくても判定できます。方法は 2 つあります。
+        </p>
+        <h3>メタデータの generated_at を見る</h3>
+        <p>
+          <a href="/api/v1/dataset.json">/api/v1/dataset.json</a> は数 KB です。
+          この中の <code>generated_at</code>（ISO 8601）と <code>school_count</code> を
+          前回取得したときの値と比べれば、更新されたかどうかが分かります。
+          変わっていたときだけ本体を取り直す使い方を想定しています。
+          {metadata?.generated_at && (
+            <>
+              {' '}現在の値は <code>{metadata.generated_at}</code> です。
+            </>
+          )}
+        </p>
+        <h3>ETag を使って条件付きで取得する</h3>
+        <p>
+          すべてのエンドポイントは <code>ETag</code> と <code>Cache-Control: public, max-age=3600</code> を返します。
+          前回のレスポンスで受け取った ETag を <code>If-None-Match</code> ヘッダに付けて送ると、
+          中身が変わっていない場合は <code>304 Not Modified</code> が本文なしで返ります。
+          22MB を転送せずに「変わっていない」ことを確認できます。
+        </p>
+        <p>
+          curl なら <code>curl --etag-save etag.txt --etag-compare etag.txt https://manabi-map.app/api/v1/schools.json</code> の形です。
+          多くの HTTP クライアントライブラリはこの往復を自動で行います。
+        </p>
+        <p>
+          更新の頻度は決めていません。学校データの追加・訂正があったときに作り直すため、
+          定期的に確認する場合は 1 日 1 回程度で十分です。
         </p>
 
         {prefectureApiLinks.length > 0 && (
