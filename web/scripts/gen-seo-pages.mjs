@@ -667,15 +667,6 @@ const activePrefectures = prefectures.filter((p) =>
 if (activePrefectures.length === 0) {
   throw new Error('gen-seo-pages: 都道府県が 1 件も解決できない（prefectures.json と実データの不一致）')
 }
-const REGION_LABELS = {
-  'hokkaido-tohoku': '北海道・東北',
-  kanto: '関東',
-  chubu: '中部',
-  kinki: '近畿',
-  'chugoku-shikoku': '中国・四国',
-  'kyushu-okinawa': '九州・沖縄',
-}
-
 async function renderPrefPage(pref, prefSchools) {
   const url = `${SITE_ORIGIN}/pref/${pref.slug}/`
   const title = `${pref.name}の高校一覧（${prefSchools.length} 校） | Manabi Map`
@@ -711,28 +702,6 @@ function renderSchoolsHubPage() {
   const description =
     `${coverageText(schools)}都道府県から高校一覧を開き、市区町村ごとの学校と地図を確認できます。` +
     'お気に入り保存・見学メモの家族共有ができる無料の学校選びサービスです。'
-  const regions = Object.entries(REGION_LABELS)
-    .map(([key, label]) => {
-      const prefs = activePrefectures.filter((p) => p.region === key)
-      if (prefs.length === 0) return ''
-      const links = prefs
-        .map((p) => {
-          const count = targets.filter((s) => s.prefecture === p.name).length
-          return `<li><a href="/pref/${p.slug}/">${escapeHtml(p.name)}の高校一覧（${count} 校）</a></li>`
-        })
-        .join('')
-      return `<section><h2>${escapeHtml(label)}</h2><ul>${links}</ul></section>`
-    })
-    .join('')
-  const main =
-    '<main>' +
-    `<nav aria-label="パンくず"><a href="/">トップ</a> › 都道府県一覧</nav>` +
-    `<h1>${escapeHtml(heading)}</h1>` +
-    '<p>都道府県を選ぶと、市区町村ごとの高校一覧が開きます。掲載は所在地の列挙で、学校の序列ではありません。</p>' +
-    regions +
-    '<p><a href="/">住所から地図でさがす</a></p>' +
-    '</main>'
-  void main
   const withHead = renderHead(template, { title, description, url })
   return withRootContent(withHead, renderApp('/schools').html)
 }
@@ -789,18 +758,8 @@ function renderDataPage() {
   const description =
     `${datasetCoverage}の学校基本情報を、` +
     '出典 URL とともに CC BY-SA 4.0 で公開する静的 JSON API です。'
-  // 県別エンドポイントは 1 件の例示だと残り 46 件の綴りを読者に推測させる。
-  // dataset.json の実収録（slug→校数）だけを列挙し、生成物と一覧を必ず一致させる。
-  const datasetPrefCounts = publicDataset.prefectures ?? {}
-  const prefectureApiLinks = prefectures
-    .filter((p) => datasetPrefCounts[p.slug] != null)
-    .map((p) => {
-      const count = Number(datasetPrefCounts[p.slug]).toLocaleString('en-US')
-      return (
-        `<li><a href="/api/v1/schools/${p.slug}.json">` +
-        `${escapeHtml(p.name)}: /api/v1/schools/${p.slug}.json</a>（${count} 校）</li>`
-      )
-    })
+  // 県別エンドポイントの一覧は DataPage が publicDataset.prefectures から描く
+  // （初期データとして埋め込む。この関数では head と JSON-LD だけを組み立てる）。
   const datasetJsonLd = {
     '@context': 'https://schema.org',
     '@type': 'Dataset',
@@ -826,37 +785,6 @@ function renderDataPage() {
     isAccessibleForFree: true,
     measurementTechnique: '学校・教育委員会・官公庁が公表した一次資料を項目単位で記録し、出典 URL を同梱',
   }
-  const main =
-    '<main>' +
-    '<h1>学校基本情報データセット・公開 API</h1>' +
-    `<p>${datasetCoverage}の学校基本情報を、` +
-    '出典へ戻れる形で公開しています。</p>' +
-    `<p><strong>${escapeHtml(DATASET_CLAIM)}</strong></p>` +
-    '<h2>収録基準</h2>' +
-    '<p>学校公式 URL を確認できる学校と、学校・教育委員会・官公庁の一次資料へたどれる項目だけを収録します。' +
-    '出典を確認できない項目は公開側へ出しません。</p>' +
-    '<p>偏差値の編集推計は、数値だけを切り出した序列化を避けるため公開 API には含めません。' +
-    'アプリ上では方法と限界の説明と組み合わせて扱います。</p>' +
-    '<h2>安定エンドポイント</h2>' +
-    '<ul>' +
-    '<li><a href="/api/v1/schools.json">全都道府県: /api/v1/schools.json</a></li>' +
-    '<li><a href="/api/v1/schools/{prefecture}.json">県別: /api/v1/schools/{prefecture}.json</a></li>' +
-    '<li><a href="/api/v1/dataset.json">メタデータ: /api/v1/dataset.json</a></li>' +
-    '</ul>' +
-    '<p>いずれも静的 JSON です。検索条件付きリクエストや POST は提供しません。' +
-    '互換性を壊す変更が必要な場合は /api/v2/ を新設し、/api/v1/ は維持します。</p>' +
-    '<h2>県別エンドポイント一覧</h2>' +
-    `<p>${prefectureApiLinks.length} 件すべてを列挙します。括弧内は収録校数です。</p>` +
-    `<ul>${prefectureApiLinks.join('')}</ul>` +
-    '<h2>ライセンスと出典表記</h2>' +
-    `<p>データは <a href="${DATASET_LICENSE_URL}">CC BY-SA 4.0</a> です。` +
-    `利用・再配布時は「${escapeHtml(DATASET_ATTRIBUTION)}」と表記してください。</p>` +
-    '<p><a href="https://github.com/ishizakahiroshi/manabi-map/blob/main/DATA.md" rel="noopener">' +
-    '生成方法と詳しい収録方針（DATA.md）</a></p>' +
-    '<h2>訂正窓口</h2>' +
-    '<p>掲載情報の削除・訂正は <a href="mailto:takedown@manabi-map.app">takedown@manabi-map.app</a> へお知らせください。</p>' +
-    '</main>'
-  void main
   const withHead = renderHead(template, { title, description, url })
   // 収録件数は DataPage が /api/v1/dataset.json から取るので、同じものを埋め込む。
   const rendered = renderApp('/data', { datasetMetadata: publicDataset })
@@ -873,51 +801,6 @@ function renderPressPage() {
   const description =
     'Manabi Map（まなびマップ）のメディア関係者・教育関係者向け基礎情報。運営者・連絡先・配布素材・' +
     '掲載情報の訂正窓口（takedown@manabi-map.app）を公開しています。'
-  const main =
-    '<main>' +
-    '<h1>メディア関係者・教育関係者の方へ</h1>' +
-    '<p>Manabi Map（まなびマップ）は、親子で使う「学校選びの地図ノート」です。' +
-    '住所を入れると通える高校が地図に表示され、気になる学校をお気に入り保存し、' +
-    '文化祭・説明会・通学経路・親子の感想を学校ごとに家族でメモできます。</p>' +
-    '<p>序列づけや合否煽りではなく、中学生と保護者が納得して進路を選ぶための管理ツールを目指した' +
-    '個人 OSS プロジェクトです。広告は進路・教育関連のみで、無差別アドネットワークは使用しません。</p>' +
-    '<h2>サービス基礎情報</h2>' +
-    '<dl>' +
-    '<dt>サービス名</dt><dd>Manabi Map（まなびマップ）</dd>' +
-    `<dt>URL</dt><dd><a href="${SITE_ORIGIN}/">${SITE_ORIGIN}</a></dd>` +
-    '<dt>初回公開</dt><dd>2026-07-05（群馬県版）。2026-07-31 に全国 47 都道府県へ拡大</dd>' +
-    '<dt>開発者</dt><dd>ishizakahiroshi（個人 OSS）</dd>' +
-    '<dt>ライセンス</dt><dd>コード AGPL-3.0 ／ データ CC BY-SA 4.0</dd>' +
-    '<dt>料金</dt><dd>無料（広告は進路・教育関連のみ控えめに掲載）</dd>' +
-    '<dt>対象</dt><dd>中学生・高校生とその保護者</dd>' +
-    '</dl>' +
-    '<h2>配布素材</h2>' +
-    '<ul>' +
-    '<li><a href="/press/manabi-map-poster.pdf">掲示ポスター（A3 縦・PDF）</a></li>' +
-    '<li><a href="/press/manabi-map-handout.pdf">保護者配布・面談用 handout（A4 縦・PDF）</a></li>' +
-    '</ul>' +
-    '<p>進路指導部の先生や保護者へ紹介いただく際に、ご自由にダウンロード・印刷・配布いただけます（改変は不可）。</p>' +
-    '<h2>プレスキット</h2>' +
-    '<ul>' +
-    '<li><a href="/press/press-release.pdf">プレスリリース（PDF）</a></li>' +
-    '<li><a href="/press/logo-pack.zip">ロゴ一式（SVG / PNG・ZIP）</a></li>' +
-    '</ul>' +
-    '<h2>学校・教育委員会向け</h2>' +
-    '<p><a href="/press/listing-checklist.html">掲載可否チェックシート（印刷用 HTML）</a>を、校内・保護者向けの紹介前確認にご利用いただけます。</p>' +
-    '<h2>取材・お問い合わせ</h2>' +
-    '<ul>' +
-    '<li>一般のお問い合わせ・取材依頼: <a href="mailto:hello@manabi-map.app">hello@manabi-map.app</a></li>' +
-    '<li>掲載情報の削除・訂正要請: <a href="mailto:takedown@manabi-map.app">takedown@manabi-map.app</a>' +
-    '（24 時間以内に受信確認 ／ 7 日以内に対応）</li>' +
-    '</ul>' +
-    '<h2>掲載データについて</h2>' +
-    `<p><strong>${escapeHtml(DATASET_CLAIM)}</strong>を公開方針としています。` +
-    '学校・教育委員会・官公庁が自ら公表した資料を根拠に編集しています。' +
-    '数値の考え方と限界は <a href="/legal/deviation-methodology/">推計の方法と限界</a> で公開しています。' +
-    'コードは <a href="https://github.com/ishizakahiroshi/manabi-map" rel="noopener">GitHub</a> で公開中です。' +
-    '<a href="/data/">公開データセットと API</a> も参照できます。</p>' +
-    '</main>'
-  void main
   const withHead = renderHead(template, { title, description, url })
   return withRootContent(withJsonLd(withHead, ORGANIZATION_JSON_LD), renderApp('/press').html)
 }
@@ -938,13 +821,6 @@ function render404Page() {
     '<meta name="robots" content="noindex" />\n    <meta name="description"',
     'noindex(404)',
   )
-  const main =
-    '<main>' +
-    '<h1>ページが見つかりません</h1>' +
-    '<p>URL が変更されたか、ページが存在しません。</p>' +
-    '<p><a href="/">トップへ（住所から地図でさがす）</a> ／ <a href="/schools/">都道府県一覧</a></p>' +
-    '</main>'
-  void main
   // 存在しない URL を渡して NotFoundPage を描かせる（React Router の * ルート）。
   return withRootContent(html, renderApp('/__not-found__').html)
 }
