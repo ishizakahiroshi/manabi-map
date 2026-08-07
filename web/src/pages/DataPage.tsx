@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import datasetClaims from '../../data/dataset-claims.json'
 import { useI18n } from '../contexts/I18nContext'
 import { useGoBack } from '../hooks/useGoBack'
@@ -17,15 +17,18 @@ type DatasetMetadata = {
 export function DataPage() {
   const goBack = useGoBack('/')
   const { t } = useI18n()
-  // プリレンダーが埋め込んだ件数があれば初回 render から使う（plan_ssr-hydration.md）。
+  // プリレンダーが埋め込んだ件数を初回 render に使う（plan_ssr-hydration.md）。
   // 無いと収録範囲が「収録対象」のままの HTML になり、hydration 後に件数へ差し替わる。
+  //
+  // ただし埋め込みは「ビルドした瞬間の値」でしかない。データだけ差し替える運用や
+  // HTML が CDN キャッシュに残っている状況では古くなるので、**正典は常に
+  // /api/v1/dataset.json 側**とし、hydration 後に必ず取り直して上書きする。
+  // 埋め込みを持っていても fetch を省略しない（値が同じなら React が bail out する）。
   const [metadata, setMetadata] = useState<DatasetMetadata | null>(
     () => getInitialData()?.datasetMetadata ?? null,
   )
-  const settled = useRef(metadata != null)
 
   useEffect(() => {
-    if (settled.current) return
     let active = true
     fetch('/api/v1/dataset.json')
       .then((response) => {
@@ -33,13 +36,11 @@ export function DataPage() {
         return response.json() as Promise<DatasetMetadata>
       })
       .then((value) => {
-        if (active) {
-          settled.current = true
-          setMetadata(value)
-        }
+        if (active) setMetadata(value)
       })
       .catch(() => {
         // 件数が読めなくても、API URL・方針・訂正窓口は表示し続ける。
+        // 埋め込みがあればそれが残るので、画面が空になることはない。
       })
     return () => {
       active = false
