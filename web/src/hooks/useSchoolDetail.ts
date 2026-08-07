@@ -118,33 +118,43 @@ export function useSchoolDetail(id: string | null): SchoolDetailState {
   // プリレンダーが埋め込んだ payload があれば初回 render から使う。
   // ここを null 始まりにすると、プリレンダー（データあり）と食い違って hydration が壊れる
   // （plan_ssr-hydration_c3_initial-data.md）。
+  //
+  // 埋め込みはビルド時点の値でしかない。school-data JSON だけ差し替える運用や
+  // HTML が CDN キャッシュに残っている状況では古くなるので、**正典は常に
+  // /school-data/<id>.json 側**とし、hydration 後に必ず取り直して上書きする。
+  // 値が同じなら React が bail out する。
   const [fetched, setFetched] = useState<FetchedDetail | null>(() => initialDetail(id))
   const [fetching, setFetching] = useState(false)
   const [fallback, setFallback] = useState(false)
   const cache = useSchoolsCache()
-  // 表示済みの id。fetched を effect の依存に入れるとループするので ref で持つ。
-  const settledId = useRef<string | null>(fetched?.school.id ?? null)
+  // 直前に表示していた id。切り替わったときだけ fetched をクリアする
+  // （単純に毎 effect で setFetched(null) すると埋め込み直後に読み込み中へ戻る）。
+  const lastId = useRef<string | null>(fetched?.school.id ?? null)
 
   useEffect(() => {
     if (!id || !SCHOOL_ID_PATTERN.test(id)) return
-    // 埋め込みデータで既に描けている id は取りに行かない。
-    // HTML と school-data は同一ビルドの生成物なので、内容は一致している。
-    if (settledId.current === id) return
-    setFetched(null)
-    setFallback(false)
+    const idChanged = lastId.current !== id
+    if (idChanged) {
+      setFetched(null)
+      setFallback(false)
+      lastId.current = id
+    }
     let cancelled = false
     setFetching(true)
     void (async () => {
       try {
         const result = await fetchSingleSchool(id)
         if (cancelled) return
-        settledId.current = id
         setFetched(result)
+        setFallback(false)
       } catch {
         if (cancelled) return
         // 単体 JSON が無い / 壊れている環境は全件ロードへフォールバックする。
-        setFallback(true)
-        void ensureSchoolsLoaded()
+        // ただし埋め込みで既に描けている id の取り直し失敗では画面を潰さない。
+        if (idChanged) {
+          setFallback(true)
+          void ensureSchoolsLoaded()
+        }
       } finally {
         if (!cancelled) setFetching(false)
       }
