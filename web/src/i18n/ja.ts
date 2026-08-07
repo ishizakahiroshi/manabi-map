@@ -54,7 +54,7 @@ export const ja: MessageTree = {
     privacy: 'プライバシー',
     terms: '利用規約',
     thirdParty: 'サードパーティライセンス',
-    deviationMethodology: '偏差値の方法と限界',
+    deviationMethodology: '推計の方法と限界',
   },
   tabs: {
     label: '主要ナビゲーション',
@@ -98,7 +98,7 @@ export const ja: MessageTree = {
     demo: 'デモを試す（ログイン不要）',
     demoTokyoStation: '東京都 千代田区',
     demoTokyoStationSub: '東京駅（丸の内）',
-    feature1: '高校名と偏差値を地図で見る',
+    feature1: '通える高校を地図で見る',
     feature2: '気になる学校を保存する',
     feature3: '文化祭・部活・通学メモを残す',
     needInput: '住所・郵便番号・地名を入れてください',

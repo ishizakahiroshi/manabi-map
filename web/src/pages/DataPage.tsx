@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import datasetClaims from '../../data/dataset-claims.json'
 import { useI18n } from '../contexts/I18nContext'
 import { useGoBack } from '../hooks/useGoBack'
+import { getInitialData } from '../lib/initialData'
 import { PREFECTURES } from '../lib/prefecture'
 
 type DatasetMetadata = {
@@ -14,9 +15,15 @@ type DatasetMetadata = {
 export function DataPage() {
   const goBack = useGoBack('/')
   const { t } = useI18n()
-  const [metadata, setMetadata] = useState<DatasetMetadata | null>(null)
+  // プリレンダーが埋め込んだ件数があれば初回 render から使う（plan_ssr-hydration.md）。
+  // 無いと収録範囲が「収録対象」のままの HTML になり、hydration 後に件数へ差し替わる。
+  const [metadata, setMetadata] = useState<DatasetMetadata | null>(
+    () => getInitialData()?.datasetMetadata ?? null,
+  )
+  const settled = useRef(metadata != null)
 
   useEffect(() => {
+    if (settled.current) return
     let active = true
     fetch('/api/v1/dataset.json')
       .then((response) => {
@@ -24,7 +31,10 @@ export function DataPage() {
         return response.json() as Promise<DatasetMetadata>
       })
       .then((value) => {
-        if (active) setMetadata(value)
+        if (active) {
+          settled.current = true
+          setMetadata(value)
+        }
       })
       .catch(() => {
         // 件数が読めなくても、API URL・方針・訂正窓口は表示し続ける。

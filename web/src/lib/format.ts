@@ -135,7 +135,7 @@ export function ownershipShort(s: School): string {
  * prefectural + 東京都 → '都立'、北海道 → '道立'、大阪府/京都府 → '府立'、他 → '県立'
  * それ以外は OWN_FULL 準拠（市立/国立/私立/組合立）。
  */
-export function ownershipFull(s: School): string {
+export function ownershipFull(s: Pick<School, 'ownership' | 'prefecture'>): string {
   if (s.ownership === 'prefectural') {
     if (s.prefecture === '東京都') return '都立'
     if (s.prefecture === '北海道') return '道立'

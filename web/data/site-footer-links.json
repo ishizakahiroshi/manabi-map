@@ -4,7 +4,7 @@
     { "path": "/data", "ja": "公開データとAPI", "en": "Open data and API" },
     { "path": "/legal/terms", "ja": "利用規約", "en": "Terms of use" },
     { "path": "/legal/privacy", "ja": "プライバシーポリシー", "en": "Privacy policy" },
-    { "path": "/legal/deviation-methodology", "ja": "偏差値の方法と限界", "en": "Estimate methodology" },
+    { "path": "/legal/deviation-methodology", "ja": "推計の方法と限界", "en": "Estimate methodology" },
     { "path": "/legal/third-party", "ja": "サードパーティライセンス", "en": "Third-party licenses" },
     { "path": "/guide/school-visit", "ja": "学校選びガイド", "en": "School choice guides" }
   ]

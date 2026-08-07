@@ -58,7 +58,10 @@ export function loadLocalHome(): HomeLocation | null {
 
 export function AppProvider({ children }: { children: ReactNode }) {
   const { session } = useAuth()
-  const [home, setHomeState] = useState<HomeLocation | null>(loadLocalHome)
+  // 初回 render は必ず null。localStorage を初期値に使うとビルド時プリレンダーと食い違い、
+  // hydration が壊れる（plan_ssr-hydration.md C2）。
+  // 復元は下の [session] effect が担う（未ログイン時に loadLocalHome() を読む経路が既にある）。
+  const [home, setHomeState] = useState<HomeLocation | null>(null)
   const [toastMsg, setToastMsg] = useState('')
   const [toastShow, setToastShow] = useState(false)
   const [loginOpen, setLoginOpen] = useState(false)

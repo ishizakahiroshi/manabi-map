@@ -7,7 +7,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "pnpm fetch:tags && pnpm gen:schools-json && vite build && tsx scripts/gen-seo-pages.mjs && pnpm verify:static",
+    "build": "pnpm fetch:tags && pnpm gen:schools-json && vite build && pnpm build:ssr && tsx scripts/gen-seo-pages.mjs && pnpm verify:static",
+    "build:ssr": "vite build --ssr src/entry-server.tsx --outDir dist-ssr",
     "fetch:tags": "git fetch --unshallow --tags 2>/dev/null || git fetch --deepen=200 --tags 2>/dev/null || git fetch --tags || true",
     "gen:schools-json": "tsx scripts/gen-schools-json.mjs",
     "gen:dataset-fields": "node scripts/gen-dataset-fields.mjs",

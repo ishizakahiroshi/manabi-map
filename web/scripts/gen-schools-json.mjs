@@ -4,7 +4,7 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { gzipSync } from 'node:zlib'
 import { createClient } from '@supabase/supabase-js'
-import { loadCivicData, resolveCityGroup } from './lib/municipalities.mjs'
+import { loadCivicData, resolveCityGroup, UNRESOLVED_CITY_LABEL } from './lib/municipalities.mjs'
 import {
   buildPublicSchoolRecords,
   DATASET_ATTRIBUTION,
@@ -460,6 +460,42 @@ for (const pref of prefectures) {
   prefDataUrls[pref.slug] = `/school-data/${prefFilename}`
 }
 
+// 県ページ用の軽量インデックス（docs/local/plan_ssr-hydration_c3_initial-data.md）。
+// PrefecturePage が実際に参照するフィールドだけを短縮キーで持つ（searchIndex と同手法）。
+// 上の pref-<slug>.json は学校詳細と同じ全項目で東京 2.8MB / 北海道 6.5MB あり、
+// プリレンダー HTML へ埋め込めないため、埋め込み用にこれを別途作る。
+// 地図・詳細ページと同じく lat/lng がある校だけ（mapSchoolRows / gen-seo-pages の targets と一致）。
+// cities は city-index と同じ市区町村コード順。school.c は resolveCityGroup のラベル。
+const prefIndexUrls = {}
+for (const pref of prefectures) {
+  const prefRows = rows.filter(
+    (row) => row.prefecture === pref.name && row.latitude != null && row.longitude != null,
+  )
+  if (prefRows.length === 0) continue
+  const cities = cityIndex.filter((entry) => entry.prefSlug === pref.slug).map((entry) => entry.city)
+  const compactSchools = prefRows.map((row) => ({
+    i: row.id,
+    n: row.name,
+    k: row.name_kana ?? null,
+    c: resolveCityGroup(row, muniByPref)?.label ?? row.city ?? UNRESOLVED_CITY_LABEL,
+    o: row.ownership,
+    ls: row.lifecycle_status_code ?? null,
+    rs: row.recruitment_status_code ?? null,
+    ct: row.course_times?.length ? row.course_times : ['fulltime'],
+    g: row.gender_type ?? null,
+    lat: row.latitude != null ? Number(row.latitude) : null,
+    lng: row.longitude != null ? Number(row.longitude) : null,
+  }))
+  const prefIndexBody = {
+    slug: pref.slug,
+    cities,
+    schools: compactSchools,
+  }
+  const prefIndexFilename = `pref-index-${pref.slug}.json`
+  await writeFile(join(schoolDataDir, prefIndexFilename), `${JSON.stringify(prefIndexBody)}\n`)
+  prefIndexUrls[pref.slug] = `/school-data/${prefIndexFilename}`
+}
+
 const manifest = {
   url: `/${filename}`,
   hash,
@@ -475,6 +511,7 @@ const manifest = {
   schoolDataVersion: hash,
   schoolDataCount: detailRows.length,
   prefDataUrls,
+  prefIndexUrls,
   generatedAt,
 }
 await writeFile(join(publicDir, 'schools-manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`)
@@ -483,6 +520,7 @@ console.log(
   `wrote ${rows.length} schools to ${outputPath} (manifest url=${manifest.url}, ` +
   `cityIndex=${cityIndex.length}, nameIndex=${nameIndex.length}, ` +
   `schoolData=${detailRows.length}, prefData=${Object.keys(prefDataUrls).length}, ` +
+  `prefIndex=${Object.keys(prefIndexUrls).length}, ` +
   `publicApi=${publicApiRecords.length})`,
 )
 
