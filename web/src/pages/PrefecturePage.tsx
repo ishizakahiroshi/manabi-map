@@ -156,40 +156,41 @@ export function PrefecturePage({ userData }: Props) {
   const scrolledFor = useRef<string | null>(null)
   // 貼り付いた見出しの判定に実測値を使う（CSS の --city-jump-h と二重管理しない）
   const jumpRef = useRef<HTMLElement>(null)
+  // 直前に表示していた slug。切り替わったときだけ一覧をクリアする
+  // （埋め込み直後に setPrefSchools([]) するとちらつく）。
+  // 埋め込みはビルド時点の値なので、正典は常に pref-index JSON 側。hydration 後に取り直す。
+  const lastPrefSlug = useRef<string | null>(boot.cityOrder != null ? (slug ?? null) : null)
 
-  // 県別軽量インデックスを読む。埋め込みが当該 slug なら fetch しない。
+  // 県別軽量インデックスを読む。埋め込みの有無にかかわらず取り直す
+  // （HTML だけ古い / JSON だけ新しいズレを正典側で上書きする）。
   // slug 切替時は前の県の一覧を残さない（見出しだけ新県・中身が旧県になるのを防ぐ）。
   useEffect(() => {
     if (!slug || !pref) return
-    const embedded = getInitialData()?.prefPage
-    if (embedded?.slug === slug) {
-      try {
-        setPrefSchools(expandPrefIndex(embedded, pref.name))
-        setCityOrder(embedded.cities)
-        setLoading(false)
-        setError(null)
-        return
-      } catch {
-        // 壊れた埋め込みは fetch へ落とす
-      }
+    const slugChanged = lastPrefSlug.current !== slug
+    if (slugChanged) {
+      setLoading(true)
+      setError(null)
+      setPrefSchools([])
+      setCityOrder(null)
+      lastPrefSlug.current = slug
     }
     let cancelled = false
-    setLoading(true)
-    setError(null)
-    setPrefSchools([])
-    setCityOrder(null)
     void loadPrefIndex(slug)
       .then((payload) => {
         if (cancelled) return
         setPrefSchools(expandPrefIndex(payload, pref.name))
         setCityOrder(payload.cities)
         setLoading(false)
+        setError(null)
       })
       .catch(() => {
         if (cancelled) return
-        setError('学校データの取得に失敗しました。時間をおいて再読み込みしてください。')
-        setPrefSchools([])
-        setCityOrder([])
+        // 埋め込みで既に描けている slug の取り直し失敗では画面を潰さない。
+        if (slugChanged) {
+          setError('学校データの取得に失敗しました。時間をおいて再読み込みしてください。')
+          setPrefSchools([])
+          setCityOrder([])
+        }
         setLoading(false)
       })
     return () => {
