@@ -147,6 +147,17 @@ export const en: MessageTree = {
     admissionLatest: '{year} primary admission {ratio}',
     favorited: 'In your favorites',
     backToAll: 'All prefectures',
+    cityPageLink: 'Open the {city} page',
+  },
+  cityPage: {
+    title: 'High schools in {city} ({n})',
+    context: 'There are {n} high schools located in {city}, {pref}.',
+    notice: 'Schools are listed by location in kana order — this is not a ranking. Admission eligibility varies by district; always check each school’s official guidelines.',
+    nearbyHeading: 'Nearby municipalities in the same prefecture',
+    nearbyLink: '{city} ({n})',
+    backToPref: 'All high schools in {pref}',
+    mapLink: 'View this area on the map',
+    empty: 'No high schools are listed for this municipality.',
   },
   notFound: {
     title: 'Page not found',
@@ -367,6 +378,7 @@ export const en: MessageTree = {
   },
   detail: {
     address: 'Address',
+    cityPageLink: 'All high schools in {city}',
     course: 'Schedule',
     scale: 'Size',
     ratio3y: 'Primary admission 3-year average (supporting figure)',

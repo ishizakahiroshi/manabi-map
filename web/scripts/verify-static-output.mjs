@@ -13,7 +13,12 @@ import { lstat, readFile, readdir } from 'node:fs/promises'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { gunzipSync } from 'node:zlib'
-import { loadCivicData, resolveCityGroup } from './lib/municipalities.mjs'
+import {
+  buildCityCounts,
+  cityPagePath,
+  loadCivicData,
+  resolveCityGroup,
+} from './lib/municipalities.mjs'
 import {
   DATASET_CLAIM,
   DATASET_LICENSE_URL,
@@ -129,6 +134,35 @@ function checkPageSkeleton(html, pageLabel, expectedCanonical) {
   const main = extractMain(html)
   if (!main) throw new Error(`missing <main> content on ${pageLabel}`)
   return main
+}
+
+/**
+ * BreadcrumbList の「最後の項目以外は item 必須」を検査する。
+ *
+ * Google のパンくず要件は position / name / item が必須で、**最後の項目だけ item を
+ * 省略できる**（省略時は現在ページの URL が使われる）。schema.org の語彙としては
+ * name だけの ListItem も有効なため、段数しか見ていなかった旧検査はこれをすり抜け、
+ * 2026-08-08 に GSC が「項目「item」がありません」を全学校ページで検出した
+ * （docs/local/plan_seo-growth-strategy_c5_static-routes.md C6）。
+ */
+function checkBreadcrumbItems(breadcrumb, pageLabel) {
+  const entries = breadcrumb.itemListElement
+  for (const [index, entry] of entries.entries()) {
+    if (entry?.position !== index + 1) {
+      throw new Error(`BreadcrumbList position must be 1-based and in order on ${pageLabel}`)
+    }
+    if (typeof entry?.name !== 'string' || entry.name.length === 0) {
+      throw new Error(`BreadcrumbList entry ${index + 1} has no name on ${pageLabel}`)
+    }
+    const isLast = index === entries.length - 1
+    if (isLast) continue
+    if (typeof entry.item !== 'string' || !entry.item.startsWith(`${SITE_ORIGIN}/`)) {
+      throw new Error(
+        `BreadcrumbList entry ${index + 1} ("${entry.name}") has no item on ${pageLabel} ` +
+        '(only the last entry may omit it)',
+      )
+    }
+  }
 }
 
 function checkSafeHrefAttributes(html, pageLabel) {
@@ -354,6 +388,8 @@ export async function verifyStaticOutput({
   const { prefectures, muniByPref } = await loadCivicData(join(dirname(fileURLToPath(import.meta.url)), '..'))
   const activePrefectures = prefectures.filter((p) => targets.some((s) => s.prefecture === p.name))
 
+  const prefSlugByName = new Map(prefectures.map((p) => [p.name, p.slug]))
+
   const LEGAL_DOCS = ['terms', 'privacy', 'third-party', 'deviation-methodology']
   const GUIDE_SLUGS = ['commute-time', 'school-visit', 'deviation-with-care']
   const staticRoutes = [
@@ -365,9 +401,32 @@ export async function verifyStaticOutput({
     ...GUIDE_SLUGS.map((slug) => `/guide/${slug}/`),
   ]
 
+  // 県別軽量インデックスは県ページ・市区町村ページ・sitemap 期待値の共通の正典なので
+  // 先に全県ぶん読む（この後の検査もこの Map を参照し、同じファイルを二度読まない）。
+  const prefIndexBySlug = new Map()
+  for (const pref of activePrefectures) {
+    prefIndexBySlug.set(
+      pref.slug,
+      JSON.parse(await readFile(join(absoluteDist, 'school-data', `pref-index-${pref.slug}.json`), 'utf8')),
+    )
+  }
+  // 市区町村ページ（c5 C6）。対象は pref-index の cities に載っている市区町村＝総務省
+  // コードへ解決できたものだけ（「その他」にはページを作らない・gen-seo-pages と同条件）。
+  const cityPageEntries = []
+  for (const pref of activePrefectures) {
+    const prefIndex = prefIndexBySlug.get(pref.slug)
+    if (!Array.isArray(prefIndex?.cities) || !Array.isArray(prefIndex?.schools)) {
+      throw new Error(`pref-index is malformed on ${pref.slug}`)
+    }
+    for (const { c: city, n } of buildCityCounts(prefIndex)) {
+      cityPageEntries.push({ pref, city, count: n })
+    }
+  }
+
   const expectedLocations = new Set([
     `${SITE_ORIGIN}/`,
     ...staticRoutes.map((path) => `${SITE_ORIGIN}${path}`),
+    ...cityPageEntries.map(({ pref, city }) => `${SITE_ORIGIN}${cityPagePath(pref.slug, city)}`),
     ...targets.map((school) => `${SITE_ORIGIN}/school/${school.id}/`),
   ])
   const locations = sitemapLocations(await readFile(join(absoluteDist, 'sitemap.xml'), 'utf8'))
@@ -465,9 +524,7 @@ export async function verifyStaticOutput({
     if (prefIndexUrl !== `/school-data/pref-index-${pref.slug}.json`) {
       throw new Error(`schools-manifest.json prefIndexUrls is wrong for ${pref.slug}: ${prefIndexUrl}`)
     }
-    const prefIndex = JSON.parse(
-      await readFile(join(schoolDataRoot, `pref-index-${pref.slug}.json`), 'utf8'),
-    )
+    const prefIndex = prefIndexBySlug.get(pref.slug)
     const expectedTargets = schools.filter(
       (school) =>
         school.prefecture === pref.name && school.latitude != null && school.longitude != null,
@@ -750,9 +807,11 @@ export async function verifyStaticOutput({
       throw new Error(`school JSON-LD is missing license or creditText on ${pageLabel}`)
     }
     // BreadcrumbList（UUID URL の検索結果表示の救済・c7 C4）: ホーム › 県 ›（市区町村）› 校名。
+    // item を与えられない中間段は段ごと落とすので、県 slug が引けなければ「ホーム › 校名」の 2 段。
     const breadcrumb = jsonLdBlocks.find((block) => block?.['@type'] === 'BreadcrumbList')
     const cityGroup = resolveCityGroup(target, muniByPref)
-    const expectedBreadcrumbLength = cityGroup ? 4 : 3
+    const prefSlug = prefSlugByName.get(target.prefecture) ?? null
+    const expectedBreadcrumbLength = prefSlug ? (cityGroup ? 4 : 3) : 2
     if (
       !breadcrumb ||
       !Array.isArray(breadcrumb.itemListElement) ||
@@ -765,6 +824,18 @@ export async function verifyStaticOutput({
     const breadcrumbLast = breadcrumb.itemListElement[breadcrumb.itemListElement.length - 1]
     if (breadcrumbLast?.name !== target.name) {
       throw new Error(`BreadcrumbList last item must be the school name on ${pageLabel}`)
+    }
+    checkBreadcrumbItems(breadcrumb, pageLabel)
+    // 3 段目は市区町村ページの実 URL を指すこと（アンカーや県 URL の使い回しではない）。
+    if (prefSlug && cityGroup) {
+      const expectedCityItem = `${SITE_ORIGIN}${cityPagePath(prefSlug, cityGroup.label)}`
+      const cityEntry = breadcrumb.itemListElement[2]
+      if (cityEntry?.item !== expectedCityItem) {
+        throw new Error(
+          `BreadcrumbList city item is wrong on ${pageLabel}: ` +
+          `expected=${expectedCityItem} actual=${cityEntry?.item}`,
+        )
+      }
     }
     checkForbiddenWords(main, pageLabel, { includeCommutePhrase: false })
     // 近隣校節（内部リンク網の本体・c4 C1）: 見出しと「直線距離」の明記、
@@ -866,12 +937,74 @@ export async function verifyStaticOutput({
         throw new Error(`${pageLabel} has jump link to missing section: #${id}`)
       }
     }
+    // 県内の全市区町村ページへ 1 ホップで辿れること（c5 C6 のクロール経路の本体）。
+    // 逆に、実在しない市区町村ページへリンクしていないこと（「その他」にはページが無い）。
+    for (const { pref: linkedPref, city } of cityPageEntries) {
+      if (linkedPref.slug !== pref.slug) continue
+      if (!main.includes(`href="${cityPagePath(pref.slug, city)}"`)) {
+        throw new Error(`${pageLabel} is missing link to ${cityPagePath(pref.slug, city)}`)
+      }
+    }
+    for (const [, href] of main.matchAll(/href="(\/pref\/[^"]+\/[^"]+\/)"/g)) {
+      if (!expectedLocations.has(`${SITE_ORIGIN}${href}`)) {
+        throw new Error(`${pageLabel} links to a municipality page that does not exist: ${href}`)
+      }
+    }
     // SSR 成果物の検査（plan_ssr-hydration.md C5）。PrefecturePage は
     // <main id="main-content" class="content hub-content"> を出す。県ページは
     // 軽量インデックス（pref-index-<slug>.json）を初期データとして埋め込むので
     // #__MM_INITIAL__ も必須。
     assertSsrMarker(html, pageLabel, 'content hub-content')
     assertInitialDataScript(html, pageLabel)
+  }
+
+  // --- 市区町村ページ全件検査（c5 C6） ---
+  // 学校ページの BreadcrumbList 3 段目がこのページを指すので、1 枚でも欠けると
+  // 構造化データがリンク切れになる。全件を検査する。
+  for (const { pref, city, count } of cityPageEntries) {
+    const path = cityPagePath(pref.slug, city)
+    const html = await readPage(absoluteDist, join('pref', pref.slug, city, 'index.html'), path)
+    const main = checkPageSkeleton(html, path, `${SITE_ORIGIN}${path}`)
+    checkSafeHrefAttributes(main, path)
+    const escapedCity = escapeHtml(city)
+    const title = extractTitle(html)
+    if (!title || !title.includes(escapedCity)) {
+      throw new Error(`title is missing the municipality name on ${path}: ${title}`)
+    }
+    const h1 = main.match(/<h1[^>]*>([\s\S]*?)<\/h1>/)
+    if (!h1 || !h1[1].includes(escapedCity)) {
+      throw new Error(`missing <h1> with the municipality name on ${path}`)
+    }
+    // 所在地の列挙であって通学圏ではない（学区データを保有するまでの不変原則）。
+    checkForbiddenWords(main, path, { includeCommutePhrase: true })
+    // その市区町村の全校が漏れなくリンクされていること（内部リンク経路の本体）。
+    const prefIndex = prefIndexBySlug.get(pref.slug)
+    const cityTargets = prefIndex.schools.filter((entry) => entry.c === city)
+    if (cityTargets.length !== count) {
+      throw new Error(`city page count mismatch on ${path}: index=${cityTargets.length} expected=${count}`)
+    }
+    for (const entry of cityTargets) {
+      if (!main.includes(`href="/school/${entry.i}/"`)) {
+        throw new Error(`${path} is missing link to /school/${entry.i}/`)
+      }
+    }
+    // パンくずは ホーム › 県 › 市区町村 の 3 段。最終段（市区町村）だけ item を省く。
+    const breadcrumb = extractJsonLdBlocks(html).find((block) => block?.['@type'] === 'BreadcrumbList')
+    if (!breadcrumb || !Array.isArray(breadcrumb.itemListElement) || breadcrumb.itemListElement.length !== 3) {
+      throw new Error(`BreadcrumbList JSON-LD is missing or malformed on ${path}`)
+    }
+    checkBreadcrumbItems(breadcrumb, path)
+    if (breadcrumb.itemListElement[2]?.name !== city) {
+      throw new Error(`BreadcrumbList last item must be the municipality name on ${path}`)
+    }
+    // 近隣導線のリンク先が実在する市区町村ページであること（袋小路と 404 の両方を防ぐ）。
+    for (const [, href] of main.matchAll(/href="(\/pref\/[^"]+\/[^"]+\/)"/g)) {
+      if (!expectedLocations.has(`${SITE_ORIGIN}${href}`)) {
+        throw new Error(`${path} links to a municipality page that does not exist: ${href}`)
+      }
+    }
+    assertSsrMarker(html, path, 'content hub-content')
+    assertInitialDataScript(html, path)
   }
 
   // --- /data/・/press・/legal/* ---
@@ -966,6 +1099,7 @@ export async function verifyStaticOutput({
     schoolCount: schools.length,
     seoSchoolCount: targets.length,
     prefPageCount: activePrefectures.length,
+    cityPageCount: cityPageEntries.length,
     staticRouteCount: staticRoutes.length + 1,
     sitemapUrlCount: locations.length,
     sitemapUniqueUrlCount: actualLocations.size,

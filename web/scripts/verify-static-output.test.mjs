@@ -77,7 +77,14 @@ function page({ title, canonical, main, jsonLd, noindex = false, footer = '', ma
     `<body><div id="root">${mainOpen}${main}</main></div>${initialScriptTag}${footer}</body></html>`
 }
 
-/** 学校ページの BreadcrumbList JSON-LD（本番: ホーム › 県 › 市区町村 › 校名）。 */
+/** 前橋市の市区町村ページ（/pref/gunma/前橋市/）の URL パス。 */
+const MAEBASHI_PATH = `/pref/gunma/${encodeURIComponent('前橋市')}/`
+
+/**
+ * 学校ページの BreadcrumbList JSON-LD（本番: ホーム › 県 › 市区町村 › 校名）。
+ * 最後（校名）以外はすべて item を持つ — Google の要件で、中間段の item 欠落は
+ * 無効アイテムになる（c5 C6・2026-08-08 の GSC エラー）。
+ */
 function breadcrumbLd(schoolName) {
   return {
     '@context': 'https://schema.org',
@@ -85,10 +92,20 @@ function breadcrumbLd(schoolName) {
     itemListElement: [
       { '@type': 'ListItem', position: 1, name: 'ホーム', item: `${ORIGIN}/` },
       { '@type': 'ListItem', position: 2, name: '群馬県', item: `${ORIGIN}/pref/gunma/` },
-      { '@type': 'ListItem', position: 3, name: '前橋市' },
+      { '@type': 'ListItem', position: 3, name: '前橋市', item: `${ORIGIN}${MAEBASHI_PATH}` },
       { '@type': 'ListItem', position: 4, name: schoolName },
     ],
   }
+}
+
+/** 県ページ本文。市区町村ページへの実リンクを含む（c5 C6 のクロール経路）。 */
+function prefPageMain() {
+  return '<h1>群馬県の高校一覧（2 校）</h1>' +
+    '<nav><a href="#%E5%89%8D%E6%A9%8B%E5%B8%82">前橋市（2）</a></nav>' +
+    '<section id="前橋市"><h2>前橋市（2 校）</h2>' +
+    `<p><a href="${MAEBASHI_PATH}">前橋市の高校一覧ページ</a></p><ul>` +
+    SCHOOLS.map((s) => `<li><a href="/school/${s.id}/">${s.name}</a></li>`).join('') +
+    '</ul></section>'
 }
 
 function schoolLd(schoolName) {
@@ -237,15 +254,31 @@ async function syntheticDist() {
   await writeFile(join(dir, 'pref', 'gunma', 'index.html'), page({
     title: '群馬県の高校一覧（2 校） | Manabi Map',
     canonical: `${ORIGIN}/pref/gunma/`,
-    main: '<h1>群馬県の高校一覧（2 校）</h1>' +
-      '<nav><a href="#%E5%89%8D%E6%A9%8B%E5%B8%82">前橋市（2）</a></nav>' +
-      '<section id="前橋市"><h2>前橋市（2 校）</h2><ul>' +
-      SCHOOLS.map((s) => `<li><a href="/school/${s.id}/">${s.name}</a></li>`).join('') +
-      '</ul></section>',
+    main: prefPageMain(),
     // SSR 検査: PrefecturePage は <main id="main-content" class="content hub-content"> を出す。
     // 県ページは pref-index 軽量データを初期として埋め込むので #__MM_INITIAL__ も必須。
     mainAttrs: 'id="main-content" class="content hub-content"',
     initialData: { slug: 'gunma', cities: ['前橋市'] },
+  }))
+  // 市区町村ページ（c5 C6）。ディレクトリ名は日本語のまま置き、URL では percent-encode される。
+  await mkdir(join(dir, 'pref', 'gunma', '前橋市'), { recursive: true })
+  await writeFile(join(dir, 'pref', 'gunma', '前橋市', 'index.html'), page({
+    title: '前橋市の高校一覧（2 校） | Manabi Map',
+    canonical: `${ORIGIN}${MAEBASHI_PATH}`,
+    main: '<h1>前橋市の高校一覧（2 校）</h1><p>群馬県前橋市にある高校は 2 校です。</p><ul>' +
+      SCHOOLS.map((s) => `<li><a href="/school/${s.id}/">${s.name}</a></li>`).join('') +
+      '</ul>',
+    mainAttrs: 'id="main-content" class="content hub-content"',
+    initialData: { slug: 'gunma', city: '前橋市', schools: [], cityCounts: [{ c: '前橋市', n: 2 }] },
+    jsonLd: {
+      '@context': 'https://schema.org',
+      '@type': 'BreadcrumbList',
+      itemListElement: [
+        { '@type': 'ListItem', position: 1, name: 'ホーム', item: `${ORIGIN}/` },
+        { '@type': 'ListItem', position: 2, name: '群馬県', item: `${ORIGIN}/pref/gunma/` },
+        { '@type': 'ListItem', position: 3, name: '前橋市' },
+      ],
+    },
   }))
   await mkdir(join(dir, 'press'), { recursive: true })
   await writeFile(join(dir, 'press', 'index.html'), page({
@@ -328,6 +361,7 @@ async function syntheticDist() {
     `<loc>${ORIGIN}/</loc>`,
     `<loc>${ORIGIN}/schools/</loc>`,
     `<loc>${ORIGIN}/pref/gunma/</loc>`,
+    `<loc>${ORIGIN}${MAEBASHI_PATH}</loc>`,
     `<loc>${ORIGIN}/data/</loc>`,
     `<loc>${ORIGIN}/press/</loc>`,
     `<loc>${ORIGIN}/legal/terms/</loc>`,
@@ -350,8 +384,9 @@ test('gzip magic, manifest, sitemap, all pages and size gate pass together', asy
   assert.equal(result.schoolCount, 2)
   assert.equal(result.seoSchoolCount, 2)
   assert.equal(result.prefPageCount, 1)
-  assert.equal(result.sitemapUrlCount, 14)
-  assert.equal(result.sitemapUniqueUrlCount, 14)
+  assert.equal(result.cityPageCount, 1)
+  assert.equal(result.sitemapUrlCount, 15)
+  assert.equal(result.sitemapUniqueUrlCount, 15)
   assert.equal(result.schoolDataCount, 2)
   assert.equal(result.prefDataCount, 1)
   assert.equal(result.publicApiSchoolCount, 2)
@@ -545,11 +580,7 @@ test('a pref page missing __MM_INITIAL__ script is rejected (plan_ssr-hydration 
   await writeFile(join(dir, 'pref', 'gunma', 'index.html'), page({
     title: '群馬県の高校一覧（2 校） | Manabi Map',
     canonical: `${ORIGIN}/pref/gunma/`,
-    main: '<h1>群馬県の高校一覧（2 校）</h1>' +
-      '<nav><a href="#%E5%89%8D%E6%A9%8B%E5%B8%82">前橋市（2）</a></nav>' +
-      '<section id="前橋市"><h2>前橋市（2 校）</h2><ul>' +
-      SCHOOLS.map((s) => `<li><a href="/school/${s.id}/">${s.name}</a></li>`).join('') +
-      '</ul></section>',
+    main: prefPageMain(),
     mainAttrs: 'id="main-content" class="content hub-content"',
     // initialData を意図的に渡さない → #__MM_INITIAL__ script が出ない
   }))

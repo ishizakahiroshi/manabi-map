@@ -62,6 +62,7 @@ function toDetail(payload: SingleSchoolPayload, id: string): FetchedDetail {
     })),
     successors: payload.successors ?? [],
     linkableSchoolIds: new Set(payload.linkableSchoolIds ?? []),
+    cityGroup: payload.cityGroup ?? null,
   }
   return { school, extras }
 }

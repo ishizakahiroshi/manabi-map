@@ -458,6 +458,10 @@ for (const row of detailRows) {
     }),
   )
   single.successors = successorsById.get(row.id) ?? []
+  // 所属市区町村ページ（/pref/<slug>/<市区町村>/）への導線用。row.city の生値は表記が
+  // 揺れている（郡付き・政令市の区・null）ので、県ページ見出しと同じ解決済みラベルを別に持つ。
+  // 解決できない校（広域通信制のキャンパス列挙住所など）は null＝リンクを出さない。
+  single.cityGroup = resolveCityGroup(row, muniByPref)?.label ?? null
   // 前身校のうち個別ページが存在する id（詳細シートのリンク可否判定用）。
   single.linkableSchoolIds = (row.predecessor_relationships ?? [])
     .map((relationship) => relationship.predecessor?.id)

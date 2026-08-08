@@ -1467,6 +1467,24 @@ button:focus:not(:focus-visible), a:focus:not(:focus-visible), input:focus:not(:
 /* お気に入り済みの印。校名の直後に置き、地図ピンの fav 色（accent）と揃える。 */
 .city-school-fav { margin-left: 4px; color: var(--accent); font-size: 0.9em; }
 
+/* 県ページの各市区町村セクションから、市区町村ページ（/pref/<県>/<市区町村>/）への導線。 */
+.city-page-link { margin: 0; padding: 8px 12px 0; font-size: 0.85rem; }
+.city-page-link a { color: var(--ink-soft); }
+
+/* 学校詳細シートの所在地欄から、所属市区町村ページへ戻る導線。 */
+.city-page-link-inline { display: inline-block; margin-top: 4px; font-size: 0.82rem; }
+
+/* 市区町村ページ本体。details の中ではないので、一覧の左右余白を戻す。 */
+.city-school-list.flat { padding: 0; }
+/* 同一県のコード順で前後にある市区町村への導線（1 校だけの市区町村ページを袋小路にしない）。 */
+.city-nearby { margin: 18px 0 8px; }
+.city-nearby-heading { font-family: var(--display); font-weight: 700; font-size: 1rem; margin: 0 0 8px; }
+.city-nearby ul { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+.city-nearby a {
+  display: inline-block; padding: 6px 10px; border: 2px solid var(--line); border-radius: 999px;
+  background: #fff; text-decoration: none; color: var(--ink); font-size: 0.85rem;
+}
+
 /* ===== サイト共通フッター ===== */
 .site-footer {
   margin: 28px auto 8px; padding-top: 12px; border-top: 1px solid var(--line);
