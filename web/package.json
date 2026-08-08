@@ -12,10 +12,10 @@
     "fetch:tags": "git fetch --unshallow --tags 2>/dev/null || git fetch --deepen=200 --tags 2>/dev/null || git fetch --tags || true",
     "gen:schools-json": "tsx scripts/gen-schools-json.mjs",
     "gen:dataset-fields": "node scripts/gen-dataset-fields.mjs",
-    "typecheck": "tsc --noEmit -p tsconfig.app.json",
-    "lint": "oxlint",
+    "typecheck": "tsc --noEmit -p tsconfig.app.json && tsc --noEmit -p tsconfig.functions.json",
+    "lint": "node scripts/lint.mjs",
     "test": "vitest run && pnpm test:static && pnpm test:functions",
-    "test:static": "node --test scripts/verify-static-output.test.mjs",
+    "test:static": "node --test scripts/verify-static-output.test.mjs scripts/lib/municipalities.test.mjs",
     "test:functions": "node --test ../functions/api/admin/_auth.test.ts ../functions/_middleware.test.ts",
     "verify:static": "node scripts/verify-static-output.mjs --dist dist --max-file-mib 25",
     "preview": "vite preview"
