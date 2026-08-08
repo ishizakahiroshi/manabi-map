@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
@@ -213,6 +213,13 @@ export function MapPage({ userData }: Props) {
   const [mapBounds, setMapBounds] = useState<L.LatLngBounds | null>(null)
   const [schoolListOpen, setSchoolListOpen] = useState(false)
   const [detail, setDetail] = useState<School | null>(null)
+  /** 詳細シートをピーク（校名だけ・地図が見える）で開くか。?school= の着地でだけ true */
+  const [detailPeek, setDetailPeek] = useState(false)
+  /** 詳細シートを開く。地図上の操作（ピン・一覧）は従来どおり全画面で開く */
+  const openDetail = useCallback((school: School, peek = false) => {
+    setDetail(school)
+    setDetailPeek(peek)
+  }, [])
 
   const BAND_CHIPS = useMemo(
     () =>
@@ -434,17 +441,18 @@ export function MapPage({ userData }: Props) {
     mapRef.fitBounds(homeViewBounds(home, schools))
   }, [home, schools, mapRef])
 
-  // 「地図で見る」導線（/map?school=<id>）で開いたら、
-  // 該当校の詳細シートを開いて地図を寄せる（同じ id の再実行はしない）
+  // 「地図で見る」導線（/map?school=<id>）で開いたら、地図を該当校へ寄せて
+  // 詳細シートをピークで開く（同じ id の再実行はしない）。ここで全画面にすると
+  // 地図が隠れ、詳細ページに戻ったように見えてしまう
   useEffect(() => {
     if (!sharedSchoolId || sharedOpenedRef.current === sharedSchoolId || !mapRef || schools.length === 0) return
     sharedOpenedRef.current = sharedSchoolId
     const school = schools.find((s) => s.id === sharedSchoolId)
     if (school) {
-      setDetail(school)
+      openDetail(school, true)
       mapRef.setView([school.latitude, school.longitude], 13)
     }
-  }, [sharedSchoolId, schools, mapRef])
+  }, [sharedSchoolId, schools, mapRef, openDetail])
 
   useEffect(() => {
     document.body.dataset.sheetOpen = detail ? 'true' : 'false'
@@ -482,10 +490,10 @@ export function MapPage({ userData }: Props) {
           kosenBadge,
           integratedBadge,
         ),
-      }).on('click', () => setDetail(s)),
+      }).on('click', () => openDetail(s)),
     )
     cluster.addLayers(schoolMarkers)
-  }, [favorites, home, visibleSchools, fmt, t])
+  }, [favorites, home, visibleSchools, fmt, t, openDetail])
 
   const sortedVisible = useMemo(
     () => [...visibleSchools].sort((a, b) => shortSchoolName(a.name, a).localeCompare(shortSchoolName(b.name, b), 'ja')),
@@ -735,7 +743,7 @@ export function MapPage({ userData }: Props) {
           <ul className="school-list">
             {sortedVisible.map((s) => (
               <li key={s.id}>
-                <button type="button" className="school-list-item" onClick={() => setDetail(s)}>
+                <button type="button" className="school-list-item" onClick={() => openDetail(s)}>
                   <span className="school-list-name">{shortSchoolName(s.name, s)}</span>
                   <span className="school-list-meta">
                     {fmt.displayCode(s)}：{fmt.devLabel(s)}
@@ -758,6 +766,7 @@ export function MapPage({ userData }: Props) {
       {detail && (
         <SchoolDetailSheet
           school={detail}
+          initialPeek={detailPeek}
           onClose={() => {
             setDetail(null)
             // ?school= 経由なら、シートを閉じた時点で通常の地図 URL に戻す。

@@ -329,11 +329,19 @@ export async function geocodeSearch(q: string): Promise<GeocodeCandidate[]> {
  * ホーム地点ラベルの短縮表示（「{label} の近く」向け）。
  * アクティブなリージョン内の都道府県名は文脈上自明なので落とす（旧: 群馬県ハードコード）。
  * 落とした結果が空・「周辺」だけ（例: 郵便番号の暫定ラベル「北海道周辺」）になる場合は元のまま返す。
+ * 「群馬県立渋川工業高等学校」のように県名の直後が「立」の場合は落とさない（落とすと
+ * 「立渋川工業高等学校」と頭が欠けて見える。学校名を検索地点にすると起きる）。
  */
 export function shortLabel(s: string): string {
   const base = (s || '').split(',').slice(0, 2).join(',')
   let out = base
-  for (const p of ACTIVE_REGION.prefectures) out = out.replace(p.name, '')
+  for (const p of ACTIVE_REGION.prefectures) {
+    const at = out.indexOf(p.name)
+    if (at < 0) continue
+    const rest = out.slice(at + p.name.length)
+    if (rest.startsWith('立')) continue
+    out = out.slice(0, at) + rest
+  }
   out = out.replace(/^[\s,、]+|[\s,、]+$/g, '')
   return out && out !== '周辺' ? out : base || s
 }

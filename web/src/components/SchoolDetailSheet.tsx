@@ -53,6 +53,12 @@ interface Props {
   extras?: SchoolDetailExtras | null
   /** 単独ページ（/school/:id）として表示中。「地図で見る」導線を出す。 */
   standalone?: boolean
+  /**
+   * 校名だけが見える低いシート（ピーク）で開く。「地図で見る」（/map?school=<id>）の
+   * 着地はこれ。全画面で開くと地図が完全に隠れ、詳細ページに戻ったように見えてしまう。
+   * ハンドル（または上スワイプ）で全画面へ展開できる。
+   */
+  initialPeek?: boolean
 }
 
 /**
@@ -61,7 +67,7 @@ interface Props {
  */
 const NEIGHBOR_PREVIEW_COUNT = 5
 
-export function SchoolDetailSheet({ school, onClose, userData, extras, standalone }: Props) {
+export function SchoolDetailSheet({ school, onClose, userData, extras, standalone, initialPeek }: Props) {
   const navigate = useNavigate()
   const { home, toast, setLoginOpen } = useApp()
   const { session } = useAuth()
@@ -106,6 +112,13 @@ export function SchoolDetailSheet({ school, onClose, userData, extras, standalon
   const schoolId = school?.id ?? null
   const open = school != null
 
+  /** ピーク（校名だけ）↔ 全画面。ピークで開いた時だけ、展開するまで地図が見える */
+  const [expanded, setExpanded] = useState(!initialPeek)
+  // 別の学校へ切り替わったとき（地図のピン → 別のピン等）は開き方をやり直す
+  useEffect(() => {
+    setExpanded(!initialPeek)
+  }, [schoolId, initialPeek])
+
   // 近隣校・後継校の算出用。受動購読（キャッシュがあれば使う・無くても全件 fetch を
   // 起動しない）。/school/:id 直リンク着地時は extras（単体 JSON 同梱の事前計算値）が
   // 渡され、地図・お気に入り等の全件ロード済み画面では下の共有ロジック計算が使われる。
@@ -129,7 +142,8 @@ export function SchoolDetailSheet({ school, onClose, userData, extras, standalon
   const successors: SuccessorRef[] =
     extras?.successors ?? (school ? (successorsById.get(school.id) ?? []) : [])
 
-  useFocusTrap(sheetRef, open)
+  // ピーク中は地図を触らせたいので、フォーカスを閉じ込めない（背景は隠れていない）
+  useFocusTrap(sheetRef, open && expanded)
   useEscapeKey(onClose, open)
 
   useEffect(() => {
@@ -601,21 +615,30 @@ export function SchoolDetailSheet({ school, onClose, userData, extras, standalon
     touchCurrentY.current = null
     if (startY == null) return
     const endY = event.changedTouches[0]?.clientY ?? currentY ?? startY
-    if (endY - startY > 60) onClose()
+    // ピーク中の上スワイプは全画面へ。下スワイプは従来どおり閉じる
+    if (!expanded && startY - endY > 60) setExpanded(true)
+    else if (endY - startY > 60) onClose()
   }
 
   return (
     <div
       ref={sheetRef}
-      className="sheet full"
+      className={expanded ? 'sheet full' : 'sheet peek'}
       role="dialog"
-      aria-modal="true"
+      // ピーク中は背景（地図）を覆っていないので modal を宣言しない
+      aria-modal={expanded ? true : undefined}
       aria-label={school.name}
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
     >
-      <button className="handle" onClick={onClose} aria-label={t('common.close')} />
+      <button
+        className="handle"
+        onClick={expanded ? onClose : () => setExpanded(true)}
+        aria-label={expanded ? t('common.close') : t('detail.expandSheet')}
+      >
+        {!expanded && <span className="handle-hint">▲ {t('detail.expandSheet')}</span>}
+      </button>
       <div className="head">
         {standalone && (
           <button className="icon-btn" onClick={onClose} aria-label={t('common.back')}>
