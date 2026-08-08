@@ -22,8 +22,13 @@ Manabi Map（まなびマップ）は、親子で学校選びを考えるため�
 - 全都道府県: `https://manabi-map.app/api/v1/schools.json`
 - 県別: `https://manabi-map.app/api/v1/schools/<prefecture>.json`（例: `gunma`）
 - メタデータ: `https://manabi-map.app/api/v1/dataset.json`
+- 呼び方の定義（OpenAPI 3.1）: `https://manabi-map.app/api/v1/openapi.json`
 
 いずれもリリース時に更新する静的 JSON です。検索条件付きリクエストや POST は提供しません。`/api/v1/` 内では後方互換性を維持し、破壊的変更が必要な場合は `/api/v2/` を新設します。
+
+認証は不要で、CORS はすべての origin に開いています（`Access-Control-Allow-Origin: *`）。ブラウザ上で動くプログラムからもそのまま読めます。
+
+`openapi.json` には、3 つのエンドポイントと、どの学校にも必ずある項目（`id` / `record_key` / `name` / `prefecture` / `official_url` / `provenance`）だけを定義しています。それ以外の項目は出典が確認できた学校にだけ現れるため、型と収録条件は下記「フィールド定義」が正典です。
 
 ## フィールド定義
 

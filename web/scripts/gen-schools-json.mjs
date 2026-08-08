@@ -6,6 +6,7 @@ import { gzipSync } from 'node:zlib'
 import { createClient } from '@supabase/supabase-js'
 import { loadCivicData, resolveCityGroup, UNRESOLVED_CITY_LABEL } from './lib/municipalities.mjs'
 import {
+  buildOpenApiDocument,
   buildPublicSchoolRecords,
   DATASET_ATTRIBUTION,
   DATASET_CLAIM,
@@ -300,6 +301,22 @@ await writeFile(
       { content_url_template: 'https://manabi-map.app/api/v1/schools/{prefecture}.json', encoding_format: 'application/json' },
     ],
   }, null, 2)}\n`,
+)
+
+// --- 呼び方の契約（OpenAPI）--------------------------------------------------
+// dataset.json が「何が入っているか」の台帳、openapi.json が「どう呼ぶか」の契約。
+// 記述の実体は scripts/lib/public-api.mjs に置く（DATA.md の生成元と同じ場所に集め、
+// 公開する項目とその説明が別々の場所で食い違わないようにする）。
+await writeFile(
+  join(publicApiRoot, 'openapi.json'),
+  `${JSON.stringify(
+    buildOpenApiDocument({
+      version: packageJson.version,
+      prefectureSlugs: Object.keys(prefApiCounts),
+    }),
+    null,
+    2,
+  )}\n`,
 )
 
 const cityGroups = new Map()

@@ -592,6 +592,10 @@ export async function verifyStaticOutput({
     const value = JSON.parse(await readFile(file.path, 'utf8'))
     const leakPath = findDeviationLeak(value)
     if (leakPath) throw new Error(`deviation data found in ${file.relativePath} at ${leakPath}`)
+    // openapi.json はデータではなくスキーマ。official_url は「出典 URL の値」ではなく
+    // プロパティ定義なので、以降の出典ホスト・出典名の検査は当てない
+    // （偏差値ガードは上で当て済み。ここで抜けるのはガードの緩和ではない）。
+    if (file.relativePath === 'api/v1/openapi.json') continue
     for (const sourceUrl of collectOfficialUrls(value)) {
       const host = urlHost(sourceUrl, file.relativePath)
       if (FORBIDDEN_SOURCE_HOSTS.some((pattern) => pattern.test(host))) {
@@ -650,6 +654,72 @@ export async function verifyStaticOutput({
     )
   ) {
     throw new Error('/api/v1/dataset.json prefecture metadata does not match the public API files')
+  }
+
+  // --- 呼び方の契約（OpenAPI）---
+  // dataset.json が「何が入っているか」、openapi.json が「どう呼ぶか」を持つ。
+  // 記述と実体が食い違っても静的配信は 200 を返し続けるため、外部クライアントは
+  // 黙って壊れる。パス・県 slug・必須フィールドを実出力と突き合わせて落とす。
+  const openapi = JSON.parse(await readFile(join(apiRoot, 'openapi.json'), 'utf8'))
+  if (openapi.info?.version !== datasetMetadata.version) {
+    throw new Error(
+      `/api/v1/openapi.json version mismatch: openapi=${openapi.info?.version} dataset=${datasetMetadata.version}`,
+    )
+  }
+  if (openapi.info?.license?.url !== DATASET_LICENSE_URL) {
+    throw new Error('/api/v1/openapi.json is missing the dataset license')
+  }
+  if (openapi.servers?.[0]?.url !== SITE_ORIGIN) {
+    throw new Error(`/api/v1/openapi.json server must be ${SITE_ORIGIN}`)
+  }
+  const documentedApiPaths = Object.keys(openapi.paths ?? {})
+  const expectedApiPaths = [
+    '/api/v1/dataset.json',
+    '/api/v1/schools.json',
+    '/api/v1/schools/{prefecture}.json',
+  ]
+  if (
+    documentedApiPaths.length !== expectedApiPaths.length ||
+    expectedApiPaths.some((path) => !documentedApiPaths.includes(path))
+  ) {
+    throw new Error(
+      `/api/v1/openapi.json paths do not match the published endpoints: ${documentedApiPaths.join(', ')}`,
+    )
+  }
+  const documentedPrefSlugs = new Set(
+    openapi.paths['/api/v1/schools/{prefecture}.json'].get?.parameters
+      ?.find((parameter) => parameter?.name === 'prefecture')?.schema?.enum ?? [],
+  )
+  if (
+    documentedPrefSlugs.size !== actualPrefApiSlugs.size ||
+    [...actualPrefApiSlugs].some((slug) => !documentedPrefSlugs.has(slug))
+  ) {
+    throw new Error(
+      '/api/v1/openapi.json prefecture enum does not match the published files: ' +
+      `documented=${documentedPrefSlugs.size} actual=${actualPrefApiSlugs.size}`,
+    )
+  }
+  // 「必ずある」と宣言した項目が実データで欠けていたら、契約の方が嘘になる。
+  const requiredSchoolFields = openapi.components?.schemas?.School?.required ?? []
+  if (requiredSchoolFields.length === 0) {
+    throw new Error('/api/v1/openapi.json School schema declares no required fields')
+  }
+  for (const record of publicPayload.schools) {
+    for (const field of requiredSchoolFields) {
+      if (record[field] == null) {
+        throw new Error(
+          `/api/v1/openapi.json declares "${field}" as required but ${record.id} does not have it`,
+        )
+      }
+    }
+  }
+
+  // 公開 API の CORS。落ちるとブラウザ内で動くクライアント（他サイトの JS・
+  // ブラウザ内 AI エージェント）から読めなくなるが、curl では 200 が返るので気づけない。
+  const headersText = await readFile(join(absoluteDist, '_headers'), 'utf8')
+  const apiHeaderBlock = headersText.split(/\n(?=\S)/).find((block) => block.startsWith('/api/v1/*'))
+  if (!apiHeaderBlock || !/^\s*Access-Control-Allow-Origin:\s*\*\s*$/mi.test(apiHeaderBlock)) {
+    throw new Error('_headers must serve /api/v1/* with Access-Control-Allow-Origin: *')
   }
 
   // --- 学校ページ全件検査 ---
@@ -866,7 +936,10 @@ export async function verifyStaticOutput({
   if (
     !llms.includes(DATASET_CLAIM) ||
     !llms.includes(`${SITE_ORIGIN}/data/`) ||
-    !llms.includes(`${SITE_ORIGIN}/api/v1/schools.json`)
+    !llms.includes(`${SITE_ORIGIN}/api/v1/schools.json`) ||
+    // 呼び方の契約への入口。ここが無いと、エージェントは llms.txt から
+    // 「データがある」ことしか分からず、呼び出し方を推測することになる。
+    !llms.includes(`${SITE_ORIGIN}/api/v1/openapi.json`)
   ) {
     throw new Error('llms.txt is missing dataset claim or public API URLs')
   }

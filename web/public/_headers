@@ -34,5 +34,10 @@
   Cache-Control: public, max-age=31536000, immutable
 
 # 出典追跡可能な公開 API。固定 URL のため 1 時間で再検証する。
+# CORS を全許可するのは、CC BY-SA 4.0 で誰でも再配布できるデータを配っているため。
+# これが無いと、ブラウザ内で動く利用者（他サイトの JS・AI エージェント）から
+# fetch できない（サーバー経由でしか読めない）。認証も Cookie も無いので
+# credentials は許可しない（既定のまま）。
 /api/v1/*
   Cache-Control: public, max-age=3600
+  Access-Control-Allow-Origin: *
