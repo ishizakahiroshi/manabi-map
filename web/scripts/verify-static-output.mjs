@@ -139,6 +139,26 @@ function checkSafeHrefAttributes(html, pageLabel) {
   }
 }
 
+/** gen-seo-pages.mjs (SSR) が走ったことの印を検査する。
+ * 手書き HTML の残骸・SSR 失敗・空の #root は、そのページ種別が出すべき class 属性を
+ * 持たないので検出できる（plan_ssr-hydration.md C5）。空の #root を素通りさせないための線。 */
+function assertSsrMarker(html, pageLabel, expectedClass) {
+  if (!html.includes(`class="${expectedClass}"`)) {
+    throw new Error(
+      `SSR marker class="${expectedClass}" is missing on ${pageLabel} ` +
+      `(gen-seo-pages.mjs failure or stale hand-written template)`,
+    )
+  }
+}
+
+/** C3 の成果物・初期データ埋め込み script が載っていることを検査する。
+ * トップは初期データが不要なため対象外。県ページ・学校詳細は必須。 */
+function assertInitialDataScript(html, pageLabel) {
+  if (!/<script type="application\/json" id="__MM_INITIAL__">/.test(html)) {
+    throw new Error(`${pageLabel} is missing #__MM_INITIAL__ initial data script (SSR hydration source)`)
+  }
+}
+
 function urlHost(value, label) {
   try {
     const parsed = new URL(value)
@@ -708,6 +728,11 @@ export async function verifyStaticOutput({
         throw new Error(`admission table without 出典 URL on ${pageLabel}`)
       }
     }
+    // SSR 成果物の検査（plan_ssr-hydration.md C5）。学校詳細は SchoolDetailSheet が
+    // <h1 class="detail-title">校名（…）</h1> を出す。これが無ければ SSR が走っていない。
+    assertSsrMarker(html, pageLabel, 'detail-title')
+    // 初期データ script（ #__MM_INITIAL__ ）は学校単体 payload を埋め込むため必須。
+    assertInitialDataScript(html, pageLabel)
   }
 
   // --- トップ ---
@@ -715,6 +740,11 @@ export async function verifyStaticOutput({
     const main = checkPageSkeleton(topHtml, '/', `${SITE_ORIGIN}/`)
     if (!/<h1[\s>]/.test(main)) throw new Error('missing <h1> on /')
     checkForbiddenWords(main, '/', { includeCommutePhrase: false })
+    // SSR 成果物の検査（plan_ssr-hydration.md C5）。HomePage は <main id="main-content" class="content home-content">
+    // を出す。これが無ければ SSR が走っていないか古い手書き HTML が残っている。トップは
+    // 初期データ script が不要（plan_ssr-hydration_c3 C3 の設計・収録件数のみ埋め込む予定だったが
+    // トップは schools-manifest を待たずに表示できるため現状 #__MM_INITIAL__ は無い）。
+    assertSsrMarker(topHtml, '/', 'content home-content')
     for (const pref of activePrefectures) {
       if (!main.includes(`href="/pref/${pref.slug}/"`)) {
         throw new Error(`top page is missing crawl link to /pref/${pref.slug}/`)
@@ -766,6 +796,12 @@ export async function verifyStaticOutput({
         throw new Error(`${pageLabel} has jump link to missing section: #${id}`)
       }
     }
+    // SSR 成果物の検査（plan_ssr-hydration.md C5）。PrefecturePage は
+    // <main id="main-content" class="content hub-content"> を出す。県ページは
+    // 軽量インデックス（pref-index-<slug>.json）を初期データとして埋め込むので
+    // #__MM_INITIAL__ も必須。
+    assertSsrMarker(html, pageLabel, 'content hub-content')
+    assertInitialDataScript(html, pageLabel)
   }
 
   // --- /data/・/press・/legal/* ---
