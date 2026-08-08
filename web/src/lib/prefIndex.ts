@@ -16,6 +16,12 @@ import type {
   SchoolLifecycleStatus,
   SchoolRecruitmentStatus,
 } from '../types/school'
+import {
+  buildCityCounts as buildSharedCityCounts,
+  cityPagePath,
+} from '../../scripts/lib/city-index-shared.mjs'
+
+export { cityPagePath }
 
 /** ディスク／埋め込み用の短縮キー。展開は expandPrefSchool だけが行う（フォーク禁止）。 */
 export interface CompactPrefSchool {
@@ -82,17 +88,10 @@ export interface CityPagePayload {
  * pref-index から市区町村ごとの掲載校数を、コード順で作る。
  *
  * **gen-seo-pages.mjs の埋め込み生成と同じ結果になること**（違うと hydration が食い違う）。
- * Node 側は .ts を import できないので同じロジックを持っている。
+ * 実装は Node 側と共有する純粋な .mjs モジュールに置く。
  */
 export function buildCityCounts(payload: PrefIndexPayload): CityCount[] {
-  const counts = new Map<string, number>()
-  for (const entry of payload.schools) {
-    if (entry.c == null) continue
-    counts.set(entry.c, (counts.get(entry.c) ?? 0) + 1)
-  }
-  return payload.cities
-    .filter((city) => counts.has(city))
-    .map((city) => ({ c: city, n: counts.get(city) ?? 0 }))
+  return buildSharedCityCounts(payload)
 }
 
 /**
@@ -101,10 +100,6 @@ export function buildCityCounts(payload: PrefIndexPayload): CityCount[] {
  * 日本語ラベルを percent-encode する。canonical・sitemap・BreadcrumbList の item も
  * すべてこの表記で統一すること（gen-seo-pages.mjs 側も同じ形を作る）。
  */
-export function cityPagePath(prefSlug: string, city: string): string {
-  return `/pref/${prefSlug}/${encodeURIComponent(city)}/`
-}
-
 /** 近隣導線に出す市区町村の数（前後それぞれ）。 */
 export const CITY_SIBLING_SPAN = 3
 

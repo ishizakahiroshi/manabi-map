@@ -212,20 +212,19 @@ async function upsert(table, rows, conflictColumns) {
 
 async function main() {
   const failures = []
-  // PostgREST の一括 upsert は全行が同じキーセットを持つことを要求する (PGRST102)。
-  // 一部の日だけ値が付く列があるため、先に全カラムを null で埋めて揃える。
-  const dailyColumns = {
-    gsc_clicks: null, gsc_impressions: null, gsc_avg_position: null, sitemap_page_count: null,
-    cf_visits: null, cf_pageviews: null, app_users_total: null, app_users_line: null,
-    app_users_anon: null, favorites_total: null, notes_total: null, home_points_total: null,
-  }
-  const daily = new Map(dates.map((date) => [date, { snapshot_date: date, ...dailyColumns }]))
+  // PostgREST の一括 upsert は全行が同じキーセットを要求する (PGRST102)。
+  // 取得できなかった値を null で送ると既存の指標を消すため、値が取れた列集合ごとに分けて送る。
+  const daily = new Map(dates.map((date) => [date, { snapshot_date: date }]))
   let gsc
   let cloudflare
 
   try {
     gsc = await fetchGsc()
-    for (const [date, values] of gsc.daily) Object.assign(daily.get(date), values)
+    for (const [date, values] of gsc.daily) {
+      for (const [key, value] of Object.entries(values)) {
+        if (value !== null) daily.get(date)[key] = value
+      }
+    }
     await upsert('dash_gsc_queries', gsc.queries, 'snapshot_date,query')
     await upsert('dash_gsc_pages', gsc.pages, 'snapshot_date,page')
   } catch (error) {
@@ -233,7 +232,11 @@ async function main() {
   }
   try {
     cloudflare = await fetchCloudflare()
-    for (const [date, values] of cloudflare.daily) Object.assign(daily.get(date), values)
+    for (const [date, values] of cloudflare.daily) {
+      for (const [key, value] of Object.entries(values)) {
+        if (value !== null) daily.get(date)[key] = value
+      }
+    }
     await upsert('dash_cf_referers', cloudflare.referers, 'snapshot_date,referer')
     await upsert('dash_cf_dims', cloudflare.dims, 'snapshot_date,dim_type,dim_value')
     for (const warning of cloudflare.warnings) console.warn(warning)
@@ -260,7 +263,18 @@ async function main() {
     failures.push(`Supabase app metrics: ${error.message}`)
   }
 
-  await upsert('dash_daily', [...daily.values()], 'snapshot_date')
+  const dailyGroups = new Map()
+  for (const row of daily.values()) {
+    const keys = Object.keys(row).filter((key) => key !== 'snapshot_date').sort()
+    if (keys.length === 0) continue
+    const groupKey = keys.join(',')
+    const group = dailyGroups.get(groupKey) ?? []
+    group.push(row)
+    dailyGroups.set(groupKey, group)
+  }
+  for (const rows of dailyGroups.values()) {
+    await upsert('dash_daily', rows, 'snapshot_date')
+  }
   console.log(`${DRY_RUN ? 'dry-run complete' : 'snapshot complete'}: ${startDate} to ${endDate}`)
   if (failures.length) {
     for (const failure of failures) console.error(failure)

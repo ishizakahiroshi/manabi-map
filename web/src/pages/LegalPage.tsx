@@ -21,7 +21,10 @@ export function LegalPage({ doc }: Props) {
   // HTML が CDN キャッシュに残っている状況では古くなるので、**正典は常に
   // /legal/*.md 側**とし、hydration 後に必ず取り直して上書きする。
   // fetch 失敗時も埋め込みを消さないので、画面が空になることはない。
-  const [body, setBody] = useState<string | null>(() => getInitialData()?.docMarkdown ?? null)
+  const [body, setBody] = useState<string | null>(() => {
+    const embedded = getInitialData()?.docMarkdown
+    return embedded?.key === `legal/${doc}` ? embedded.text : null
+  })
   const [error, setError] = useState(false)
   // 直前に表示していた doc。切り替わったときだけ body をクリアする
   // （初回マウントで埋め込みを setBody(null) するとちらつく）。

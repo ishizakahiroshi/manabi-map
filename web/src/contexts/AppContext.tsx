@@ -129,6 +129,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // migratedFor は成功時のみ立てる（失敗時に再試行できるよう、エラーで固定しない）
   useEffect(() => {
     if (!session) {
+      // 実ログインからのサインアウト後は、前ユーザーの地点を次のユーザーへ移送しない。
+      // 初回の未ログイン状態では activeHomeUserId が null のため、匿名利用の引き継ぎは残る。
+      if (activeHomeUserId.current !== null) {
+        try { localStorage.removeItem(HOME_KEY) } catch { /* noop */ }
+        activeHomeUserId.current = null
+        migratedFor.current = null
+        setHomeState(null)
+        return
+      }
       activeHomeUserId.current = null
       migratedFor.current = null
       setHomeState(loadLocalHome())

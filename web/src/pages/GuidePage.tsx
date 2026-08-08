@@ -21,7 +21,10 @@ export function GuidePage({ slug }: Props) {
   // プリレンダーが埋め込んだ本文があれば初回 render から使う（plan_ssr-hydration.md）。
   // 埋め込みはビルド時点の値なので、正典は常に /guide/*.md。hydration 後に取り直す。
   // fetch 失敗時も埋め込みを消さないので、画面が空になることはない。
-  const [body, setBody] = useState<string | null>(() => getInitialData()?.docMarkdown ?? null)
+  const [body, setBody] = useState<string | null>(() => {
+    const embedded = getInitialData()?.docMarkdown
+    return guide && embedded?.key === `guide/${guide.slug}` ? embedded.text : null
+  })
   const [error, setError] = useState(false)
   // 直前に表示していた slug。切り替わったときだけ body をクリアする
   // （初回マウントで埋め込みを setBody(null) するとちらつく）。

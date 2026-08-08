@@ -227,11 +227,11 @@ function withJsonLd(html, jsonLd) {
  * 中に入れると React の管理下に無い要素が紛れて hydration が食い違う
  * （plan_ssr-hydration.md）。
  */
-function withRootContent(html, content, afterRoot = '') {
+function withRootContent(html, content, afterRoot = '', route = '/') {
   return replaceOrThrow(
     html,
     /<div id="root"><\/div>/,
-    () => `<div id="root">${content}</div>${afterRoot}`,
+    () => `<div id="root" data-mm-route="${escapeHtml(route)}">${content}</div>${afterRoot}`,
     '#root',
   )
 }
@@ -607,6 +607,7 @@ async function renderSchoolPage(school) {
     withJsonLd(withJsonLd(withHead, jsonLd), breadcrumbLd),
     rendered.html,
     rendered.initialScript,
+    `/school/${school.id}`,
   )
 }
 
@@ -709,7 +710,7 @@ function renderPrefPage(pref, prefIndex) {
     '地図で場所を確認し、気になる学校の保存や家族での見学メモ共有ができる無料の学校選びサービスです。'
   const withHead = renderHead(template, { title, description, url })
   const rendered = renderApp(`/pref/${pref.slug}`, { prefPage: prefIndex })
-  return withRootContent(withHead, rendered.html, rendered.initialScript)
+  return withRootContent(withHead, rendered.html, rendered.initialScript, `/pref/${pref.slug}`)
 }
 
 /**
@@ -754,7 +755,7 @@ function renderCityPage(pref, prefIndex, cityCounts, city, count) {
   }
   const withHead = renderHead(template, { title, description, url })
   const rendered = renderApp(path, { cityPage: payload })
-  return withRootContent(withJsonLd(withHead, breadcrumbLd), rendered.html, rendered.initialScript)
+  return withRootContent(withJsonLd(withHead, breadcrumbLd), rendered.html, rendered.initialScript, path)
 }
 
 function renderSchoolsHubPage() {
@@ -768,7 +769,7 @@ function renderSchoolsHubPage() {
     `${coverageText(schools)}都道府県から高校一覧を開き、市区町村ごとの学校と地図を確認できます。` +
     'お気に入り保存・見学メモの家族共有ができる無料の学校選びサービスです。'
   const withHead = renderHead(template, { title, description, url })
-  return withRootContent(withHead, renderApp('/schools').html)
+  return withRootContent(withHead, renderApp('/schools').html, '', '/schools')
 }
 
 // --- /press と /legal/*（E-E-A-T の機械可読化） ------------------------------
@@ -857,6 +858,7 @@ function renderDataPage() {
     withJsonLd(withHead, datasetJsonLd),
     rendered.html,
     rendered.initialScript,
+    '/data',
   )
 }
 
@@ -867,7 +869,7 @@ function renderPressPage() {
     'Manabi Map（まなびマップ）のメディア関係者・教育関係者向け基礎情報。運営者・連絡先・配布素材・' +
     '掲載情報の訂正窓口（takedown@manabi-map.app）を公開しています。'
   const withHead = renderHead(template, { title, description, url })
-  return withRootContent(withJsonLd(withHead, ORGANIZATION_JSON_LD), renderApp('/press').html)
+  return withRootContent(withJsonLd(withHead, ORGANIZATION_JSON_LD), renderApp('/press').html, '', '/press')
 }
 
 // --- 404（ソフト 404 の解消） ------------------------------------------------
@@ -887,7 +889,7 @@ function render404Page() {
     'noindex(404)',
   )
   // 存在しない URL を渡して NotFoundPage を描かせる（React Router の * ルート）。
-  return withRootContent(html, renderApp('/__not-found__').html)
+  return withRootContent(html, renderApp('/__not-found__').html, '', '/__not-found__')
 }
 
 // --- 書き出し ----------------------------------------------------------------
@@ -904,6 +906,7 @@ await writeFile(
     withJsonLd(template, ORGANIZATION_JSON_LD),
     topRendered.html,
     topRendered.initialScript,
+    '/',
   ),
 )
 
@@ -954,12 +957,14 @@ for (const { doc, title } of LEGAL_DOCS) {
   // node 側で HTML 化して流し込むと、React の出力と 1 文字でも違った時点で hydration が壊れる。
   const markdown = await readFile(join(distDir, 'legal', `${doc}.md`), 'utf8')
   const withHead = renderHead(template, { title: `${title} | Manabi Map`, description, url })
-  const rendered = renderApp(`/legal/${doc}`, { docMarkdown: markdown })
+  const rendered = renderApp(`/legal/${doc}`, {
+    docMarkdown: { key: `legal/${doc}`, text: markdown },
+  })
   const outDir = join(distDir, 'legal', doc)
   await mkdir(outDir, { recursive: true })
   await writeFile(
     join(outDir, 'index.html'),
-    withRootContent(withHead, rendered.html, rendered.initialScript),
+    withRootContent(withHead, rendered.html, rendered.initialScript, `/legal/${doc}`),
   )
 }
 
@@ -971,12 +976,14 @@ for (const guide of GUIDES) {
     description: guide.description,
     url,
   })
-  const rendered = renderApp(`/guide/${guide.slug}`, { docMarkdown: markdown })
+  const rendered = renderApp(`/guide/${guide.slug}`, {
+    docMarkdown: { key: `guide/${guide.slug}`, text: markdown },
+  })
   const outDir = join(distDir, 'guide', guide.slug)
   await mkdir(outDir, { recursive: true })
   await writeFile(
     join(outDir, 'index.html'),
-    withRootContent(withHead, rendered.html, rendered.initialScript),
+    withRootContent(withHead, rendered.html, rendered.initialScript, `/guide/${guide.slug}`),
   )
 }
 

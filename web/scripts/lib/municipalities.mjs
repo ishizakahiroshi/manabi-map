@@ -14,6 +14,9 @@
 
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
+import { buildCityCounts, cityPagePath } from './city-index-shared.mjs'
+
+export { buildCityCounts, cityPagePath }
 
 /** web ルート配下の data/*.json を読む。 */
 export async function loadCivicData(webRoot) {
@@ -112,28 +115,6 @@ export const UNRESOLVED_CITY_LABEL = 'その他'
  * canonical・sitemap・BreadcrumbList の item・React 側リンクがすべてこの表記で
  * 一致している必要がある（ズレると自 URL 不一致で verify:static が落ちる）。
  */
-export function cityPagePath(prefSlug, city) {
-  return `/pref/${prefSlug}/${encodeURIComponent(city)}/`
-}
-
-/**
- * pref-index から市区町村ごとの掲載校数を、コード順（cities の並び）で作る。
- *
- * **`src/lib/prefIndex.ts` の `buildCityCounts` と同一の結果になること。**
- * ここで作った値をプリレンダー HTML に埋め、ブラウザ側は同じ関数の TS 版で
- * 再計算する。食い違うと hydration が壊れる。
- */
-export function buildCityCounts(prefIndex) {
-  const counts = new Map()
-  for (const entry of prefIndex.schools) {
-    if (entry.c == null) continue
-    counts.set(entry.c, (counts.get(entry.c) ?? 0) + 1)
-  }
-  return prefIndex.cities
-    .filter((city) => counts.has(city))
-    .map((city) => ({ c: city, n: counts.get(city) }))
-}
-
 /**
  * 県内の学校を市区町村グループへ分ける。
  * 返り値: [{ label, code, kana, schools }] を市区町村コード順で。
