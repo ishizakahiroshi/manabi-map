@@ -58,16 +58,22 @@ async function collectTypeScriptSources(root) {
 }
 
 /** 検証対象の骨格（canonical / og:url / title / main）を持つ最小ページを合成する。
- * jsonLd は単体 object でも配列でもよい（配列は本番同様に script タグを分けて出す）。 */
-function page({ title, canonical, main, jsonLd, noindex = false, footer = '' }) {
+ * jsonLd は単体 object でも配列でもよい（配列は本番同様に script タグを分けて出す）。
+ * mainAttrs で SSR 出力特有の <main> クラスを再現する（plan_ssr-hydration.md C5 検査用）。
+ * initialData を渡すと #__MM_INITIAL__ script を #root の直後に出す。 */
+function page({ title, canonical, main, jsonLd, noindex = false, footer = '', mainAttrs = '', initialData = null }) {
   const canonicalTag = canonical ? `<link rel="canonical" href="${canonical}">` : ''
   const ogUrl = canonical ? `<meta property="og:url" content="${canonical}">` : ''
   const robots = noindex ? '<meta name="robots" content="noindex" />' : ''
   const jsonLdTag = (Array.isArray(jsonLd) ? jsonLd : jsonLd ? [jsonLd] : [])
     .map((block) => `<script type="application/ld+json">${JSON.stringify(block)}</script>`)
     .join('')
+  const mainOpen = mainAttrs ? `<main ${mainAttrs}>` : '<main>'
+  const initialScriptTag = initialData != null
+    ? `<script type="application/json" id="__MM_INITIAL__">${JSON.stringify(initialData).replace(/</g, '\\u003c')}</script>`
+    : ''
   return `<!doctype html><html><head><title>${title}</title>${robots}${canonicalTag}${ogUrl}${jsonLdTag}</head>` +
-    `<body><div id="root"><main>${main}</main></div>${footer}</body></html>`
+    `<body><div id="root">${mainOpen}${main}</main></div>${initialScriptTag}${footer}</body></html>`
 }
 
 /** 学校ページの BreadcrumbList JSON-LD（本番: ホーム › 県 › 市区町村 › 校名）。 */
@@ -184,6 +190,9 @@ async function syntheticDist() {
     title: 'Manabi Map',
     canonical: `${ORIGIN}/`,
     main: '<h1>親子で使う、学校選びの地図ノート。</h1><nav><a href="/pref/gunma/">群馬県</a></nav>',
+    // SSR 検査: HomePage は <main id="main-content" class="content home-content"> を出す。
+    // トップは初期データ script が不要なため initialData を渡さない（本番と同じ）。
+    mainAttrs: 'id="main-content" class="content home-content"',
     jsonLd: [
       { '@context': 'https://schema.org', '@type': 'WebSite', '@id': `${ORIGIN}/#website`, name: 'Manabi Map' },
       { '@context': 'https://schema.org', '@type': 'Organization', '@id': `${ORIGIN}/#organization`, name: 'Manabi Map' },
@@ -204,6 +213,10 @@ async function syntheticDist() {
       '<section id="前橋市"><h2>前橋市（2 校）</h2><ul>' +
       SCHOOLS.map((s) => `<li><a href="/school/${s.id}/">${s.name}</a></li>`).join('') +
       '</ul></section>',
+    // SSR 検査: PrefecturePage は <main id="main-content" class="content hub-content"> を出す。
+    // 県ページは pref-index 軽量データを初期として埋め込むので #__MM_INITIAL__ も必須。
+    mainAttrs: 'id="main-content" class="content hub-content"',
+    initialData: { slug: 'gunma', cities: ['前橋市'] },
   }))
   await mkdir(join(dir, 'press'), { recursive: true })
   await writeFile(join(dir, 'press', 'index.html'), page({
@@ -266,7 +279,8 @@ async function syntheticDist() {
     await writeFile(join(schoolDir, 'index.html'), page({
       title: `${school.name}（${school.prefecture}前橋市）の地図・アクセス・学科 | Manabi Map`,
       canonical: `${ORIGIN}/school/${school.id}/`,
-      main: `<h1>${school.name}</h1>` +
+      // h1 は React の実出力なので class="detail-title" を持つ（SSR 検査対応）。
+      main: `<h1 class="detail-title">${school.name}</h1>` +
         `<section><h2>${school.name}の近くにある高校</h2>` +
         '<p>直線距離の近い順に 1 校。実際の通学経路・所要時間は交通手段により異なります。</p>' +
         `<ul><li><a href="/school/${neighbor.id}/">${neighbor.name}</a>（前橋市・約 1.0 km）</li></ul></section>`,
@@ -274,6 +288,10 @@ async function syntheticDist() {
         schoolLd(school.name),
         breadcrumbLd(school.name),
       ],
+      // SSR 検査: 学校詳細は <main id="main-content"> を出す（class="content" は loading 時のみ。
+      // 本番は school != null の分岐なので class が付かない）。
+      mainAttrs: 'id="main-content"',
+      initialData: { schools: [school] },
     }))
   }
   await writeFile(join(dir, 'sitemap.xml'), [
@@ -446,6 +464,88 @@ test('a school page without the neighbor section is rejected', async (t) => {
   await assert.rejects(
     verifyStaticOutput({ distDir: dir, maxFileBytes: 1024 * 1024 }),
     /missing neighbor section heading/,
+  )
+})
+
+test('a school page missing SSR detail-title class is rejected (plan_ssr-hydration C5)', async (t) => {
+  const dir = await syntheticDist()
+  t.after(() => rm(dir, { recursive: true, force: true }))
+  // synthetic-b を「class="detail-title" が無い h1」で上書き。#_MM_INITIAL__ は残す。
+  await writeFile(join(dir, 'school', 'synthetic-b', 'index.html'), page({
+    title: '合成第二高等学校（群馬県前橋市）の地図・アクセス・学科 | Manabi Map',
+    canonical: `${ORIGIN}/school/synthetic-b/`,
+    main: '<h1>合成第二高等学校</h1>' +
+      '<section><h2>合成第二高等学校の近くにある高校</h2>' +
+      '<p>直線距離の近い順に 1 校。</p>' +
+      '<ul><li><a href="/school/synthetic-a/">合成第一高等学校</a>（前橋市・約 1.0 km）</li></ul></section>',
+    mainAttrs: 'id="main-content"',
+    initialData: { schools: [SCHOOLS[1]] },
+    jsonLd: [schoolLd('合成第二高等学校'), breadcrumbLd('合成第二高等学校')],
+  }))
+  await assert.rejects(
+    verifyStaticOutput({ distDir: dir, maxFileBytes: 1024 * 1024 }),
+    /SSR marker class="detail-title"/,
+  )
+})
+
+test('a school page missing __MM_INITIAL__ script is rejected (plan_ssr-hydration C5)', async (t) => {
+  const dir = await syntheticDist()
+  t.after(() => rm(dir, { recursive: true, force: true }))
+  await writeFile(join(dir, 'school', 'synthetic-b', 'index.html'), page({
+    title: '合成第二高等学校（群馬県前橋市）の地図・アクセス・学科 | Manabi Map',
+    canonical: `${ORIGIN}/school/synthetic-b/`,
+    main: '<h1 class="detail-title">合成第二高等学校</h1>' +
+      '<section><h2>合成第二高等学校の近くにある高校</h2>' +
+      '<p>直線距離の近い順に 1 校。</p>' +
+      '<ul><li><a href="/school/synthetic-a/">合成第一高等学校</a>（前橋市・約 1.0 km）</li></ul></section>',
+    mainAttrs: 'id="main-content"',
+    // initialData を意図的に渡さない → #__MM_INITIAL__ script が出ない
+    jsonLd: [schoolLd('合成第二高等学校'), breadcrumbLd('合成第二高等学校')],
+  }))
+  await assert.rejects(
+    verifyStaticOutput({ distDir: dir, maxFileBytes: 1024 * 1024 }),
+    /is missing #__MM_INITIAL__ initial data script/,
+  )
+})
+
+test('a pref page missing __MM_INITIAL__ script is rejected (plan_ssr-hydration C5)', async (t) => {
+  const dir = await syntheticDist()
+  t.after(() => rm(dir, { recursive: true, force: true }))
+  // gunma 県ページを #_MM_INITIAL__ 無しで上書き。class="content hub-content" は残す。
+  await writeFile(join(dir, 'pref', 'gunma', 'index.html'), page({
+    title: '群馬県の高校一覧（2 校） | Manabi Map',
+    canonical: `${ORIGIN}/pref/gunma/`,
+    main: '<h1>群馬県の高校一覧（2 校）</h1>' +
+      '<nav><a href="#%E5%89%8D%E6%A9%8B%E5%B8%82">前橋市（2）</a></nav>' +
+      '<section id="前橋市"><h2>前橋市（2 校）</h2><ul>' +
+      SCHOOLS.map((s) => `<li><a href="/school/${s.id}/">${s.name}</a></li>`).join('') +
+      '</ul></section>',
+    mainAttrs: 'id="main-content" class="content hub-content"',
+    // initialData を意図的に渡さない → #__MM_INITIAL__ script が出ない
+  }))
+  await assert.rejects(
+    verifyStaticOutput({ distDir: dir, maxFileBytes: 1024 * 1024 }),
+    /is missing #__MM_INITIAL__ initial data script/,
+  )
+})
+
+test('a top page missing SSR home-content class is rejected (plan_ssr-hydration C5)', async (t) => {
+  const dir = await syntheticDist()
+  t.after(() => rm(dir, { recursive: true, force: true }))
+  // トップを class="content home-content" 無しで上書き。SSR が走っていない想定。
+  await writeFile(join(dir, 'index.html'), page({
+    title: 'Manabi Map',
+    canonical: `${ORIGIN}/`,
+    main: '<h1>親子で使う、学校選びの地図ノート。</h1><nav><a href="/pref/gunma/">群馬県</a></nav>',
+    mainAttrs: 'id="main-content"',
+    jsonLd: [
+      { '@context': 'https://schema.org', '@type': 'WebSite', '@id': `${ORIGIN}/#website`, name: 'Manabi Map' },
+      { '@context': 'https://schema.org', '@type': 'Organization', '@id': `${ORIGIN}/#organization`, name: 'Manabi Map' },
+    ],
+  }))
+  await assert.rejects(
+    verifyStaticOutput({ distDir: dir, maxFileBytes: 1024 * 1024 }),
+    /SSR marker class="content home-content"/,
   )
 })
 
