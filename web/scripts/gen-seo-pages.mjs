@@ -967,6 +967,8 @@ const llms = [
   '- 全件 API: https://manabi-map.app/api/v1/schools.json',
   '- 県別 API: https://manabi-map.app/api/v1/schools/{prefecture}.json',
   '- API メタデータ: https://manabi-map.app/api/v1/dataset.json',
+  '- API の呼び方（OpenAPI 3.1）: https://manabi-map.app/api/v1/openapi.json',
+  '- 認証は不要です。CORS は全 origin に開いています。',
   '- 偏差値の編集推計は公開 API に含めません。',
   '- データセットの説明: https://github.com/ishizakahiroshi/manabi-map/blob/main/DATA.md',
   '',

@@ -263,3 +263,192 @@ export function toPublicSchoolRecord(row, sourceCatalog, builtAt) {
 export function buildPublicSchoolRecords(rows, sourceCatalog, builtAt) {
   return rows.map((row) => toPublicSchoolRecord(row, sourceCatalog, builtAt)).filter(Boolean)
 }
+
+export const DATASET_ORIGIN = 'https://manabi-map.app'
+export const DATASET_FIELDS_DOC_URL =
+  'https://github.com/ishizakahiroshi/manabi-map/blob/main/DATA.md'
+
+/**
+ * 公開 API の「呼び方の契約」（OpenAPI 3.1）。
+ *
+ * dataset.json が「何が入っているか」を、これが「どう呼ぶか」を持つ。
+ * 外部クライアント（AI エージェント含む）が 1 ファイルで呼び出し方を掴めるようにするためのもの。
+ *
+ * レコードの全フィールド定義はここに複製しない。正典は DATA.md（gen-dataset-fields.mjs が
+ * このファイルの定数から生成する）で、複製すると必ず片方が古くなる。ここに書くのは
+ * 「どの学校にも必ずある項目」だけとし、残りは additionalProperties で許して
+ * externalDocs から DATA.md へ送る。宣言した必須項目が実データと食い違えば
+ * verify-static-output.mjs が build を落とす。
+ */
+export function buildOpenApiDocument({ version, prefectureSlugs, origin = DATASET_ORIGIN }) {
+  const collectionProperties = {
+    api_version: { type: 'string', const: 'v1' },
+    generated_at: { type: 'string', format: 'date-time', description: 'この JSON を生成した時刻。' },
+    count: { type: 'integer', minimum: 0, description: 'schools の要素数。' },
+    schools: { type: 'array', items: { $ref: '#/components/schemas/School' } },
+  }
+  return {
+    openapi: '3.1.0',
+    info: {
+      title: 'Manabi Map 学校基本情報 API',
+      version,
+      summary: '出典を追跡できる日本の高等学校・高等専門学校の基本情報。',
+      description: [
+        `収録方針: ${DATASET_CLAIM}`,
+        '',
+        '認証は不要で、CORS は全 origin に開いています。実体は固定 URL の静的 JSON なので、',
+        '検索・絞り込みのパラメータはありません。全件または都道府県別に取得して、',
+        '利用側で絞り込んでください。',
+        '',
+        `再配布・改変には出典表記が必要です（CC BY-SA 4.0）。表記例: ${DATASET_ATTRIBUTION}`,
+        '',
+        '偏差値の編集推計と、出典 URL を確認できない項目は、この API には含めません。',
+        '学校を序列化する用途（順位づけ・合否可能性の判定）には使えません。',
+      ].join('\n'),
+      license: { name: 'CC BY-SA 4.0', url: DATASET_LICENSE_URL },
+      contact: { name: 'Manabi Map', url: `${origin}/data/`, email: 'hello@manabi-map.app' },
+    },
+    externalDocs: {
+      description: 'フィールド定義（全項目の型と収録条件）',
+      url: DATASET_FIELDS_DOC_URL,
+    },
+    servers: [{ url: origin }],
+    paths: {
+      '/api/v1/dataset.json': {
+        get: {
+          operationId: 'getDataset',
+          summary: 'データセットの収録範囲・ライセンス・配布先を取得する',
+          description: '収録件数と都道府県別の内訳。最初にこれを読むと、どの県が使えるか分かります。',
+          responses: {
+            200: {
+              description: 'データセットのメタデータ',
+              content: {
+                'application/json': { schema: { $ref: '#/components/schemas/DatasetMetadata' } },
+              },
+            },
+          },
+        },
+      },
+      '/api/v1/schools.json': {
+        get: {
+          operationId: 'listAllSchools',
+          summary: '収録校を全件取得する',
+          description: '全都道府県ぶんを 1 ファイルで返します。県が決まっているなら県別の方が軽量です。',
+          responses: {
+            200: {
+              description: '収録校の全件',
+              content: {
+                'application/json': { schema: { $ref: '#/components/schemas/SchoolCollection' } },
+              },
+            },
+          },
+        },
+      },
+      '/api/v1/schools/{prefecture}.json': {
+        get: {
+          operationId: 'listSchoolsByPrefecture',
+          summary: '都道府県を指定して収録校を取得する',
+          parameters: [
+            {
+              name: 'prefecture',
+              in: 'path',
+              required: true,
+              description: '都道府県のローマ字 slug（例: gunma）。収録済みの県のみ。',
+              schema: { type: 'string', enum: prefectureSlugs },
+            },
+          ],
+          responses: {
+            200: {
+              description: '指定した都道府県の収録校',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/PrefectureSchoolCollection' },
+                },
+              },
+            },
+            404: { description: '未収録の都道府県' },
+          },
+        },
+      },
+    },
+    components: {
+      schemas: {
+        DatasetMetadata: {
+          type: 'object',
+          required: [
+            'api_version',
+            'generated_at',
+            'school_count',
+            'prefecture_count',
+            'prefectures',
+            'license',
+          ],
+          properties: {
+            api_version: { type: 'string', const: 'v1' },
+            generated_at: { type: 'string', format: 'date-time' },
+            school_count: { type: 'integer', minimum: 0 },
+            prefecture_count: { type: 'integer', minimum: 0 },
+            prefectures: {
+              type: 'object',
+              description: '都道府県 slug をキー、収録校数を値とする対応表。',
+              additionalProperties: { type: 'integer', minimum: 0 },
+            },
+            license: { type: 'string' },
+            license_url: { type: 'string', format: 'uri' },
+            attribution: { type: 'string', description: '再配布時に添える出典表記。' },
+            provenance_policy: { type: 'string' },
+            inclusion_policy: { type: 'string' },
+            exclusion_policy: { type: 'string' },
+          },
+          additionalProperties: true,
+        },
+        SchoolCollection: {
+          type: 'object',
+          required: ['api_version', 'generated_at', 'count', 'schools'],
+          properties: collectionProperties,
+          additionalProperties: true,
+        },
+        PrefectureSchoolCollection: {
+          type: 'object',
+          required: ['api_version', 'generated_at', 'prefecture', 'count', 'schools'],
+          properties: {
+            ...collectionProperties,
+            prefecture: { type: 'string', description: '都道府県名（例: 群馬県）。' },
+          },
+          additionalProperties: true,
+        },
+        School: {
+          type: 'object',
+          description:
+            'どの学校にも必ずある項目だけを定義しています。学科・入試統計・前身校などは' +
+            '出典が確認できた学校にだけ現れるため、全項目の型と収録条件は externalDocs を参照してください。',
+          externalDocs: { description: '全フィールドの定義', url: DATASET_FIELDS_DOC_URL },
+          required: ['id', 'record_key', 'name', 'prefecture', 'official_url', 'provenance'],
+          properties: {
+            id: { type: 'string', format: 'uuid', description: '内部 ID。外部参照には record_key を推奨。' },
+            record_key: { type: 'string', description: 'school-<uuid> 形式の安定キー。' },
+            name: { type: 'string', description: '学校名（正式名称）。' },
+            prefecture: { type: 'string', description: '所在の都道府県名。' },
+            official_url: {
+              type: 'string',
+              format: 'uri',
+              description: '学校公式サイト。これを確認できない学校は収録しません。',
+            },
+            provenance: {
+              type: 'object',
+              description: '出典情報。項目単位の出典は field_sources に入ります。',
+              required: ['official_url', 'last_built_at', 'field_sources'],
+              properties: {
+                official_url: { type: 'string', format: 'uri' },
+                last_built_at: { type: 'string', format: 'date-time' },
+                field_sources: { type: 'array', items: { type: 'object', additionalProperties: true } },
+              },
+              additionalProperties: true,
+            },
+          },
+          additionalProperties: true,
+        },
+      },
+    },
+  }
+}
