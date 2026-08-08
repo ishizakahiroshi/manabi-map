@@ -211,6 +211,28 @@ export function genderRatioLabel(s: School): string | null {
   return `男 ${s.male_ratio}% / 女 ${100 - s.male_ratio}%（${source}）`
 }
 
+// 一覧行に添える状態ラベル（閉校予定・募集停止を一覧でも隠さない）。
+// SchoolDetailSheet の状態表示と同じ趣旨で、県ページと市区町村ページが共有する。
+const LIST_LIFECYCLE_LABELS: Record<string, string> = {
+  planned: '開校予定', closing: '在校生のみ', closed: '閉校',
+}
+const LIST_RECRUITMENT_LABELS: Record<string, string> = {
+  unknown: '未確認', not_started: '募集開始前',
+  no_external_high_school_intake: '高校段階の外部募集なし', stopped: '募集終了',
+}
+
+/** 通常状態（在校中・募集中）なら null。一覧の行末に `〔…〕` で添える。 */
+export function listStatusLabel(s: {
+  lifecycle_status_code: string
+  recruitment_status_code: string
+}): string | null {
+  const labels = [
+    s.lifecycle_status_code !== 'active' ? LIST_LIFECYCLE_LABELS[s.lifecycle_status_code] : null,
+    s.recruitment_status_code !== 'recruiting' ? LIST_RECRUITMENT_LABELS[s.recruitment_status_code] : null,
+  ].filter((v): v is string => Boolean(v))
+  return labels.length ? labels.join('・') : null
+}
+
 export function extraBadge(s: School): string {
   if (s.type === 'kosen') return ' [5年制]'
   if (s.is_integrated) return ' [中高一貫]'

@@ -6,15 +6,17 @@ import { useGoBack } from '../hooks/useGoBack'
 import type { useUserData } from '../hooks/useUserData'
 import { getInitialData } from '../lib/initialData'
 import {
+  cityPagePath,
   expandPrefIndex,
   loadPrefIndex,
   type PrefListSchool,
 } from '../lib/prefIndex'
 import { normalizeForMatch } from '../lib/searchIndex'
 import { prefectureBySlug } from '../lib/prefecture'
-import { ownershipFull, GEN_FULL, COURSE_TIME_FULL } from '../lib/format'
+import { ownershipFull, listStatusLabel, COURSE_TIME_FULL } from '../lib/format'
 import { trackEvent } from '../lib/analytics'
-import type { CourseTime, GenderType } from '../types/school'
+import { useSchoolChips } from '../hooks/useSchoolChips'
+import { SchoolFilterChips } from '../components/SchoolFilterChips'
 import { SiteFooter } from '../components/SiteFooter'
 import { NotFoundPage } from './NotFoundPage'
 
@@ -51,41 +53,6 @@ function savePrefViewState(slug: string, openCities: Set<string>, scroll: number
   } catch {
     // sessionStorage unavailable or full: view-state persistence is best effort
   }
-}
-
-type OwnershipChip = 'public' | 'private' | 'national'
-
-interface ChipState {
-  ownership: Set<OwnershipChip>
-  course: Set<CourseTime>
-  gender: Set<GenderType>
-}
-
-function emptyChips(): ChipState {
-  return { ownership: new Set(), course: new Set(), gender: new Set() }
-}
-
-function ownershipChipOf(s: PrefListSchool): OwnershipChip {
-  if (s.ownership === 'private') return 'private'
-  if (s.ownership === 'national') return 'national'
-  return 'public'
-}
-
-// SchoolDetailSheet と同じ趣旨の状態ラベル（閉校予定・募集停止を一覧でも隠さない）。
-const LIFECYCLE_LABELS: Record<string, string> = {
-  planned: '開校予定', closing: '在校生のみ', closed: '閉校',
-}
-const RECRUITMENT_LABELS: Record<string, string> = {
-  unknown: '未確認', not_started: '募集開始前',
-  no_external_high_school_intake: '高校段階の外部募集なし', stopped: '募集終了',
-}
-
-function statusLabel(s: PrefListSchool): string | null {
-  const labels = [
-    s.lifecycle_status_code !== 'active' ? LIFECYCLE_LABELS[s.lifecycle_status_code] : null,
-    s.recruitment_status_code !== 'recruiting' ? RECRUITMENT_LABELS[s.recruitment_status_code] : null,
-  ].filter((v): v is string => Boolean(v))
-  return labels.length ? labels.join('・') : null
 }
 
 /**
@@ -151,7 +118,8 @@ export function PrefecturePage({ userData }: Props) {
    * 初回 render では false 固定。effect で sessionStorage を見て立てる。
    */
   const preferStoredScroll = useRef(false)
-  const [chips, setChips] = useState<ChipState>(emptyChips)
+  const chips = useSchoolChips(prefSchools)
+  const chipsClear = chips.clear
   const [q, setQ] = useState('')
   const scrolledFor = useRef<string | null>(null)
   // 貼り付いた見出しの判定に実測値を使う（CSS の --city-jump-h と二重管理しない）
@@ -216,14 +184,17 @@ export function PrefecturePage({ userData }: Props) {
       byCity.set(city, list)
     }
     const collator = new Intl.Collator('ja')
+    // cityOrder に載っている市区町村だけが専用ページを持つ（「その他」＝解決不能の
+    // 受け皿にはページが無いので、リンクを出すとリンク切れになる）。
+    const known = new Set(cityOrder)
     const orderedLabels = [
       ...cityOrder.filter((c) => byCity.has(c)),
-      ...[...byCity.keys()].filter((c) => !cityOrder.includes(c)).sort(collator.compare),
+      ...[...byCity.keys()].filter((c) => !known.has(c)).sort(collator.compare),
     ]
     return orderedLabels.map((label) => {
       const list = (byCity.get(label) ?? []).slice()
       list.sort((a, b) => collator.compare(a.name_kana ?? a.name, b.name_kana ?? b.name))
-      return { label, schools: list }
+      return { label, schools: list, hasPage: known.has(label) }
     })
   }, [prefSchools, cityOrder])
 
@@ -292,8 +263,10 @@ export function PrefecturePage({ userData }: Props) {
     viewStateSlugRef.current = slug
     restoredFor.current = null
     scrolledFor.current = null
-    setChips(emptyChips())
+    chipsClear()
     setQ('')
+    // chipsClear は useCallback で安定。依存に足すと参照だけで再発火する形になるため入れない。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [slug])
 
   // 市区町村の開閉状態を、現在のスクロール位置と一緒に県別へ保存する
@@ -345,14 +318,7 @@ export function PrefecturePage({ userData }: Props) {
 
   if (!pref) return <NotFoundPage />
 
-  const chipActive = chips.ownership.size > 0 || chips.course.size > 0 || chips.gender.size > 0
-  const matchesChips = (s: PrefListSchool): boolean => {
-    if (chips.ownership.size > 0 && !chips.ownership.has(ownershipChipOf(s))) return false
-    if (chips.course.size > 0 && !s.course_times.some((c) => chips.course.has(c))) return false
-    if (chips.gender.size > 0 && !chips.gender.has(s.gender_type)) return false
-    return true
-  }
-  const shownCount = prefSchools.filter(matchesChips).length
+  const shownCount = prefSchools.filter(chips.matches).length
 
   // 校名しぼりこみ。見出し（市区町村名）にも当てるので「文京」で文京区の 25 校がまとめて出る。
   const query = normalizeForMatch(q.trim())
@@ -362,10 +328,11 @@ export function PrefecturePage({ userData }: Props) {
       const cityHit = queryActive && normalizeForMatch(g.label).includes(query)
       return {
         label: g.label,
+        hasPage: g.hasPage,
         total: g.schools.length,
         schools: g.schools.filter(
           (s) =>
-            matchesChips(s) &&
+            chips.matches(s) &&
             (!queryActive || cityHit || (haystackById.get(s.id) ?? '').includes(query)),
         ),
       }
@@ -375,44 +342,6 @@ export function PrefecturePage({ userData }: Props) {
   const queryHits = visibleGroups.reduce((n, g) => n + g.schools.length, 0)
   /** 検索中は一致した市区町村を開いたまま固定する（結果が畳まれて見えなくならないように）。 */
   const isOpen = (label: string) => queryActive || openCities.has(label)
-
-  const count = (fn: (s: PrefListSchool) => boolean) => prefSchools.filter(fn).length
-  const chipDefs: Array<{ key: string; label: string; n: number; on: boolean; toggle: () => void }> = []
-  const toggleSet = <T,>(set: Set<T>, value: T): Set<T> => {
-    const next = new Set(set)
-    if (next.has(value)) next.delete(value)
-    else next.add(value)
-    return next
-  }
-  const ownershipDefs: Array<[OwnershipChip, string]> = [
-    ['public', t('prefPage.chipPublic')],
-    ['private', t('prefPage.chipPrivate')],
-    ['national', t('prefPage.chipNational')],
-  ]
-  for (const [key, label] of ownershipDefs) {
-    const n = count((s) => ownershipChipOf(s) === key)
-    if (n === 0) continue
-    chipDefs.push({
-      key: `own-${key}`, label, n, on: chips.ownership.has(key),
-      toggle: () => setChips((c) => ({ ...c, ownership: toggleSet(c.ownership, key) })),
-    })
-  }
-  for (const key of ['fulltime', 'parttime', 'correspondence'] as CourseTime[]) {
-    const n = count((s) => s.course_times.includes(key))
-    if (n === 0) continue
-    chipDefs.push({
-      key: `course-${key}`, label: COURSE_TIME_FULL[key], n, on: chips.course.has(key),
-      toggle: () => setChips((c) => ({ ...c, course: toggleSet(c.course, key) })),
-    })
-  }
-  for (const key of ['coed', 'girls', 'boys'] as GenderType[]) {
-    const n = count((s) => s.gender_type === key)
-    if (n === 0) continue
-    chipDefs.push({
-      key: `gender-${key}`, label: GEN_FULL[key], n, on: chips.gender.has(key),
-      toggle: () => setChips((c) => ({ ...c, gender: toggleSet(c.gender, key) })),
-    })
-  }
 
   const openSchool = (school: PrefListSchool) => {
     trackEvent('search', { source: 'pref_page' })
@@ -542,27 +471,13 @@ export function PrefecturePage({ userData }: Props) {
               </div>
             )}
 
-            <div className="chip-row" role="group" aria-label={t('prefPage.chipsLabel')}>
-              {chipDefs.map((c) => (
-                <button
-                  key={c.key}
-                  type="button"
-                  className={`chip ${c.on ? 'on' : ''}`}
-                  aria-pressed={c.on}
-                  onClick={c.toggle}
-                >
-                  {c.label} {c.n}
-                </button>
-              ))}
-            </div>
-            {chipActive && (
-              <div className="mini-hint" aria-live="polite">
-                {t('prefPage.filterShowing', { total: prefSchools.length, shown: shownCount })}{' '}
-                <button type="button" className="chip" onClick={() => setChips(emptyChips())}>
-                  {t('prefPage.filterClear')}
-                </button>
-              </div>
-            )}
+            <SchoolFilterChips
+              chips={chips.chips}
+              active={chips.active}
+              total={prefSchools.length}
+              shown={shownCount}
+              onClear={chips.clear}
+            />
 
             {/* 0 件でも要素は残す（ref と ResizeObserver を付け替えないため）。高さ 0 は
                 --city-jump-h: 0px として正しく効き、貼り付く見出しが可視領域の上端に載る。 */}
@@ -604,13 +519,29 @@ export function PrefecturePage({ userData }: Props) {
               >
                 <summary>
                   {t('prefPage.cityHeading', { city: g.label, n: g.total })}
-                  {(chipActive || queryActive) && g.schools.length !== g.total
+                  {(chips.active || queryActive) && g.schools.length !== g.total
                     ? `（${t('prefPage.cityShown', { n: g.schools.length })}）`
                     : ''}
                 </summary>
+                {/* 市区町村ページへの実リンク（クロール経路・c5 C6）。summary の中に置くと
+                    details の開閉と競合するので、本文の先頭へ出す。
+                    「その他」（市区町村を解決できなかった受け皿）にはページが無い。 */}
+                {g.hasPage && (
+                  <p className="city-page-link">
+                    <a
+                      href={cityPagePath(pref.slug, g.label)}
+                      onClick={(e) => {
+                        e.preventDefault()
+                        navigate(cityPagePath(pref.slug, g.label))
+                      }}
+                    >
+                      {t('prefPage.cityPageLink', { city: g.label })} →
+                    </a>
+                  </p>
+                )}
                 <ul className="city-school-list">
                   {g.schools.map((s) => {
-                    const status = statusLabel(s)
+                    const status = listStatusLabel(s)
                     return (
                       <li key={s.id}>
                         <a

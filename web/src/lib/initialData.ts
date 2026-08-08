@@ -1,6 +1,6 @@
 import type { AdmissionSelectionSource } from '../types/school'
 import type { SchoolRow } from '../hooks/useSchools'
-import type { PrefIndexPayload } from './prefIndex'
+import type { CityPagePayload, PrefIndexPayload } from './prefIndex'
 import type { SuccessorRef } from './successors'
 
 /**
@@ -29,6 +29,8 @@ export interface SingleSchoolPayload {
   }>
   successors?: SuccessorRef[]
   linkableSchoolIds?: string[]
+  /** 解決済みの市区町村ラベル（県ページ見出しと同一）。市区町村ページへの導線に使う。 */
+  cityGroup?: string | null
 }
 
 export interface InitialData {
@@ -39,6 +41,11 @@ export interface InitialData {
    * 展開は PrefecturePage が expandPrefIndex で行う。
    */
   prefPage?: PrefIndexPayload
+  /**
+   * 市区町村ページ（/pref/:pref/:city）用。該当市区町村の学校だけを持つ短縮形。
+   * 展開は CityPage が expandPrefSchool で行う。
+   */
+  cityPage?: CityPagePayload
   /** 法務ページ（/legal/*）とガイド（/guide/*）の Markdown 本文。 */
   docMarkdown?: string
   /** /data 用。dist/api/v1/dataset.json と同じ形（収録件数と県別内訳）。 */

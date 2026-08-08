@@ -12,6 +12,8 @@ import {
 import { primaryAdmissionTrend } from '../lib/admission'
 import { neighborPlaceLabel, selectNeighbors } from '../lib/neighbors'
 import { successorsByPredecessorId, type SuccessorRef } from '../lib/successors'
+import { cityPagePath } from '../lib/prefIndex'
+import { prefectureByName } from '../lib/prefecture'
 import { useSchoolsCache } from '../hooks/useSchools'
 import { useApp } from '../contexts/AppContext'
 import { useAuth } from '../contexts/AuthContext'
@@ -44,6 +46,12 @@ export interface SchoolDetailExtras {
   neighbors: NeighborEntry[]
   successors: SuccessorRef[]
   linkableSchoolIds: ReadonlySet<string>
+  /**
+   * 解決済みの市区町村ラベル（県ページ見出しと同一）。市区町村ページ
+   * （/pref/<slug>/<市区町村>/・c5 C6）への導線に使う。解決不能校は null。
+   * 全件キャッシュ経路（地図から開いたシート）では extras 自体が無いのでリンクは出ない。
+   */
+  cityGroup: string | null
 }
 
 interface Props {
@@ -230,6 +238,11 @@ export function SchoolDetailSheet({ school, onClose, userData, extras, standalon
   const dist = home ? haversine(home, { lat: school.latitude, lng: school.longitude }) : null
   const routeUrl = home ? googleMapsRoute(home, school) : null
   const genderRatio = fmt.genderRatioLabel(school)
+  // 所属市区町村ページ（c5 C6）。市区町村を解決できた校だけリンクを出す
+  // （解決できない = そのラベルのページが生成されていない）。
+  const cityPageSlug = prefectureByName(school.prefecture)?.slug ?? null
+  const cityPageHref =
+    cityPageSlug && extras?.cityGroup ? cityPagePath(cityPageSlug, extras.cityGroup) : null
   const admissionTrend = primaryAdmissionTrend(school)
   const hasCourseInfo = school.course_times.length > 0
   const hasScaleInfo =
@@ -684,6 +697,21 @@ export function SchoolDetailSheet({ school, onClose, userData, extras, standalon
                 {school.postal_code ? `〒${school.postal_code}　` : ''}
                 {school.address}
               </b>
+              {/* 所属市区町村ページへの導線（c5 C6）。同じ市区町村の他校へ 1 ホップで移れる。
+                  静的 HTML にも <a href> として載るので、学校ページ → 市区町村ページの
+                  内部リンクにもなる。 */}
+              {cityPageHref && extras?.cityGroup && (
+                <a
+                  className="city-page-link-inline"
+                  href={cityPageHref}
+                  onClick={(e) => {
+                    e.preventDefault()
+                    navigate(cityPageHref)
+                  }}
+                >
+                  {t('detail.cityPageLink', { city: extras.cityGroup })} →
+                </a>
+              )}
             </div>
           )}
           <div>
