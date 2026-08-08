@@ -114,7 +114,7 @@ begin
   where h.user_id = v_uid
     and h.created_at > now() - interval '10 minutes';
 
-  if v_recent_count >= case when v_is_anonymous then 2 else 5 end then
+  if v_recent_count >= (case when v_is_anonymous then 2 else 5 end) then
     raise exception using
       errcode = 'P0001',
       message = 'home location rate limit exceeded';
@@ -180,7 +180,7 @@ begin
   where r.reporter_user_id = v_uid
     and r.created_at > now() - interval '10 minutes';
 
-  if v_recent_count >= case when v_is_anonymous then 2 else 5 end then
+  if v_recent_count >= (case when v_is_anonymous then 2 else 5 end) then
     raise exception using
       errcode = 'P0001',
       message = 'data report rate limit exceeded';
