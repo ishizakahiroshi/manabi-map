@@ -92,10 +92,16 @@ export function DataPage() {
           <li><a href="/api/v1/schools.json">全都道府県: /api/v1/schools.json</a></li>
           <li><a href="/api/v1/schools/{'{prefecture}'}.json">県別: /api/v1/schools/{'{prefecture}'}.json</a></li>
           <li><a href="/api/v1/dataset.json">メタデータ: /api/v1/dataset.json</a></li>
+          <li><a href="/api/v1/openapi.json">呼び方の定義（OpenAPI 3.1）: /api/v1/openapi.json</a></li>
         </ul>
         <p>
           いずれも静的 JSON です。検索条件付きリクエストや POST は提供しません。
           互換性を壊す変更が必要な場合は /api/v2/ を新設し、/api/v1/ は維持します。
+        </p>
+        <p>
+          認証は不要で、CORS はすべての origin に開いています。ブラウザ上で動くプログラムからも
+          そのまま読めます。各項目の型と収録条件は <a href="/api/v1/openapi.json">openapi.json</a> と
+          リポジトリの DATA.md にまとめています。
         </p>
 
         <h2>更新されたかを知る方法</h2>

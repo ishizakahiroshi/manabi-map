@@ -8,6 +8,7 @@ import { gzipSync } from 'node:zlib'
 
 import { verifyStaticOutput } from './verify-static-output.mjs'
 import {
+  buildOpenApiDocument,
   DATASET_ATTRIBUTION,
   DATASET_CLAIM,
   DATASET_LICENSE_URL,
@@ -107,6 +108,21 @@ const SCHOOLS = [
   { id: 'synthetic-b', name: '合成第二高等学校', prefecture: '群馬県', city: '前橋市', latitude: 36.5, longitude: 139.2, official_url: 'https://synthetic-b.ed.jp/', is_active: true },
 ]
 
+// dataset.json と openapi.json は同じ版を名乗る（本番は package.json の version）。
+const DATASET_VERSION = '0.0.0-synthetic'
+
+/** 公開 API の「呼び方の契約」。本番と同じ生成関数を使い、fixture 側に複製を作らない
+ * （複製すると、契約が変わったときに検査だけが古い形を通し続ける）。 */
+function syntheticOpenApi({ prefectureSlugs = ['gunma'], requiredSchoolFields } = {}) {
+  const document = buildOpenApiDocument({
+    version: DATASET_VERSION,
+    prefectureSlugs,
+    origin: ORIGIN,
+  })
+  if (requiredSchoolFields) document.components.schemas.School.required = requiredSchoolFields
+  return document
+}
+
 async function syntheticDist() {
   const dir = await mkdtemp(join(tmpdir(), 'manabi-map-static-'))
   const body = Buffer.from(JSON.stringify({ formatVersion: 2, sourceCatalog: [], schools: SCHOOLS }))
@@ -162,6 +178,7 @@ async function syntheticDist() {
 
   const publicSchools = SCHOOLS.map((school) => ({
     id: school.id,
+    record_key: `school-${school.id}`,
     name: school.name,
     prefecture: school.prefecture,
     official_url: school.official_url,
@@ -178,6 +195,7 @@ async function syntheticDist() {
   }))
   await writeFile(join(dir, 'api', 'v1', 'dataset.json'), JSON.stringify({
     api_version: 'v1',
+    version: DATASET_VERSION,
     generated_at: '2026-08-06T00:00:00.000Z',
     school_count: publicSchools.length,
     prefecture_count: 1,
@@ -185,6 +203,17 @@ async function syntheticDist() {
     provenance_policy: DATASET_CLAIM,
     license_url: DATASET_LICENSE_URL,
   }))
+  await writeFile(join(dir, 'api', 'v1', 'openapi.json'), JSON.stringify(syntheticOpenApi()))
+
+  // 公開 API の CORS（Cloudflare Pages の _headers はそのまま dist へコピーされる）
+  await writeFile(join(dir, '_headers'), [
+    '/*',
+    '  X-Content-Type-Options: nosniff',
+    '/api/v1/*',
+    '  Cache-Control: public, max-age=3600',
+    '  Access-Control-Allow-Origin: *',
+    '',
+  ].join('\n'))
 
   await writeFile(join(dir, 'index.html'), page({
     title: 'Manabi Map',
@@ -264,6 +293,7 @@ async function syntheticDist() {
     DATASET_CLAIM,
     `${ORIGIN}/data/`,
     `${ORIGIN}/api/v1/schools.json`,
+    `${ORIGIN}/api/v1/openapi.json`,
     '',
   ].join('\n'))
   await writeFile(join(dir, '404.html'), page({
@@ -696,6 +726,56 @@ test('a missing prefecture API file reports the missing source prefecture slug',
   await assert.rejects(
     verifyStaticOutput({ distDir: dir, maxFileBytes: 1024 * 1024 }),
     /missing source prefectures: gunma/,
+  )
+})
+
+test('an openapi prefecture enum that drifts from the published files is rejected', async (t) => {
+  const dir = await syntheticDist()
+  t.after(() => rm(dir, { recursive: true, force: true }))
+  await writeFile(
+    join(dir, 'api', 'v1', 'openapi.json'),
+    JSON.stringify(syntheticOpenApi({ prefectureSlugs: ['gunma', 'tokyo'] })),
+  )
+  await assert.rejects(
+    verifyStaticOutput({ distDir: dir, maxFileBytes: 1024 * 1024 }),
+    /openapi\.json prefecture enum does not match/,
+  )
+})
+
+test('an openapi required field that the public records do not have is rejected', async (t) => {
+  const dir = await syntheticDist()
+  t.after(() => rm(dir, { recursive: true, force: true }))
+  await writeFile(
+    join(dir, 'api', 'v1', 'openapi.json'),
+    JSON.stringify(syntheticOpenApi({ requiredSchoolFields: ['id', 'name', 'total_students'] })),
+  )
+  await assert.rejects(
+    verifyStaticOutput({ distDir: dir, maxFileBytes: 1024 * 1024 }),
+    /declares "total_students" as required/,
+  )
+})
+
+test('losing the public API CORS header is rejected', async (t) => {
+  const dir = await syntheticDist()
+  t.after(() => rm(dir, { recursive: true, force: true }))
+  const path = join(dir, '_headers')
+  const headers = await readFile(path, 'utf8')
+  await writeFile(path, headers.replace('  Access-Control-Allow-Origin: *\n', ''))
+  await assert.rejects(
+    verifyStaticOutput({ distDir: dir, maxFileBytes: 1024 * 1024 }),
+    /Access-Control-Allow-Origin/,
+  )
+})
+
+test('llms.txt without the openapi entry point is rejected', async (t) => {
+  const dir = await syntheticDist()
+  t.after(() => rm(dir, { recursive: true, force: true }))
+  const path = join(dir, 'llms.txt')
+  const llms = await readFile(path, 'utf8')
+  await writeFile(path, llms.replace(`${ORIGIN}/api/v1/openapi.json\n`, ''))
+  await assert.rejects(
+    verifyStaticOutput({ distDir: dir, maxFileBytes: 1024 * 1024 }),
+    /llms\.txt is missing dataset claim or public API URLs/,
   )
 })
 
