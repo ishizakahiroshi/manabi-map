@@ -46,8 +46,8 @@ export interface InitialData {
    * 展開は CityPage が expandPrefSchool で行う。
    */
   cityPage?: CityPagePayload
-  /** 法務ページ（/legal/*）とガイド（/guide/*）の Markdown 本文。 */
-  docMarkdown?: string
+  /** 法務ページ（/legal/*）とガイド（/guide/*）の Markdown 本文。key は文書の識別子。 */
+  docMarkdown?: { key: string; text: string }
   /** /data 用。dist/api/v1/dataset.json と同じ形（収録件数と県別内訳）。 */
   datasetMetadata?: {
     school_count: number

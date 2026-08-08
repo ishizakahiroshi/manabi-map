@@ -73,9 +73,13 @@ jobs:
           VERSION_OVERRIDE: ci-${{ github.sha }}
         run: pnpm exec vite build
 
+      - name: Build SSR bundle
+        if: env.HAS_SUPABASE_BUILD_ACCESS == 'true'
+        run: pnpm build:ssr
+
       - name: Generate SEO pages
         if: env.HAS_SUPABASE_BUILD_ACCESS == 'true'
-        run: node scripts/gen-seo-pages.mjs
+        run: pnpm exec tsx scripts/gen-seo-pages.mjs
 
       - name: Verify static output, SEO, gzip, and 25 MiB limit
         if: env.HAS_SUPABASE_BUILD_ACCESS == 'true'
