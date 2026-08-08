@@ -419,6 +419,15 @@ body {
   z-index: 700;
 }
 .sheet.full { height: calc(100% - 40px - var(--tabbar-h)); }
+/* 「地図で見る」（/map?school=<id>）の着地。校名だけ見せて地図を残す。
+   全画面で開くと地図が完全に隠れ、詳細ページに戻ったように見えてしまう。 */
+.sheet.peek { height: 112px; }
+.sheet.peek .body,
+.sheet.peek .sheet-bottom-bar { display: none; }
+.sheet.peek .handle { flex-direction: column; gap: 5px; padding-bottom: 6px; }
+.handle-hint {
+  font-family: var(--display); font-weight: 700; font-size: 0.76rem; color: var(--ink-soft);
+}
 .sheet.hidden { transform: translateY(105%); }
 .sheet.auto { height: auto; }
 .handle {
