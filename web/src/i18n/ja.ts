@@ -540,6 +540,7 @@ export const ja: MessageTree = {
     adminRebuildFail: '再ビルドを開始できませんでした',
     bottomBar: '学校詳細の操作',
     closeBar: '閉じる（下スワイプでも可）',
+    expandSheet: '詳細を見る',
   },
   report: {
     provide: '情報を提供する',

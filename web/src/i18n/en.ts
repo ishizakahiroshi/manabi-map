@@ -540,6 +540,7 @@ export const en: MessageTree = {
     adminRebuildFail: 'Could not start the rebuild',
     bottomBar: 'School detail actions',
     closeBar: 'Close (or swipe down)',
+    expandSheet: 'View details',
   },
   report: {
     provide: 'Provide information',
