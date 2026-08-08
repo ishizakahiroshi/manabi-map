@@ -147,6 +147,17 @@ export const ja: MessageTree = {
     admissionLatest: '{year}年度 一次募集 {ratio}',
     favorited: 'お気に入り登録済み',
     backToAll: '都道府県一覧へ',
+    cityPageLink: '{city}の高校一覧ページ',
+  },
+  cityPage: {
+    title: '{city}の高校一覧（{n} 校）',
+    context: '{pref}{city}にある高校は {n} 校です。',
+    notice: '掲載は所在地の列挙・五十音順で、学校の序列ではありません。出願できる学校は学区・募集要項により異なるため、必ず各校の募集要項でご確認ください。',
+    nearbyHeading: '同じ県の近くの市区町村',
+    nearbyLink: '{city}（{n} 校）',
+    backToPref: '{pref}の高校一覧へ',
+    mapLink: 'この地域を地図で見る',
+    empty: 'この市区町村に掲載中の高校はありません。',
   },
   notFound: {
     title: 'ページが見つかりません',
@@ -367,6 +378,7 @@ export const ja: MessageTree = {
   },
   detail: {
     address: '所在地',
+    cityPageLink: '{city}の高校一覧',
     course: '課程',
     scale: '規模',
     ratio3y: '一次募集の3年平均（補助値）',

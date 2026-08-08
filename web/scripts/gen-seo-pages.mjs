@@ -22,7 +22,12 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { gunzipSync } from 'node:zlib'
-import { loadCivicData, resolveCityGroup } from './lib/municipalities.mjs'
+import {
+  buildCityCounts,
+  cityPagePath,
+  loadCivicData,
+  resolveCityGroup,
+} from './lib/municipalities.mjs'
 import {
   DATASET_ATTRIBUTION,
   DATASET_CLAIM,
@@ -559,17 +564,25 @@ async function renderSchoolPage(school) {
   }
 
   // BreadcrumbList（UUID URL の検索結果表示を救済する唯一の手段・c7 C4）。
-  // 県までは実 URL（/pref/<slug>/）へリンクし、市区町村ハブは存在しないため
-  // item を省略した name のみの ListItem にする（schema.org 的に有効）。
-  // 市区町村名は県ページの見出しと同じ resolveCityGroup の label を使う。
+  //
+  // **最後の要素以外は必ず item を持たせる。** Google の要件は
+  // 「position / name / item が必須。最後の項目だけ item を省略できる」で、
+  // 中間段の item 欠落は無効アイテム＝リッチリザルト対象外になる。
+  // schema.org の語彙としては name のみの ListItem も有効なため、
+  // 2026-08-08 に GSC が「項目「item」がありません」を検出するまで気づけなかった
+  // （旧実装は市区町村ハブが無いことを理由に 3 段目の item を省いていた）。
+  //
+  // 市区町村は専用ページ（/pref/<slug>/<市区町村>/・c5 C6）へリンクする。
+  // item を与えられない中間段は段ごと出さない（県 slug が解決できない場合は 2 段へ縮める）。
   const prefSlug = prefSlugByName.get(school.prefecture)
+  const prefUrl = prefSlug ? `${SITE_ORIGIN}/pref/${prefSlug}/` : null
   const cityGroup = resolveCityGroup(school, muniByPref)
   const breadcrumbEntries = [
     { name: 'ホーム', item: `${SITE_ORIGIN}/` },
-    prefSlug
-      ? { name: school.prefecture, item: `${SITE_ORIGIN}/pref/${prefSlug}/` }
-      : { name: school.prefecture },
-    ...(cityGroup ? [{ name: cityGroup.label }] : []),
+    ...(prefUrl ? [{ name: school.prefecture, item: prefUrl }] : []),
+    ...(prefUrl && cityGroup
+      ? [{ name: cityGroup.label, item: `${SITE_ORIGIN}${cityPagePath(prefSlug, cityGroup.label)}` }]
+      : []),
     { name: school.name },
   ]
   const breadcrumbLd = {
@@ -667,18 +680,15 @@ const activePrefectures = prefectures.filter((p) =>
 if (activePrefectures.length === 0) {
   throw new Error('gen-seo-pages: 都道府県が 1 件も解決できない（prefectures.json と実データの不一致）')
 }
-async function renderPrefPage(pref, prefSchools) {
-  const url = `${SITE_ORIGIN}/pref/${pref.slug}/`
-  const title = `${pref.name}の高校一覧（${prefSchools.length} 校） | Manabi Map`
-  const description =
-    `${pref.name}の高校一覧（${prefSchools.length} 校）。市区町村ごとに校名・設置区分・課程を掲載。` +
-    '地図で場所を確認し、気になる学校の保存や家族での見学メモ共有ができる無料の学校選びサービスです。'
-  // 県別軽量インデックスをそのまま埋め込み、PrefecturePage の初回 render と揃える
-  // （plan_ssr-hydration_c3_initial-data.md「県ページの設計」）。
+/**
+ * 県別軽量インデックスを読む。県ページと市区町村ページの共通の正典
+ * （plan_ssr-hydration_c3_initial-data.md「県ページの設計」）。
+ */
+async function readPrefIndex(pref, prefSchools) {
   const prefIndex = JSON.parse(
     await readFile(join(distDir, 'school-data', `pref-index-${pref.slug}.json`), 'utf8'),
   )
-  if (prefIndex?.slug !== pref.slug || !Array.isArray(prefIndex.schools)) {
+  if (prefIndex?.slug !== pref.slug || !Array.isArray(prefIndex.schools) || !Array.isArray(prefIndex.cities)) {
     throw new Error(`gen-seo-pages: pref-index が不正です: ${pref.slug}`)
   }
   if (prefIndex.schools.length !== prefSchools.length) {
@@ -687,9 +697,64 @@ async function renderPrefPage(pref, prefSchools) {
       `index=${prefIndex.schools.length} targets=${prefSchools.length}`,
     )
   }
+  return prefIndex
+}
+
+function renderPrefPage(pref, prefIndex) {
+  const url = `${SITE_ORIGIN}/pref/${pref.slug}/`
+  const count = prefIndex.schools.length
+  const title = `${pref.name}の高校一覧（${count} 校） | Manabi Map`
+  const description =
+    `${pref.name}の高校一覧（${count} 校）。市区町村ごとに校名・設置区分・課程を掲載。` +
+    '地図で場所を確認し、気になる学校の保存や家族での見学メモ共有ができる無料の学校選びサービスです。'
   const withHead = renderHead(template, { title, description, url })
   const rendered = renderApp(`/pref/${pref.slug}`, { prefPage: prefIndex })
   return withRootContent(withHead, rendered.html, rendered.initialScript)
+}
+
+/**
+ * 市区町村ページ（/pref/<県 slug>/<市区町村>/・c5 C6）。
+ *
+ * 掲載は **所在地の列挙**。「◯◯市から通える高校」型の見出し・本文は書かない
+ * （学区データを保有しないため。docs/local/plan_seo-growth-strategy.md §やらないこと）。
+ * 並び順は五十音順固定で、偏差値順・倍率順のソートは実装しない。
+ *
+ * 埋め込みは該当市区町村の学校だけに絞る（県全体を入れると東京 430 校 × 62 ページで
+ * dist が数 MB 膨らむ）。近隣導線に要る県内の他市区町村は件数だけの cityCounts で渡す。
+ */
+function renderCityPage(pref, prefIndex, cityCounts, city, count) {
+  const path = cityPagePath(pref.slug, city)
+  const url = `${SITE_ORIGIN}${path}`
+  const title = `${city}の高校一覧（${count} 校） | Manabi Map`
+  const description =
+    `${pref.name}${city}にある高校 ${count} 校の一覧。校名・設置区分・課程を五十音順に掲載し、` +
+    '地図で場所を確認できます。お気に入り保存・見学メモの家族共有ができる無料の学校選びサービスです。'
+  const payload = {
+    slug: pref.slug,
+    city,
+    schools: prefIndex.schools.filter((entry) => entry.c === city),
+    cityCounts,
+  }
+  if (payload.schools.length !== count) {
+    throw new Error(
+      `gen-seo-pages: 市区町村の件数不一致 ${pref.slug}/${city}: ` +
+      `payload=${payload.schools.length} cityCounts=${count}`,
+    )
+  }
+  // 最終段（市区町村）は item 省略が正しい形（Google は現在ページの URL を使う）。
+  // 中間段の県は必ず item を持たせる（学校ページの breadcrumbEntries と同じ不変条件）。
+  const breadcrumbLd = {
+    '@context': 'https://schema.org',
+    '@type': 'BreadcrumbList',
+    itemListElement: [
+      { name: 'ホーム', item: `${SITE_ORIGIN}/` },
+      { name: pref.name, item: `${SITE_ORIGIN}/pref/${pref.slug}/` },
+      { name: city },
+    ].map((entry, index) => ({ '@type': 'ListItem', position: index + 1, ...entry })),
+  }
+  const withHead = renderHead(template, { title, description, url })
+  const rendered = renderApp(path, { cityPage: payload })
+  return withRootContent(withJsonLd(withHead, breadcrumbLd), rendered.html, rendered.initialScript)
 }
 
 function renderSchoolsHubPage() {
@@ -849,12 +914,28 @@ for (const school of targets) {
 }
 
 const prefPages = []
+const cityPages = []
 for (const pref of activePrefectures) {
   const prefSchools = targets.filter((s) => s.prefecture === pref.name)
+  const prefIndex = await readPrefIndex(pref, prefSchools)
   const outDir = join(distDir, 'pref', pref.slug)
   await mkdir(outDir, { recursive: true })
-  await writeFile(join(outDir, 'index.html'), await renderPrefPage(pref, prefSchools))
+  await writeFile(join(outDir, 'index.html'), renderPrefPage(pref, prefIndex))
   prefPages.push(`/pref/${pref.slug}/`)
+
+  // 市区町村ページ（c5 C6）。対象は pref-index の cities に載っている市区町村だけ＝
+  // 総務省コードへ解決できたもの。「その他」（解決不能の受け皿）にはページを作らない。
+  // ディレクトリ名は日本語のまま置き、URL では percent-encode される（cityPagePath と対応）。
+  const cityCounts = buildCityCounts(prefIndex)
+  for (const { c: city, n } of cityCounts) {
+    const cityDir = join(distDir, 'pref', pref.slug, city)
+    await mkdir(cityDir, { recursive: true })
+    await writeFile(
+      join(cityDir, 'index.html'),
+      renderCityPage(pref, prefIndex, cityCounts, city, n),
+    )
+    cityPages.push(cityPagePath(pref.slug, city))
+  }
 }
 
 await mkdir(join(distDir, 'schools'), { recursive: true })
@@ -909,6 +990,7 @@ const urls = [
   { path: '/' },
   { path: '/schools/' },
   ...prefPages.map((path) => ({ path })),
+  ...cityPages.map((path) => ({ path })),
   { path: '/data/' },
   { path: '/press/' },
   ...LEGAL_DOCS.map(({ doc }) => ({ path: `/legal/${doc}/` })),
@@ -938,6 +1020,7 @@ if (pageStats.admissionTablesWithoutSource > 0) {
 
 console.log(
   `wrote ${targets.length} school pages, ${prefPages.length} pref hubs, ` +
+  `${cityPages.length} city pages, ` +
   `${LEGAL_DOCS.length} legal pages, ${GUIDES.length} guides, data, press, 404 and sitemap.xml (${urls.length} urls) to ${distDir}`,
 )
 

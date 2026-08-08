@@ -56,6 +56,70 @@ export interface PrefIndexPayload {
   schools: CompactPrefSchool[]
 }
 
+/** 県内の市区町村 1 件と、その掲載校数。市区町村ページの近隣導線に使う。 */
+export interface CityCount {
+  c: string
+  n: number
+}
+
+/**
+ * 市区町村ページ（/pref/:pref/:city）の埋め込み payload。
+ *
+ * schools は**その市区町村の分だけ**。県全体を入れると東京 430 校 × 62 ページで
+ * dist が数 MB 膨らむため（plan_seo-growth-strategy_c5_static-routes.md C6）。
+ * 近隣導線に要る「県内の他の市区町村」は件数だけの cityCounts で持つ。
+ */
+export interface CityPagePayload {
+  slug: string
+  /** 市区町村ラベル（県ページ見出し・city-index と同一表記）。 */
+  city: string
+  schools: CompactPrefSchool[]
+  /** 市区町村コード順（pref-index の cities 順）。掲載校が 0 の市区町村は含まない。 */
+  cityCounts: CityCount[]
+}
+
+/**
+ * pref-index から市区町村ごとの掲載校数を、コード順で作る。
+ *
+ * **gen-seo-pages.mjs の埋め込み生成と同じ結果になること**（違うと hydration が食い違う）。
+ * Node 側は .ts を import できないので同じロジックを持っている。
+ */
+export function buildCityCounts(payload: PrefIndexPayload): CityCount[] {
+  const counts = new Map<string, number>()
+  for (const entry of payload.schools) {
+    if (entry.c == null) continue
+    counts.set(entry.c, (counts.get(entry.c) ?? 0) + 1)
+  }
+  return payload.cities
+    .filter((city) => counts.has(city))
+    .map((city) => ({ c: city, n: counts.get(city) ?? 0 }))
+}
+
+/**
+ * 市区町村ページの URL パス。
+ *
+ * 日本語ラベルを percent-encode する。canonical・sitemap・BreadcrumbList の item も
+ * すべてこの表記で統一すること（gen-seo-pages.mjs 側も同じ形を作る）。
+ */
+export function cityPagePath(prefSlug: string, city: string): string {
+  return `/pref/${prefSlug}/${encodeURIComponent(city)}/`
+}
+
+/** 近隣導線に出す市区町村の数（前後それぞれ）。 */
+export const CITY_SIBLING_SPAN = 3
+
+/**
+ * コード順で前後にある市区町村を返す。総務省コードは地域順に並ぶので、
+ * 前後を取ると地理的にも近い市区町村になる（距離計算を持ち込まずに済む）。
+ */
+export function selectCitySiblings(cityCounts: CityCount[], city: string): CityCount[] {
+  const index = cityCounts.findIndex((entry) => entry.c === city)
+  if (index < 0) return []
+  return cityCounts
+    .slice(Math.max(0, index - CITY_SIBLING_SPAN), index + CITY_SIBLING_SPAN + 1)
+    .filter((entry) => entry.c !== city)
+}
+
 export function expandPrefSchool(entry: CompactPrefSchool, prefecture: string): PrefListSchool {
   return {
     id: entry.i,
