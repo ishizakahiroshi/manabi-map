@@ -924,8 +924,23 @@ body {
 /* Leaflet 微調整 */
 .leaflet-map { width: 100%; height: 100%; }
 .leaflet-container { background: #dbe9d7; font-family: var(--body); }
-/* 学校詳細シート表示中は地図右下 attribution が広告カードとかぶるため非表示にする */
-body[data-sheet-open="true"] .leaflet-bottom.leaflet-right { display: none; }
+/* 学校詳細シート表示中は地図下端のコントロール（右下 attribution・左下 縮尺バー）が
+   広告カードやシートとかぶるため非表示にする */
+body[data-sheet-open="true"] .leaflet-bottom { display: none; }
+
+/* 縮尺バー: 何 km 圏かを地図上で直感的につかめるようにする（メートル法のみ）。
+   幅は MapPage の FixedScaleControl が 96px 固定で入れるので、ここでは指定しない
+   （Leaflet 標準の scale と違ってズームしてもバーの長さは変わらない）。
+   右下の attribution のすぐ上に積む（Leaflet は bottom 側の corner では後から
+   足したコントロールを上に入れる）。Leaflet 既定の細い灰色枠ではサイトの意匠から
+   浮くので、他の地図コントロールと同じ「2px の黒枠」に合わせる。 */
+.leaflet-control-scale { margin-right: 10px; margin-bottom: 4px; }
+.leaflet-control-scale-line {
+  border: 2px solid var(--ink); border-top: none; border-radius: 0 0 6px 6px;
+  background: rgba(255, 255, 255, 0.85); color: var(--ink);
+  font-family: var(--display); font-weight: 700; font-size: 0.72rem;
+  line-height: 1.25; padding: 1px 6px 2px; text-shadow: none;
+}
 
 /* --- サイドバー --- */
 .sb-backdrop {
