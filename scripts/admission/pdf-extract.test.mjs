@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -13,6 +13,10 @@ const fixtureDir = join(here, '..', '..', 'tmp', 'kyoto-pdf')
 
 function loadFixture(name) {
   return readFileSync(join(fixtureDir, name), 'utf8')
+}
+
+function fixtureAvailable(name) {
+  return existsSync(join(fixtureDir, name))
 }
 
 // PyMuPDF が動くPythonを探す。pdf-extract.mjs 本体と同じ探索順・同じ環境変数を使う。
@@ -69,7 +73,7 @@ function buildCjkTablePdf(python, pdfPath) {
 const MID_ADMITTED_START_MARKER = '学舎・分校名'
 
 for (const fixture of ['r6-mid-admitted.txt', 'r7-mid-admitted.txt', 'r8-mid-admitted.txt']) {
-  test(`${fixture}: 上位10校がper-school行として抽出できる`, () => {
+  test(`${fixture}: 上位10校がper-school行として抽出できる`, { skip: fixtureAvailable(fixture) ? false : 'ローカルの京都府抽出 fixture が無い環境' }, () => {
     const text = loadFixture(fixture)
     const { rows } = parseSchoolRows(text, { startMarker: MID_ADMITTED_START_MARKER })
     assert.ok(rows.length >= 10, `rows.length=${rows.length}`)
@@ -89,7 +93,7 @@ for (const fixture of ['r6-mid-admitted.txt', 'r7-mid-admitted.txt', 'r8-mid-adm
   })
 }
 
-test('r8-school-guide.txt: 学科抽出が20校以上できる', () => {
+test('r8-school-guide.txt: 学科抽出が20校以上できる', { skip: fixtureAvailable('r8-school-guide.txt') ? false : 'ローカルの京都府抽出 fixture が無い環境' }, () => {
   const text = loadFixture('r8-school-guide.txt')
   // 学校案内は目次より前の表紙・制度説明ページで学校名らしき語が多数誤検出されるため、
   // 全日制課程の学校一覧（目次内の通学圏別ページ索引）から解析する。
