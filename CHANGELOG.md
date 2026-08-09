@@ -36,6 +36,7 @@
 
 ### Security
 - `schools` の匿名・認証済み直接 SELECT を公開列へ限定し、収集作業用の内部列を PostgREST 経由でも返さない migration を追加（本番適用はリリース runbook の DB ゲートで実施）
+- `react-router-dom` / `react-router` を 7.18.2 へ更新し、RSC mode の CSRF advisory を解消。lockfile に残っていた未使用の脆弱な `nanoid` 3.3.15 エントリも除去
 
 ### Removed
 - SSR 化で使われなくなった手書き HTML 生成を削除
