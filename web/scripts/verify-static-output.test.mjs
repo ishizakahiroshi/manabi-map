@@ -199,6 +199,7 @@ async function syntheticDist() {
     name: school.name,
     prefecture: school.prefecture,
     official_url: school.official_url,
+    is_integrated: Boolean(school.is_integrated),
     provenance: { official_url: school.official_url, last_built_at: '2026-08-06T00:00:00.000Z', field_sources: [] },
   }))
   await mkdir(join(dir, 'api', 'v1', 'schools'), { recursive: true })
@@ -857,6 +858,12 @@ test('an openapi required field that the public records do not have is rejected'
     verifyStaticOutput({ distDir: dir, maxFileBytes: 1024 * 1024 }),
     /declares "total_students" as required/,
   )
+})
+
+test('openapi declares the required is_integrated field published by every school record', () => {
+  const schoolSchema = syntheticOpenApi().components.schemas.School
+  assert.equal(schoolSchema.properties.is_integrated.type, 'boolean')
+  assert.ok(schoolSchema.required.includes('is_integrated'))
 })
 
 test('losing the public API CORS header is rejected', async (t) => {
