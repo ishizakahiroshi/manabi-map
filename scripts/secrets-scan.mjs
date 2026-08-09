@@ -8,7 +8,7 @@
 // 新しい watchlist テーブルは作らない（id 正典・名前派生の kb 設計を維持）。
 
 import { readFileSync, existsSync, statSync } from 'node:fs';
-import { execSync } from 'node:child_process';
+import { execFileSync, execSync } from 'node:child_process';
 import { join } from 'node:path';
 
 // === Configuration ===
@@ -286,15 +286,14 @@ function isSkipFilename(path) {
 
 // === Scanning ===
 
-function scanFile(path, needleMap, structuralPatterns) {
-  if (!existsSync(path)) return [];
-  let stat;
-  try { stat = statSync(path); } catch { return []; }
-  if (!stat.isFile()) return [];
-  if (stat.size > MAX_FILE_SIZE) return [];
-
+function scanFile(path, needleMap, structuralPatterns, mode) {
   let content;
-  try { content = readFileSync(path, 'utf8'); } catch { return []; }
+  try {
+    content = mode === 'staged'
+      ? execFileSync('git', ['show', `:${path}`], { encoding: 'utf8', maxBuffer: MAX_FILE_SIZE * 4 })
+      : readFileSync(path, 'utf8');
+  } catch { return []; }
+  if (Buffer.byteLength(content, 'utf8') > MAX_FILE_SIZE) return [];
 
   const hits = [];
   const lines = content.split('\n');
@@ -462,7 +461,7 @@ function main() {
 
   const allHits = [];
   for (const file of filesToScan) {
-    const hits = scanFile(file, needleMap, structuralPatterns);
+    const hits = scanFile(file, needleMap, structuralPatterns, args.mode);
     allHits.push(...hits);
   }
 

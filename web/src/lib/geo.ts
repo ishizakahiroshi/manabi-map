@@ -104,9 +104,8 @@ function normalizePostalInput(v: string): string {
 export function parsePostal(v: string): HomeLocation | null {
   const normalized = normalizePostalInput(v)
   if (!normalized) return null
-  if (!/^[\d-]+$/.test(normalized)) return null
+  if (!/^\d{3}$/.test(normalized) && !/^\d{7}$/.test(normalized) && !/^\d{3}-\d{4}$/.test(normalized)) return null
   const clean = normalized.replace(/[^0-9]/g, '')
-  if (clean.length < 3 || clean.length > 7) return null
   const p3 = parseInt(clean.slice(0, 3), 10)
   const pref = prefectureForPostal3(p3)
   if (!pref) return null
@@ -116,9 +115,7 @@ export function parsePostal(v: string): HomeLocation | null {
 /** 入力が（リージョン内かどうかに関わらず）郵便番号の形をしているか */
 function looksLikePostal(v: string): boolean {
   const normalized = normalizePostalInput(v)
-  if (!/^[\d-]+$/.test(normalized)) return false
-  const clean = normalized.replace(/[^0-9]/g, '')
-  return clean.length >= 3 && clean.length <= 7
+  return /^\d{3}$/.test(normalized) || /^\d{7}$/.test(normalized) || /^\d{3}-\d{4}$/.test(normalized)
 }
 
 export interface GeocodeCandidate {

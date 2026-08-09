@@ -13,7 +13,7 @@ import {
 } from '../lib/prefIndex'
 import { normalizeForMatch } from '../lib/searchIndex'
 import { prefectureBySlug } from '../lib/prefecture'
-import { ownershipFull, listStatusLabel, COURSE_TIME_FULL } from '../lib/format'
+import { useFormat } from '../hooks/useFormat'
 import { trackEvent } from '../lib/analytics'
 import { useSchoolChips } from '../hooks/useSchoolChips'
 import { SchoolFilterChips } from '../components/SchoolFilterChips'
@@ -97,6 +97,7 @@ export function PrefecturePage({ userData }: Props) {
   const { setHome } = useApp()
   const { t } = useI18n()
   const { favorites } = userData
+  const fmt = useFormat()
   const pref = slug ? prefectureBySlug(slug) : null
 
   const boot = initialPrefState(slug, pref?.name)
@@ -541,7 +542,7 @@ export function PrefecturePage({ userData }: Props) {
                 )}
                 <ul className="city-school-list">
                   {g.schools.map((s) => {
-                    const status = listStatusLabel(s)
+                    const status = fmt.listStatusLabel(s)
                     return (
                       <li key={s.id}>
                         <a
@@ -562,7 +563,7 @@ export function PrefecturePage({ userData }: Props) {
                             </span>
                           )}
                           <span className="city-school-meta">
-                            {ownershipFull(s)}・{s.course_times.map((c) => COURSE_TIME_FULL[c]).join('・')}
+                            {fmt.ownFull(s)}・{s.course_times.map((c) => fmt.courseFull(c)).join('・')}
                             {status ? `〔${status}〕` : ''}
                           </span>
                         </a>

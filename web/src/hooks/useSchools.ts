@@ -9,6 +9,7 @@ import type {
   SchoolRelationshipSummary,
 } from '../types/school'
 import { flattenRecruitmentUnits, type AdmissionRecruitmentUnitRow } from '../lib/admissionUnits'
+import { APP_SCHOOL_SELECT } from '../lib/school-select'
 
 const FETCH_ERROR_MESSAGE = '学校データの取得に失敗しました。時間をおいて再読み込みしてください。'
 
@@ -51,7 +52,6 @@ export interface SchoolRow {
   recruitment_ended_on?: string | null
   closed_on?: string | null
   status_official_url?: string | null
-  status_note?: string | null
   course_times?: School['course_times'] | null
   main_school_name?: string | null
   campus_type?: School['campus_type'] | null
@@ -149,7 +149,6 @@ export function mapSchoolRows(rows: SchoolRow[]): School[] {
         recruitment_ended_on: r.recruitment_ended_on ?? null,
         closed_on: r.closed_on ?? null,
         status_official_url: r.status_official_url ?? null,
-        status_note: r.status_note ?? null,
         course_times: r.course_times?.length ? r.course_times : ['fulltime'],
         main_school_name: r.main_school_name ?? null,
         campus_type: r.campus_type ?? 'main',
@@ -189,9 +188,7 @@ async function fetchSchoolRows(): Promise<SchoolRow[]> {
     for (let from = 0; ; from += pageSize) {
       const { data, error } = await supabase
         .from('schools')
-        .select(
-          '*, school_departments(id, school_id, name, course_type, ui_group), school_deviation_values(department_id, value, is_active), school_admission_stats(id, department_id, year, capacity, applicants, examinees, admitted, note, source_url), predecessor_relationships:school_relationships!school_relationships_successor_school_id_fkey(id, relationship_type_code, effective_on, official_url, notes, predecessor:schools!school_relationships_predecessor_school_id_fkey(id, record_key, name, lifecycle_status_code, closed_on)), school_name_history(id, name, name_kana, valid_from, valid_to, official_url, notes)',
-        )
+        .select(APP_SCHOOL_SELECT)
         .eq('is_active', true)
         .order('id', { ascending: true })
         .range(from, from + pageSize - 1)

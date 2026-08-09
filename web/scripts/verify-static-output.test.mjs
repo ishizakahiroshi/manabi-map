@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url'
 import test from 'node:test'
 import { gzipSync } from 'node:zlib'
 
-import { verifyStaticOutput } from './verify-static-output.mjs'
+import { isDetailSchool, verifyStaticOutput } from './verify-static-output.mjs'
 import {
   buildOpenApiDocument,
   DATASET_ATTRIBUTION,
@@ -393,6 +393,26 @@ test('gzip magic, manifest, sitemap, all pages and size gate pass together', asy
   assert.equal(result.publicApiPrefCount, 1)
 })
 
+test('name index target set excludes a synthetic school without coordinates', () => {
+  const mixedSchools = [
+    ...SCHOOLS,
+    {
+      id: 'synthetic-no-coordinates',
+      name: '合成座標なし高等学校',
+      prefecture: '群馬県',
+      city: '前橋市',
+      latitude: null,
+      longitude: null,
+      official_url: 'https://synthetic-no-coordinates.ed.jp/',
+      is_active: true,
+    },
+  ]
+
+  const detailTargets = mixedSchools.filter(isDetailSchool)
+  assert.deepEqual(detailTargets.map((school) => school.id), ['synthetic-a', 'synthetic-b'])
+  assert.equal(detailTargets.length, 2)
+})
+
 test('the prerendered data page contains every configured footer link', async (t) => {
   const dir = await syntheticDist()
   t.after(() => rm(dir, { recursive: true, force: true }))
@@ -709,6 +729,59 @@ test('a deviation field anywhere under /api/v1/ is rejected', async (t) => {
     verifyStaticOutput({ distDir: dir, maxFileBytes: 1024 * 1024 }),
     /deviation data found/,
   )
+})
+
+test('deviation text in public API free-text values is rejected', async () => {
+  const leakCases = [
+    ['status_description', (record) => { record.status_description = '合成校の偏差値 58 前後という記述' }],
+    ['name_history', (record) => { record.name_history = [{ notes: '偏差値 58 とする古いメモ' }] }],
+    ['predecessors', (record) => { record.predecessors = [{ notes: 'deviation value 58' }] }],
+  ]
+
+  for (const [label, inject] of leakCases) {
+    const dir = await syntheticDist()
+    try {
+      const path = join(dir, 'api', 'v1', 'schools.json')
+      const payload = JSON.parse(await readFile(path, 'utf8'))
+      inject(payload.schools[0])
+      await writeFile(path, JSON.stringify(payload))
+      await assert.rejects(
+        verifyStaticOutput({ distDir: dir, maxFileBytes: 1024 * 1024 }),
+        new RegExp(`deviation text found in api/v1/schools\\.json.*${label.replace('.', '\\.')}`),
+      )
+    } finally {
+      await rm(dir, { recursive: true, force: true })
+    }
+  }
+})
+
+test('status_note is rejected from app JSON and SSR initial data', async () => {
+  const jsonDir = await syntheticDist()
+  try {
+    const path = join(jsonDir, 'school-data', 'synthetic-a.json')
+    const payload = JSON.parse(await readFile(path, 'utf8'))
+    payload.schools[0].status_note = 'internal synthetic note'
+    await writeFile(path, JSON.stringify(payload))
+    await assert.rejects(
+      verifyStaticOutput({ distDir: jsonDir, maxFileBytes: 1024 * 1024 }),
+      /internal school field found in school-data\/synthetic-a\.json.*status_note/,
+    )
+  } finally {
+    await rm(jsonDir, { recursive: true, force: true })
+  }
+
+  const htmlDir = await syntheticDist()
+  try {
+    const path = join(htmlDir, 'school', 'synthetic-a', 'index.html')
+    const html = await readFile(path, 'utf8')
+    await writeFile(path, html.replace('</script>', '"status_note":"internal synthetic note"}</script>'))
+    await assert.rejects(
+      verifyStaticOutput({ distDir: htmlDir, maxFileBytes: 1024 * 1024 }),
+      /internal school field found in .*index\.html at HTML initial data/,
+    )
+  } finally {
+    await rm(htmlDir, { recursive: true, force: true })
+  }
 })
 
 test('a public API record without official_url is rejected', async (t) => {
