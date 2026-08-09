@@ -18,6 +18,7 @@ import {
 // docs/local/plan_seo-growth-strategy_c7 C1）。
 import { selectNeighbors } from '../src/lib/neighbors.ts'
 import { successorsByPredecessorId } from '../src/lib/successors.ts'
+import { GENERATOR_SCHOOL_SELECT } from '../src/lib/school-select.ts'
 
 const here = dirname(fileURLToPath(import.meta.url))
 const webRoot = join(here, '..')
@@ -92,8 +93,7 @@ async function runWithRetry(label, run, attempts = 4) {
   throw new Error(`${label}に失敗しました: ${lastMessage}`)
 }
 
-const select =
-  '*, school_departments(id, school_id, name, course_type, ui_group), school_field_sources(field_name, official_url, doc_title, published_at, source_page_or_table, last_verified_at, last_http_status, is_official_source), school_deviation_values(department_id, value, is_active), school_admission_stats(id, department_id, year, capacity, applicants, examinees, admitted, note, source_url), predecessor_relationships:school_relationships!school_relationships_successor_school_id_fkey(id, relationship_type_code, effective_on, official_url, notes, predecessor:schools!school_relationships_predecessor_school_id_fkey(id, record_key, name, lifecycle_status_code, closed_on)), school_name_history(id, name, name_kana, valid_from, valid_to, official_url, notes)'
+const select = GENERATOR_SCHOOL_SELECT
 // このページサイズは school_departments(school_id) の索引に依存する（migration 202607310101）。
 // 索引が無いと embed が親 1 行ごとに全件走査になり、全国 47 都道府県（学科 7,798 行）では
 // 250 件/ページでも 3.1 秒かかって Supabase の statement timeout（3 秒）に達する。
@@ -319,9 +319,10 @@ await writeFile(
   )}\n`,
 )
 
+const detailRows = rows.filter((row) => row.latitude != null && row.longitude != null)
 const cityGroups = new Map()
 const unresolvedByPref = new Map()
-for (const row of rows) {
+for (const row of detailRows) {
   const resolved = resolveCityGroup(row, muniByPref)
   if (!resolved) {
     unresolvedByPref.set(row.prefecture, (unresolvedByPref.get(row.prefecture) ?? 0) + 1)
@@ -344,7 +345,7 @@ const cityIndex = [...cityGroups.values()]
   .sort((a, b) => (a.code < b.code ? -1 : a.code > b.code ? 1 : 0))
   .map(({ code: _code, ...entry }) => entry)
 
-const nameIndex = rows.map((row) => ({
+const nameIndex = detailRows.map((row) => ({
   i: row.id,
   n: row.name,
   k: row.name_kana ?? null,
@@ -431,7 +432,6 @@ function subsetPayload(subsetRows) {
 
 // 単体 JSON は個別ページを持つ学校（緯度経度あり = gen-seo-pages.mjs の生成対象・
 // React 側 mapSchoolRows のフィルタと同一集合）だけ出力する。近隣校の母集合も同じ。
-const detailRows = rows.filter((row) => row.latitude != null && row.longitude != null)
 const detailIds = new Set(detailRows.map((row) => row.id))
 const neighborUniverse = detailRows.map((row) => ({
   id: row.id,

@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useApp } from '../contexts/AppContext'
 import { useI18n } from '../contexts/I18nContext'
@@ -43,6 +43,10 @@ export function HomePage() {
   const [indexes, setIndexes] = useState<SearchIndexes | null>(null)
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const lastQuery = useRef('')
+
+  useEffect(() => () => {
+    if (timer.current) clearTimeout(timer.current)
+  }, [])
 
   // 市区町村・校名の軽量索引は検索欄フォーカス時に遅延読込する
   // （schools.json 全体はトップで読まない）。失敗しても住所検索は生きるので静かに諦める。
@@ -120,6 +124,7 @@ export function HomePage() {
   }
 
   const clearQuery = () => {
+    if (timer.current) clearTimeout(timer.current)
     setQ('')
     setHint(null)
     setCandidates(null)

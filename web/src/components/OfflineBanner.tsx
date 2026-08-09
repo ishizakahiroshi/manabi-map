@@ -3,13 +3,13 @@ import { useI18n } from '../contexts/I18nContext'
 
 export function OfflineBanner() {
   const { t } = useI18n()
-  const [offline, setOffline] = useState(
-    typeof navigator !== 'undefined' && 'onLine' in navigator ? !navigator.onLine : false,
-  )
+  // 初回 render はSSRと一致させ、実際の接続状態はeffectで取り込む。
+  const [offline, setOffline] = useState(false)
 
   useEffect(() => {
     const goOffline = () => setOffline(true)
     const goOnline = () => setOffline(false)
+    if ('onLine' in navigator) setOffline(!navigator.onLine)
     window.addEventListener('offline', goOffline)
     window.addEventListener('online', goOnline)
     return () => {

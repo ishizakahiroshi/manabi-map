@@ -1,6 +1,5 @@
 import { useCallback, useMemo, useState } from 'react'
 import { useI18n } from '../contexts/I18nContext'
-import { GEN_FULL, COURSE_TIME_FULL } from '../lib/format'
 import type { PrefListSchool } from '../lib/prefIndex'
 import type { CourseTime, GenderType } from '../types/school'
 
@@ -92,7 +91,7 @@ export function useSchoolChips(schools: PrefListSchool[]): SchoolChips {
       const n = count((s) => s.course_times.includes(key))
       if (n === 0) continue
       defs.push({
-        key: `course-${key}`, label: COURSE_TIME_FULL[key], n, on: state.course.has(key),
+        key: `course-${key}`, label: t(`labels.course.${key}`), n, on: state.course.has(key),
         toggle: () => setState((c) => ({ ...c, course: toggleSet(c.course, key) })),
       })
     }
@@ -100,7 +99,7 @@ export function useSchoolChips(schools: PrefListSchool[]): SchoolChips {
       const n = count((s) => s.gender_type === key)
       if (n === 0) continue
       defs.push({
-        key: `gender-${key}`, label: GEN_FULL[key], n, on: state.gender.has(key),
+        key: `gender-${key}`, label: t(`labels.gen.${key}`), n, on: state.gender.has(key),
         toggle: () => setState((c) => ({ ...c, gender: toggleSet(c.gender, key) })),
       })
     }
