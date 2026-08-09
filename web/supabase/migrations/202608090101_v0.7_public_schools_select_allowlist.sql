@@ -59,7 +59,7 @@ declare
     'status_description'
   ];
 begin
-  foreach role_name in array['anon', 'authenticated'] loop
+  foreach role_name in array ARRAY['anon', 'authenticated'] loop
     if has_table_privilege(role_name, 'public.schools', 'select') then
       raise exception 'table-level SELECT remains for %', role_name;
     end if;
