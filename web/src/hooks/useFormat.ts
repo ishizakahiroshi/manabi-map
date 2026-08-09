@@ -17,7 +17,7 @@ export function useFormat() {
      * ownership + prefecture から動的に判定するため School 全体を渡すこと。
      * en locale では labels.own の 'metropolitan/dou/fu/prefectural/...' を使う。
      */
-    ownFull: (s: School) => {
+    ownFull: (s: Pick<School, 'ownership' | 'prefecture'>) => {
       if (locale === 'ja') return ownershipFull(s)
       if (s.ownership === 'prefectural') {
         if (s.prefecture === '東京都') return label(t, 'labels.own', 'metropolitan')
@@ -32,6 +32,25 @@ export function useFormat() {
     courseFull: (key: string) => label(t, 'labels.course', key),
     campusFull: (key: string) => label(t, 'labels.campus', key),
 
+    listStatusLabel: (s: Pick<School, 'lifecycle_status_code' | 'recruitment_status_code'>) => {
+      const lifecycleLabels: Record<string, string> = {
+        planned: t('detail.lifecyclePlanned'),
+        closing: t('detail.lifecycleClosing'),
+        closed: t('detail.lifecycleClosed'),
+      }
+      const recruitmentLabels: Record<string, string> = {
+        unknown: t('detail.recruitmentUnknown'),
+        not_started: t('detail.recruitmentNotStarted'),
+        no_external_high_school_intake: t('detail.recruitmentNoExternal'),
+        stopped: t('detail.recruitmentStopped'),
+      }
+      const labels = [
+        s.lifecycle_status_code !== 'active' ? lifecycleLabels[s.lifecycle_status_code] : null,
+        s.recruitment_status_code !== 'recruiting' ? recruitmentLabels[s.recruitment_status_code] : null,
+      ].filter((value): value is string => Boolean(value))
+      return labels.length ? labels.join('・') : null
+    },
+
     courseTimeLabel: (s: School) => {
       const labels = s.course_times.map((c) => label(t, 'labels.course', c)).filter(Boolean)
       return labels.length ? labels.join('・') : t('common.infoPending')
@@ -40,7 +59,7 @@ export function useFormat() {
     enrollmentLabel: (s: School) => {
       if (s.total_students != null && s.enrollment_year != null) {
         return t('labels.enrollment', {
-          count: s.total_students.toLocaleString(),
+          count: s.total_students.toLocaleString('en-US'),
           year: s.enrollment_year,
         })
       }

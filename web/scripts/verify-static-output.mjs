@@ -13,7 +13,12 @@ import { lstat, readFile, readdir } from 'node:fs/promises'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { gunzipSync } from 'node:zlib'
-import { loadCivicData, resolveCityGroup } from './lib/municipalities.mjs'
+import {
+  buildCityCounts,
+  cityPagePath,
+  loadCivicData,
+  resolveCityGroup,
+} from './lib/municipalities.mjs'
 import {
   DATASET_CLAIM,
   DATASET_LICENSE_URL,
@@ -23,6 +28,10 @@ import {
 
 const DEFAULT_MAX_FILE_MIB = 25
 const SITE_ORIGIN = 'https://manabi-map.app'
+
+export function isDetailSchool(school) {
+  return school?.latitude != null && school?.longitude != null
+}
 
 function escapeHtml(value) {
   return String(value)
@@ -84,15 +93,22 @@ function extractJsonLdBlocks(html) {
 }
 
 // 一覧・ハブ・学校ページの本文（<main>）に出てはいけない語。
-// 「偏差値」はプリレンダー非掲載の方針（§7.7 運用）を、残りはランキングサイト化の
-// 禁止線を、それぞれビルドで固定する。「通学時間」は実乗換データを持たないため
-// プリレンダーに書かない（c4 C1。距離は「直線距離」と明記する）。
-const FORBIDDEN_WORDS = ['ランキング', 'TOP', '狙い目', 'おすすめ', '偏差値', '通学時間']
-// ガイドは「通学時間」「偏差値」を説明する一次目的のページなので、その二語だけは対象外。
+// ランキングサイト化の禁止線をビルドで固定する。「通学時間」は実乗換データを
+// 持たないためプリレンダーに書かない（c4 C1。距離は「直線距離」と明記する）。
+//
+// 「偏差値」は 2026-08-07 に本リストから外した（plan_ssr-hydration.md）。
+// プリレンダーが「手書きの別 HTML」から「React の実出力」に変わり、画面に出している値が
+// そのまま HTML に載るようになったため、HTML 側で数値を伏せることは原理的にできない
+// （伏せると hydration が食い違い、初期表示のちらつきが戻る）。
+//
+// 「偏差値を出さない」線は公開 API 側で守る。findDeviationLeak() が /api/v1/ の
+// 全 JSON を走査し、deviation を含むキーが 1 つでもあればビルドを落とす（本ファイル 526-530 行）。
+const FORBIDDEN_WORDS = ['ランキング', 'TOP', '狙い目', 'おすすめ', '通学時間']
+// ガイドは「通学時間」を説明する一次目的のページなので、その語だけは対象外。
 // 序列化を助長する語は、本文にも引き続き出さない。
 const GUIDE_FORBIDDEN_WORDS = ['ランキング', 'TOP', '狙い目', 'おすすめ']
 // /data/ と llms.txt は「偏差値を API に含めない」という除外方針を説明するため、
-// 語そのものは許可する。序列化を促す語は引き続き禁止する。
+// 「おすすめ」等の緩い語も許可する。序列化を促す語は引き続き禁止する。
 const DATASET_FORBIDDEN_WORDS = ['ランキング', 'TOP', '狙い目']
 // 「◯◯市から通える」型の断定は学区データを保有するまで禁止（/pref/ 配下と全域ハブ）。
 // トップ・学校ページの定型文「住所を入れると通える高校が…」はサービス説明なので対象外。
@@ -124,11 +140,60 @@ function checkPageSkeleton(html, pageLabel, expectedCanonical) {
   return main
 }
 
+/**
+ * BreadcrumbList の「最後の項目以外は item 必須」を検査する。
+ *
+ * Google のパンくず要件は position / name / item が必須で、**最後の項目だけ item を
+ * 省略できる**（省略時は現在ページの URL が使われる）。schema.org の語彙としては
+ * name だけの ListItem も有効なため、段数しか見ていなかった旧検査はこれをすり抜け、
+ * 2026-08-08 に GSC が「項目「item」がありません」を全学校ページで検出した
+ * （docs/local/plan_seo-growth-strategy_c5_static-routes.md C6）。
+ */
+function checkBreadcrumbItems(breadcrumb, pageLabel) {
+  const entries = breadcrumb.itemListElement
+  for (const [index, entry] of entries.entries()) {
+    if (entry?.position !== index + 1) {
+      throw new Error(`BreadcrumbList position must be 1-based and in order on ${pageLabel}`)
+    }
+    if (typeof entry?.name !== 'string' || entry.name.length === 0) {
+      throw new Error(`BreadcrumbList entry ${index + 1} has no name on ${pageLabel}`)
+    }
+    const isLast = index === entries.length - 1
+    if (isLast) continue
+    if (typeof entry.item !== 'string' || !entry.item.startsWith(`${SITE_ORIGIN}/`)) {
+      throw new Error(
+        `BreadcrumbList entry ${index + 1} ("${entry.name}") has no item on ${pageLabel} ` +
+        '(only the last entry may omit it)',
+      )
+    }
+  }
+}
+
 function checkSafeHrefAttributes(html, pageLabel) {
   for (const [, href] of html.matchAll(/\bhref="([^"]*)"/gi)) {
     if (!/^(?:https?:\/\/|\/|#|mailto:|tel:)/i.test(href)) {
       throw new Error(`unsafe href scheme on ${pageLabel}: ${href}`)
     }
+  }
+}
+
+/** gen-seo-pages.mjs (SSR) が走ったことの印を検査する。
+ * 手書き HTML の残骸・SSR 失敗・空の #root は、そのページ種別が出すべき class 属性を
+ * 持たないので検出できる（plan_ssr-hydration.md C5）。空の #root を素通りさせないための線。 */
+function assertSsrMarker(html, pageLabel, expectedClass) {
+  if (!html.includes(`class="${expectedClass}"`)) {
+    throw new Error(
+      `SSR marker class="${expectedClass}" is missing on ${pageLabel} ` +
+      `(gen-seo-pages.mjs failure or stale hand-written template)`,
+    )
+  }
+}
+
+/** C3 の成果物・初期データ埋め込み script が載っていることを検査する。
+ * トップは初期データが不要なため対象外。県ページ・学校詳細は必須。 */
+function assertInitialDataScript(html, pageLabel) {
+  if (!/<script type="application\/json" id="__MM_INITIAL__">/.test(html)) {
+    throw new Error(`${pageLabel} is missing #__MM_INITIAL__ initial data script (SSR hydration source)`)
   }
 }
 
@@ -147,6 +212,17 @@ const FORBIDDEN_SOURCE_HOSTS = [
   /(^|\.)minkou\.jp$/,
   /(^|\.)shingakunet\.com$/,
   /(^|\.)zyuken\.net$/,
+]
+
+// URL ではなく本文に出典名が書かれていても、公開データの出典方針に反する。
+// ホスト名の検査（FORBIDDEN_SOURCE_HOSTS）とは別に、すべての文字列値を走査する。
+const FORBIDDEN_SOURCE_TEXT_PATTERNS = [
+  { label: 'Wikipedia', pattern: /wikipedia(?:\.org)?/iu },
+  { label: 'ウィキペディア', pattern: /ウィキペディア/iu },
+  { label: 'みんこう', pattern: /(?:みんこう|minkou\.jp)/iu },
+  { label: 'みんなの高校情報', pattern: /みんなの高校情報/iu },
+  { label: 'スタディサプリ', pattern: /(?:スタディサプリ|shingakunet\.com)/iu },
+  { label: '高校受験ナビ', pattern: /(?:高校受験ナビ|zyuken\.net)/iu },
 ]
 
 // 私学協会・教育情報ポータル等は一次資料の発行主体でも、自治体向けの
@@ -208,6 +284,78 @@ function findDeviationLeak(value, path = '$') {
   return null
 }
 
+const DEVIATION_TEXT = /(偏差値|deviation)/iu
+const DEVIATION_TEXT_ALLOWLIST = new Map([
+  ['api/v1/dataset.json', new Set(['$.provenance_policy', '$.exclusion_policy'])],
+  ['api/v1/openapi.json', new Set(['$.info.description'])],
+])
+
+/** 公開 API の自由記述にも偏差値の値・説明を混ぜない。許可はファイル全体ではなくパス単位。 */
+function findDeviationText(value, path = '$', allowedPaths = new Set()) {
+  if (typeof value === 'string') {
+    return !allowedPaths.has(path) && DEVIATION_TEXT.test(value) ? path : null
+  }
+  if (Array.isArray(value)) {
+    for (let index = 0; index < value.length; index += 1) {
+      const leak = findDeviationText(value[index], `${path}[${index}]`, allowedPaths)
+      if (leak) return leak
+    }
+    return null
+  }
+  if (!value || typeof value !== 'object') return null
+  for (const [key, item] of Object.entries(value)) {
+    const leak = findDeviationText(item, `${path}.${key}`, allowedPaths)
+    if (leak) return leak
+  }
+  return null
+}
+
+const INTERNAL_SCHOOL_FIELDS = new Set(['status_note'])
+
+function findForbiddenKey(value, forbiddenKeys, path = '$') {
+  if (Array.isArray(value)) {
+    for (let index = 0; index < value.length; index += 1) {
+      const leak = findForbiddenKey(value[index], forbiddenKeys, `${path}[${index}]`)
+      if (leak) return leak
+    }
+    return null
+  }
+  if (!value || typeof value !== 'object') return null
+  for (const [key, item] of Object.entries(value)) {
+    if (forbiddenKeys.has(key)) return `${path}.${key}`
+    const leak = findForbiddenKey(item, forbiddenKeys, `${path}.${key}`)
+    if (leak) return leak
+  }
+  return null
+}
+
+function assertNoInternalSchoolFields(value, relativePath) {
+  const leakPath = findForbiddenKey(value, INTERNAL_SCHOOL_FIELDS)
+  if (leakPath) {
+    throw new Error(`internal school field found in ${relativePath} at ${leakPath}`)
+  }
+}
+
+function findForbiddenSourceMention(value, path = '$') {
+  if (typeof value === 'string') {
+    const match = FORBIDDEN_SOURCE_TEXT_PATTERNS.find(({ pattern }) => pattern.test(value))
+    return match ? { label: match.label, path } : null
+  }
+  if (Array.isArray(value)) {
+    for (let index = 0; index < value.length; index += 1) {
+      const leak = findForbiddenSourceMention(value[index], `${path}[${index}]`)
+      if (leak) return leak
+    }
+    return null
+  }
+  if (!value || typeof value !== 'object') return null
+  for (const [key, item] of Object.entries(value)) {
+    const leak = findForbiddenSourceMention(item, `${path}.${key}`)
+    if (leak) return leak
+  }
+  return null
+}
+
 async function readPage(absoluteDist, relativePath, label) {
   const path = join(absoluteDist, relativePath)
   let stat
@@ -218,7 +366,11 @@ async function readPage(absoluteDist, relativePath, label) {
     throw error
   }
   if (!stat.isFile()) throw new Error(`prerendered page is not a regular file: ${label}`)
-  return readFile(path, 'utf8')
+  const html = await readFile(path, 'utf8')
+  if (/"status_note"\s*:/.test(html)) {
+    throw new Error(`internal school field found in ${relativePath} at HTML initial data`)
+  }
+  return html
 }
 
 export async function verifyStaticOutput({
@@ -270,12 +422,13 @@ export async function verifyStaticOutput({
   const cityIndex = JSON.parse(await readFile(join(absoluteDist, manifest.cityIndexUrl.slice(1)), 'utf8'))
   if (!Array.isArray(cityIndex)) throw new Error('city index payload is not an array')
   const nameIndex = JSON.parse(await readFile(join(absoluteDist, manifest.nameIndexUrl.slice(1)), 'utf8'))
-  if (!Array.isArray(nameIndex) || nameIndex.length !== manifest.count) {
-    throw new Error(`name index count mismatch: manifest=${manifest.count} payload=${nameIndex?.length}`)
+  if (!Array.isArray(nameIndex)) {
+    throw new Error('name index payload is not an array')
   }
 
   const schoolsPath = join(absoluteDist, manifest.url.slice(1))
   const { schools, isGzip } = decodeSchoolsPayload(await readFile(schoolsPath))
+  assertNoInternalSchoolFields({ schools }, manifest.url)
   if (schools.length !== manifest.count) {
     throw new Error(`manifest count mismatch: manifest=${manifest.count} payload=${schools.length}`)
   }
@@ -290,11 +443,16 @@ export async function verifyStaticOutput({
     throw new Error('dist/index.html に未置換の __COVERAGE__ が残っている（gen-seo-pages が走っていない可能性）')
   }
 
-  const targets = schools.filter((school) => school?.latitude != null && school?.longitude != null)
+  const targets = schools.filter(isDetailSchool)
+  if (nameIndex.length !== targets.length) {
+    throw new Error(`name index count mismatch: targets=${targets.length} payload=${nameIndex.length}`)
+  }
 
   // 県ハブは prefectures.json（総務省コード表由来）とデータの突き合わせで決まる。
   const { prefectures, muniByPref } = await loadCivicData(join(dirname(fileURLToPath(import.meta.url)), '..'))
   const activePrefectures = prefectures.filter((p) => targets.some((s) => s.prefecture === p.name))
+
+  const prefSlugByName = new Map(prefectures.map((p) => [p.name, p.slug]))
 
   const LEGAL_DOCS = ['terms', 'privacy', 'third-party', 'deviation-methodology']
   const GUIDE_SLUGS = ['commute-time', 'school-visit', 'deviation-with-care']
@@ -307,9 +465,33 @@ export async function verifyStaticOutput({
     ...GUIDE_SLUGS.map((slug) => `/guide/${slug}/`),
   ]
 
+  // 県別軽量インデックスは県ページ・市区町村ページ・sitemap 期待値の共通の正典なので
+  // 先に全県ぶん読む（この後の検査もこの Map を参照し、同じファイルを二度読まない）。
+  const prefIndexBySlug = new Map()
+  for (const pref of activePrefectures) {
+    const prefIndex = JSON.parse(
+      await readFile(join(absoluteDist, 'school-data', `pref-index-${pref.slug}.json`), 'utf8'),
+    )
+    assertNoInternalSchoolFields(prefIndex, `school-data/pref-index-${pref.slug}.json`)
+    prefIndexBySlug.set(pref.slug, prefIndex)
+  }
+  // 市区町村ページ（c5 C6）。対象は pref-index の cities に載っている市区町村＝総務省
+  // コードへ解決できたものだけ（「その他」にはページを作らない・gen-seo-pages と同条件）。
+  const cityPageEntries = []
+  for (const pref of activePrefectures) {
+    const prefIndex = prefIndexBySlug.get(pref.slug)
+    if (!Array.isArray(prefIndex?.cities) || !Array.isArray(prefIndex?.schools)) {
+      throw new Error(`pref-index is malformed on ${pref.slug}`)
+    }
+    for (const { c: city, n } of buildCityCounts(prefIndex)) {
+      cityPageEntries.push({ pref, city, count: n })
+    }
+  }
+
   const expectedLocations = new Set([
     `${SITE_ORIGIN}/`,
     ...staticRoutes.map((path) => `${SITE_ORIGIN}${path}`),
+    ...cityPageEntries.map(({ pref, city }) => `${SITE_ORIGIN}${cityPagePath(pref.slug, city)}`),
     ...targets.map((school) => `${SITE_ORIGIN}/school/${school.id}/`),
   ])
   const locations = sitemapLocations(await readFile(join(absoluteDist, 'sitemap.xml'), 'utf8'))
@@ -364,6 +546,7 @@ export async function verifyStaticOutput({
       throw error
     }
     const single = JSON.parse(singleText)
+    assertNoInternalSchoolFields(single, `school-data/${target.id}.json`)
     if (!Array.isArray(single?.schools) || single.schools.length !== 1 || single.schools[0]?.id !== target.id) {
       throw new Error(`school-data JSON does not contain the school itself: /school-data/${target.id}.json`)
     }
@@ -384,6 +567,7 @@ export async function verifyStaticOutput({
     const prefPayload = JSON.parse(
       await readFile(join(schoolDataRoot, `pref-${pref.slug}.json`), 'utf8'),
     )
+    assertNoInternalSchoolFields(prefPayload, `school-data/pref-${pref.slug}.json`)
     const expectedPrefCount = schools.filter((school) => school.prefecture === pref.name).length
     if (!Array.isArray(prefPayload?.schools) || prefPayload.schools.length !== expectedPrefCount) {
       throw new Error(
@@ -395,6 +579,41 @@ export async function verifyStaticOutput({
   }
   if (prefRowTotal !== schools.length) {
     throw new Error(`pref split total mismatch: prefTotal=${prefRowTotal} schools=${schools.length}`)
+  }
+
+  // 県ページ用軽量インデックス（SSR 埋め込み用・短縮キー）。
+  // 件数は lat/lng ありの校（地図・詳細ページと同じ集合）と一致させる。
+  if (!manifest.prefIndexUrls || typeof manifest.prefIndexUrls !== 'object') {
+    throw new Error('schools-manifest.json is missing prefIndexUrls')
+  }
+  for (const pref of activePrefectures) {
+    const prefIndexUrl = manifest.prefIndexUrls[pref.slug]
+    if (prefIndexUrl !== `/school-data/pref-index-${pref.slug}.json`) {
+      throw new Error(`schools-manifest.json prefIndexUrls is wrong for ${pref.slug}: ${prefIndexUrl}`)
+    }
+    const prefIndex = prefIndexBySlug.get(pref.slug)
+    const expectedTargets = schools.filter(
+      (school) =>
+        school.prefecture === pref.name && isDetailSchool(school),
+    ).length
+    if (
+      prefIndex?.slug !== pref.slug ||
+      !Array.isArray(prefIndex.cities) ||
+      !Array.isArray(prefIndex.schools) ||
+      prefIndex.schools.length !== expectedTargets
+    ) {
+      throw new Error(
+        `pref-index mismatch on ${pref.slug}: ` +
+        `expected=${expectedTargets} actual=${prefIndex?.schools?.length}`,
+      )
+    }
+    // 短縮キーが崩れて HTML が肥大しないよう、少なくとも 1 校は i/n 形であること
+    if (prefIndex.schools.length > 0) {
+      const sample = prefIndex.schools[0]
+      if (typeof sample?.i !== 'string' || typeof sample?.n !== 'string') {
+        throw new Error(`pref-index ${pref.slug} is not using compact keys (expected i/n)`)
+      }
+    }
   }
 
   // NULL 自体は段階的な収集を妨げないが、公開 API の対象外になるため見逃さない。
@@ -495,8 +714,21 @@ export async function verifyStaticOutput({
   if (apiJsonFiles.length < 3) throw new Error('/api/v1/ static JSON files are missing')
   for (const file of apiJsonFiles) {
     const value = JSON.parse(await readFile(file.path, 'utf8'))
+    assertNoInternalSchoolFields(value, file.relativePath)
     const leakPath = findDeviationLeak(value)
     if (leakPath) throw new Error(`deviation data found in ${file.relativePath} at ${leakPath}`)
+    const textLeakPath = findDeviationText(
+      value,
+      '$',
+      DEVIATION_TEXT_ALLOWLIST.get(file.relativePath) ?? new Set(),
+    )
+    if (textLeakPath) {
+      throw new Error(`deviation text found in ${file.relativePath} at ${textLeakPath}`)
+    }
+    // openapi.json はデータではなくスキーマ。official_url は「出典 URL の値」ではなく
+    // プロパティ定義なので、以降の出典ホスト・出典名の検査は当てない
+    // （偏差値ガードは上で当て済み。ここで抜けるのはガードの緩和ではない）。
+    if (file.relativePath === 'api/v1/openapi.json') continue
     for (const sourceUrl of collectOfficialUrls(value)) {
       const host = urlHost(sourceUrl, file.relativePath)
       if (FORBIDDEN_SOURCE_HOSTS.some((pattern) => pattern.test(host))) {
@@ -505,6 +737,12 @@ export async function verifyStaticOutput({
       if (!isInstitutionalHost(host) && !registeredOfficialHosts.has(host)) {
         throw new Error(`unregistered source domain in ${file.relativePath}: ${host}`)
       }
+    }
+    const sourceMention = findForbiddenSourceMention(value)
+    if (sourceMention) {
+      throw new Error(
+        `forbidden source mention "${sourceMention.label}" in ${file.relativePath} at ${sourceMention.path}`,
+      )
     }
   }
 
@@ -551,6 +789,72 @@ export async function verifyStaticOutput({
     throw new Error('/api/v1/dataset.json prefecture metadata does not match the public API files')
   }
 
+  // --- 呼び方の契約（OpenAPI）---
+  // dataset.json が「何が入っているか」、openapi.json が「どう呼ぶか」を持つ。
+  // 記述と実体が食い違っても静的配信は 200 を返し続けるため、外部クライアントは
+  // 黙って壊れる。パス・県 slug・必須フィールドを実出力と突き合わせて落とす。
+  const openapi = JSON.parse(await readFile(join(apiRoot, 'openapi.json'), 'utf8'))
+  if (openapi.info?.version !== datasetMetadata.version) {
+    throw new Error(
+      `/api/v1/openapi.json version mismatch: openapi=${openapi.info?.version} dataset=${datasetMetadata.version}`,
+    )
+  }
+  if (openapi.info?.license?.url !== DATASET_LICENSE_URL) {
+    throw new Error('/api/v1/openapi.json is missing the dataset license')
+  }
+  if (openapi.servers?.[0]?.url !== SITE_ORIGIN) {
+    throw new Error(`/api/v1/openapi.json server must be ${SITE_ORIGIN}`)
+  }
+  const documentedApiPaths = Object.keys(openapi.paths ?? {})
+  const expectedApiPaths = [
+    '/api/v1/dataset.json',
+    '/api/v1/schools.json',
+    '/api/v1/schools/{prefecture}.json',
+  ]
+  if (
+    documentedApiPaths.length !== expectedApiPaths.length ||
+    expectedApiPaths.some((path) => !documentedApiPaths.includes(path))
+  ) {
+    throw new Error(
+      `/api/v1/openapi.json paths do not match the published endpoints: ${documentedApiPaths.join(', ')}`,
+    )
+  }
+  const documentedPrefSlugs = new Set(
+    openapi.paths['/api/v1/schools/{prefecture}.json'].get?.parameters
+      ?.find((parameter) => parameter?.name === 'prefecture')?.schema?.enum ?? [],
+  )
+  if (
+    documentedPrefSlugs.size !== actualPrefApiSlugs.size ||
+    [...actualPrefApiSlugs].some((slug) => !documentedPrefSlugs.has(slug))
+  ) {
+    throw new Error(
+      '/api/v1/openapi.json prefecture enum does not match the published files: ' +
+      `documented=${documentedPrefSlugs.size} actual=${actualPrefApiSlugs.size}`,
+    )
+  }
+  // 「必ずある」と宣言した項目が実データで欠けていたら、契約の方が嘘になる。
+  const requiredSchoolFields = openapi.components?.schemas?.School?.required ?? []
+  if (requiredSchoolFields.length === 0) {
+    throw new Error('/api/v1/openapi.json School schema declares no required fields')
+  }
+  for (const record of publicPayload.schools) {
+    for (const field of requiredSchoolFields) {
+      if (record[field] == null) {
+        throw new Error(
+          `/api/v1/openapi.json declares "${field}" as required but ${record.id} does not have it`,
+        )
+      }
+    }
+  }
+
+  // 公開 API の CORS。落ちるとブラウザ内で動くクライアント（他サイトの JS・
+  // ブラウザ内 AI エージェント）から読めなくなるが、curl では 200 が返るので気づけない。
+  const headersText = await readFile(join(absoluteDist, '_headers'), 'utf8')
+  const apiHeaderBlock = headersText.split(/\n(?=\S)/).find((block) => block.startsWith('/api/v1/*'))
+  if (!apiHeaderBlock || !/^\s*Access-Control-Allow-Origin:\s*\*\s*$/mi.test(apiHeaderBlock)) {
+    throw new Error('_headers must serve /api/v1/* with Access-Control-Allow-Origin: *')
+  }
+
   // --- 学校ページ全件検査 ---
   let neighborLinkTotal = 0
   for (const target of targets) {
@@ -563,7 +867,11 @@ export async function verifyStaticOutput({
     if (!title || !title.includes(escapedName)) {
       throw new Error(`title is missing school name on ${pageLabel}: ${title}`)
     }
-    if (!main.includes(`<h1>${escapedName}</h1>`)) {
+    // h1 は React の実出力（<h1 class="detail-title">校名（県共：58〜62）</h1>）なので、
+    // タグの完全一致ではなく「h1 があり、その中に校名が入っている」で判定する
+    // （plan_ssr-hydration.md でプリレンダーを手書き HTML から React 出力へ切り替えた）。
+    const h1 = main.match(/<h1[^>]*>([\s\S]*?)<\/h1>/)
+    if (!h1 || !h1[1].includes(escapedName)) {
       throw new Error(`missing <h1> school heading on ${pageLabel}`)
     }
     const jsonLdBlocks = extractJsonLdBlocks(html)
@@ -575,9 +883,11 @@ export async function verifyStaticOutput({
       throw new Error(`school JSON-LD is missing license or creditText on ${pageLabel}`)
     }
     // BreadcrumbList（UUID URL の検索結果表示の救済・c7 C4）: ホーム › 県 ›（市区町村）› 校名。
+    // item を与えられない中間段は段ごと落とすので、県 slug が引けなければ「ホーム › 校名」の 2 段。
     const breadcrumb = jsonLdBlocks.find((block) => block?.['@type'] === 'BreadcrumbList')
     const cityGroup = resolveCityGroup(target, muniByPref)
-    const expectedBreadcrumbLength = cityGroup ? 4 : 3
+    const prefSlug = prefSlugByName.get(target.prefecture) ?? null
+    const expectedBreadcrumbLength = prefSlug ? (cityGroup ? 4 : 3) : 2
     if (
       !breadcrumb ||
       !Array.isArray(breadcrumb.itemListElement) ||
@@ -591,10 +901,24 @@ export async function verifyStaticOutput({
     if (breadcrumbLast?.name !== target.name) {
       throw new Error(`BreadcrumbList last item must be the school name on ${pageLabel}`)
     }
+    checkBreadcrumbItems(breadcrumb, pageLabel)
+    // 3 段目は市区町村ページの実 URL を指すこと（アンカーや県 URL の使い回しではない）。
+    if (prefSlug && cityGroup) {
+      const expectedCityItem = `${SITE_ORIGIN}${cityPagePath(prefSlug, cityGroup.label)}`
+      const cityEntry = breadcrumb.itemListElement[2]
+      if (cityEntry?.item !== expectedCityItem) {
+        throw new Error(
+          `BreadcrumbList city item is wrong on ${pageLabel}: ` +
+          `expected=${expectedCityItem} actual=${cityEntry?.item}`,
+        )
+      }
+    }
     checkForbiddenWords(main, pageLabel, { includeCommutePhrase: false })
     // 近隣校節（内部リンク網の本体・c4 C1）: 見出しと「直線距離」の明記、
     // 自分以外の学校ページへの最低リンク数を全件で保証する。
-    if (!main.includes('の近くにある高校')) {
+    // 見出しは React の実出力（<h4>📍 近くにある高校</h4>）。旧手書き HTML は
+    // 「<校名>の近くにある高校」だったが、シート内では校名が直上にあるため繰り返さない。
+    if (!main.includes('近くにある高校')) {
       throw new Error(`missing neighbor section heading on ${pageLabel}`)
     }
     if (!main.includes('直線距離')) {
@@ -613,11 +937,19 @@ export async function verifyStaticOutput({
     neighborLinkTotal += schoolLinks.size
     // 選抜実績の年度表を出すページには公式出典が必須（c4 C3 完了条件）。
     if (main.includes('年度別志願状況')) {
-      const sourceLine = main.match(/<p>出典:\s*([\s\S]*?)<\/p>/i)?.[1] ?? ''
-      if (!/<a\b[^>]*\bhref="https?:\/\/[^" ]+/i.test(sourceLine)) {
+      // React の実出力は <div class="admission-sources"> の中に出典リストを持つ
+      // （SchoolDetailSheet.tsx の admission-sources ブロック）。
+      // 旧手書き HTML の <p>出典: …</p> 形式ではない。
+      const sourceBlock = main.match(/<div class="admission-sources">[\s\S]*?<\/div>/i)?.[0] ?? ''
+      if (!/<a\b[^>]*\bhref="https?:\/\/[^" ]+/i.test(sourceBlock)) {
         throw new Error(`admission table without 出典 URL on ${pageLabel}`)
       }
     }
+    // SSR 成果物の検査（plan_ssr-hydration.md C5）。学校詳細は SchoolDetailSheet が
+    // <h1 class="detail-title">校名（…）</h1> を出す。これが無ければ SSR が走っていない。
+    assertSsrMarker(html, pageLabel, 'detail-title')
+    // 初期データ script（ #__MM_INITIAL__ ）は学校単体 payload を埋め込むため必須。
+    assertInitialDataScript(html, pageLabel)
   }
 
   // --- トップ ---
@@ -625,6 +957,11 @@ export async function verifyStaticOutput({
     const main = checkPageSkeleton(topHtml, '/', `${SITE_ORIGIN}/`)
     if (!/<h1[\s>]/.test(main)) throw new Error('missing <h1> on /')
     checkForbiddenWords(main, '/', { includeCommutePhrase: false })
+    // SSR 成果物の検査（plan_ssr-hydration.md C5）。HomePage は <main id="main-content" class="content home-content">
+    // を出す。これが無ければ SSR が走っていないか古い手書き HTML が残っている。トップは
+    // 初期データ script が不要（plan_ssr-hydration_c3 C3 の設計・収録件数のみ埋め込む予定だったが
+    // トップは schools-manifest を待たずに表示できるため現状 #__MM_INITIAL__ は無い）。
+    assertSsrMarker(topHtml, '/', 'content home-content')
     for (const pref of activePrefectures) {
       if (!main.includes(`href="/pref/${pref.slug}/"`)) {
         throw new Error(`top page is missing crawl link to /pref/${pref.slug}/`)
@@ -656,8 +993,10 @@ export async function verifyStaticOutput({
     const html = await readPage(absoluteDist, join('pref', pref.slug, 'index.html'), `/pref/${pref.slug}/`)
     const pageLabel = `/pref/${pref.slug}/`
     const main = checkPageSkeleton(html, pageLabel, `${SITE_ORIGIN}/pref/${pref.slug}/`)
-    if (!main.includes(`<h1>${escapeHtml(pref.name)}の高校一覧`)) {
-      throw new Error(`missing <h1> on ${pageLabel}`)
+    // SSR 後は class 付き h1 になるため、完全一致ではなく「h1 があり県名が入る」で見る
+    // （plan_ssr-hydration_c3_initial-data.md 手順 6）。
+    if (!/<h1[\s>]/.test(main) || !main.includes(escapeHtml(pref.name))) {
+      throw new Error(`missing <h1> with prefecture name on ${pageLabel}`)
     }
     checkForbiddenWords(main, pageLabel, { includeCommutePhrase: true })
     // 県内全校へのリンクが 1 校残らず載っていること（内部リンク経路の本体）。
@@ -674,6 +1013,74 @@ export async function verifyStaticOutput({
         throw new Error(`${pageLabel} has jump link to missing section: #${id}`)
       }
     }
+    // 県内の全市区町村ページへ 1 ホップで辿れること（c5 C6 のクロール経路の本体）。
+    // 逆に、実在しない市区町村ページへリンクしていないこと（「その他」にはページが無い）。
+    for (const { pref: linkedPref, city } of cityPageEntries) {
+      if (linkedPref.slug !== pref.slug) continue
+      if (!main.includes(`href="${cityPagePath(pref.slug, city)}"`)) {
+        throw new Error(`${pageLabel} is missing link to ${cityPagePath(pref.slug, city)}`)
+      }
+    }
+    for (const [, href] of main.matchAll(/href="(\/pref\/[^"]+\/[^"]+\/)"/g)) {
+      if (!expectedLocations.has(`${SITE_ORIGIN}${href}`)) {
+        throw new Error(`${pageLabel} links to a municipality page that does not exist: ${href}`)
+      }
+    }
+    // SSR 成果物の検査（plan_ssr-hydration.md C5）。PrefecturePage は
+    // <main id="main-content" class="content hub-content"> を出す。県ページは
+    // 軽量インデックス（pref-index-<slug>.json）を初期データとして埋め込むので
+    // #__MM_INITIAL__ も必須。
+    assertSsrMarker(html, pageLabel, 'content hub-content')
+    assertInitialDataScript(html, pageLabel)
+  }
+
+  // --- 市区町村ページ全件検査（c5 C6） ---
+  // 学校ページの BreadcrumbList 3 段目がこのページを指すので、1 枚でも欠けると
+  // 構造化データがリンク切れになる。全件を検査する。
+  for (const { pref, city, count } of cityPageEntries) {
+    const path = cityPagePath(pref.slug, city)
+    const html = await readPage(absoluteDist, join('pref', pref.slug, city, 'index.html'), path)
+    const main = checkPageSkeleton(html, path, `${SITE_ORIGIN}${path}`)
+    checkSafeHrefAttributes(main, path)
+    const escapedCity = escapeHtml(city)
+    const title = extractTitle(html)
+    if (!title || !title.includes(escapedCity)) {
+      throw new Error(`title is missing the municipality name on ${path}: ${title}`)
+    }
+    const h1 = main.match(/<h1[^>]*>([\s\S]*?)<\/h1>/)
+    if (!h1 || !h1[1].includes(escapedCity)) {
+      throw new Error(`missing <h1> with the municipality name on ${path}`)
+    }
+    // 所在地の列挙であって通学圏ではない（学区データを保有するまでの不変原則）。
+    checkForbiddenWords(main, path, { includeCommutePhrase: true })
+    // その市区町村の全校が漏れなくリンクされていること（内部リンク経路の本体）。
+    const prefIndex = prefIndexBySlug.get(pref.slug)
+    const cityTargets = prefIndex.schools.filter((entry) => entry.c === city)
+    if (cityTargets.length !== count) {
+      throw new Error(`city page count mismatch on ${path}: index=${cityTargets.length} expected=${count}`)
+    }
+    for (const entry of cityTargets) {
+      if (!main.includes(`href="/school/${entry.i}/"`)) {
+        throw new Error(`${path} is missing link to /school/${entry.i}/`)
+      }
+    }
+    // パンくずは ホーム › 県 › 市区町村 の 3 段。最終段（市区町村）だけ item を省く。
+    const breadcrumb = extractJsonLdBlocks(html).find((block) => block?.['@type'] === 'BreadcrumbList')
+    if (!breadcrumb || !Array.isArray(breadcrumb.itemListElement) || breadcrumb.itemListElement.length !== 3) {
+      throw new Error(`BreadcrumbList JSON-LD is missing or malformed on ${path}`)
+    }
+    checkBreadcrumbItems(breadcrumb, path)
+    if (breadcrumb.itemListElement[2]?.name !== city) {
+      throw new Error(`BreadcrumbList last item must be the municipality name on ${path}`)
+    }
+    // 近隣導線のリンク先が実在する市区町村ページであること（袋小路と 404 の両方を防ぐ）。
+    for (const [, href] of main.matchAll(/href="(\/pref\/[^"]+\/[^"]+\/)"/g)) {
+      if (!expectedLocations.has(`${SITE_ORIGIN}${href}`)) {
+        throw new Error(`${path} links to a municipality page that does not exist: ${href}`)
+      }
+    }
+    assertSsrMarker(html, path, 'content hub-content')
+    assertInitialDataScript(html, path)
   }
 
   // --- /data/・/press・/legal/* ---
@@ -738,7 +1145,10 @@ export async function verifyStaticOutput({
   if (
     !llms.includes(DATASET_CLAIM) ||
     !llms.includes(`${SITE_ORIGIN}/data/`) ||
-    !llms.includes(`${SITE_ORIGIN}/api/v1/schools.json`)
+    !llms.includes(`${SITE_ORIGIN}/api/v1/schools.json`) ||
+    // 呼び方の契約への入口。ここが無いと、エージェントは llms.txt から
+    // 「データがある」ことしか分からず、呼び出し方を推測することになる。
+    !llms.includes(`${SITE_ORIGIN}/api/v1/openapi.json`)
   ) {
     throw new Error('llms.txt is missing dataset claim or public API URLs')
   }
@@ -765,6 +1175,7 @@ export async function verifyStaticOutput({
     schoolCount: schools.length,
     seoSchoolCount: targets.length,
     prefPageCount: activePrefectures.length,
+    cityPageCount: cityPageEntries.length,
     staticRouteCount: staticRoutes.length + 1,
     sitemapUrlCount: locations.length,
     sitemapUniqueUrlCount: actualLocations.size,

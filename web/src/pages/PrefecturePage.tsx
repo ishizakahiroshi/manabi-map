@@ -3,14 +3,20 @@ import { useLocation, useNavigate, useNavigationType, useParams } from 'react-ro
 import { useApp } from '../contexts/AppContext'
 import { useI18n } from '../contexts/I18nContext'
 import { useGoBack } from '../hooks/useGoBack'
-import { useSchools } from '../hooks/useSchools'
 import type { useUserData } from '../hooks/useUserData'
-import { loadSearchIndexes, normalizeForMatch } from '../lib/searchIndex'
+import { getInitialData } from '../lib/initialData'
+import {
+  cityPagePath,
+  expandPrefIndex,
+  loadPrefIndex,
+  type PrefListSchool,
+} from '../lib/prefIndex'
+import { normalizeForMatch } from '../lib/searchIndex'
 import { prefectureBySlug } from '../lib/prefecture'
-import { ownershipFull, devLabel, topDev, GEN_FULL, COURSE_TIME_FULL } from '../lib/format'
-import { primaryAdmissionTrend } from '../lib/admission'
+import { useFormat } from '../hooks/useFormat'
 import { trackEvent } from '../lib/analytics'
-import type { CourseTime, GenderType, School } from '../types/school'
+import { useSchoolChips } from '../hooks/useSchoolChips'
+import { SchoolFilterChips } from '../components/SchoolFilterChips'
 import { SiteFooter } from '../components/SiteFooter'
 import { NotFoundPage } from './NotFoundPage'
 
@@ -49,39 +55,25 @@ function savePrefViewState(slug: string, openCities: Set<string>, scroll: number
   }
 }
 
-type OwnershipChip = 'public' | 'private' | 'national'
-
-interface ChipState {
-  ownership: Set<OwnershipChip>
-  course: Set<CourseTime>
-  gender: Set<GenderType>
-}
-
-function emptyChips(): ChipState {
-  return { ownership: new Set(), course: new Set(), gender: new Set() }
-}
-
-function ownershipChipOf(s: School): OwnershipChip {
-  if (s.ownership === 'private') return 'private'
-  if (s.ownership === 'national') return 'national'
-  return 'public'
-}
-
-// SchoolDetailSheet と同じ趣旨の状態ラベル（閉校予定・募集停止を一覧でも隠さない）。
-const LIFECYCLE_LABELS: Record<string, string> = {
-  planned: '開校予定', closing: '在校生のみ', closed: '閉校',
-}
-const RECRUITMENT_LABELS: Record<string, string> = {
-  unknown: '未確認', not_started: '募集開始前',
-  no_external_high_school_intake: '高校段階の外部募集なし', stopped: '募集終了',
-}
-
-function statusLabel(s: School): string | null {
-  const labels = [
-    s.lifecycle_status_code !== 'active' ? LIFECYCLE_LABELS[s.lifecycle_status_code] : null,
-    s.recruitment_status_code !== 'recruiting' ? RECRUITMENT_LABELS[s.recruitment_status_code] : null,
-  ].filter((v): v is string => Boolean(v))
-  return labels.length ? labels.join('・') : null
+/**
+ * プリレンダー同梱（または null）から県一覧の初期 state を作る。
+ * sessionStorage / fetch は触らない（hydration 一致のため）。
+ */
+function initialPrefState(slug: string | undefined, prefName: string | undefined): {
+  schools: PrefListSchool[]
+  cityOrder: string[] | null
+} {
+  if (!slug || !prefName) return { schools: [], cityOrder: null }
+  const payload = getInitialData()?.prefPage
+  if (!payload || payload.slug !== slug) return { schools: [], cityOrder: null }
+  try {
+    return {
+      schools: expandPrefIndex(payload, prefName),
+      cityOrder: payload.cities,
+    }
+  } catch {
+    return { schools: [], cityOrder: null }
+  }
 }
 
 interface Props {
@@ -90,8 +82,8 @@ interface Props {
 
 /**
  * /pref/:pref — 都道府県ハブ（一覧）。
- * 初回直リンクはプリレンダー HTML（scripts/gen-seo-pages.mjs の renderPrefPage）が出るため、
- * ここは SPA 内遷移と mount 後の描画を担当する（白紙防止）。
+ * 全件 schools.json は読まず、県別軽量インデックス（pref-index）だけで描く
+ * （plan_ssr-hydration_c3_initial-data.md）。地図へ遷移したときに初めて全件を取る。
  * 並び順は市区町村コード順 → 同一市区町村内は五十音順に固定する。
  * 偏差値順・倍率順のソートは実装しない（ランキングサイト化の禁止線・
  * docs/local/plan_seo-growth-strategy.md §やらないこと）。
@@ -104,122 +96,112 @@ export function PrefecturePage({ userData }: Props) {
   const navigationType = useNavigationType()
   const { setHome } = useApp()
   const { t } = useI18n()
-  const { schools, loading, error } = useSchools()
   const { favorites } = userData
+  const fmt = useFormat()
   const pref = slug ? prefectureBySlug(slug) : null
 
-  const [cityOrder, setCityOrder] = useState<string[] | null>(null)
-  const [cityBySchool, setCityBySchool] = useState<Map<string, string> | null>(null)
+  const boot = initialPrefState(slug, pref?.name)
+  const [prefSchools, setPrefSchools] = useState<PrefListSchool[]>(() => boot.schools)
+  const [cityOrder, setCityOrder] = useState<string[] | null>(() => boot.cityOrder)
+  const [loading, setLoading] = useState(() => boot.cityOrder == null)
+  const [error, setError] = useState<string | null>(null)
   const contentRef = useRef<HTMLElement>(null)
   const storedViewStateRef = useRef<PrefViewState | null>(null)
   const viewStateSlugRef = useRef(slug)
   const restoredFor = useRef<string | null>(null)
   const scrollFrameRef = useRef<number | null>(null)
-  const [openCities, setOpenCities] = useState<Set<string>>(() => {
-    const state = readPrefViewState(slug)
-    storedViewStateRef.current = state
-    return new Set(state.open)
-  })
+  // 初回 render は sessionStorage を読まない（SSR と一致させる）。effect で復元する。
+  const [openCities, setOpenCities] = useState<Set<string>>(() => new Set())
   const openCitiesRef = useRef(openCities)
   openCitiesRef.current = openCities
   /**
    * 戻る操作（POP）でこの画面へ着いたときは、URL hash よりも保存済みの閲覧位置を優先する。
-   * 市区町村ジャンプで hash が付いた状態から学校詳細へ行き来しても、読んでいた場所を
-   * 見出しの先頭へ巻き戻さないため。保存位置が無い直リンク着地は従来どおり hash へ着地する。
+   * 初回 render では false 固定。effect で sessionStorage を見て立てる。
    */
-  const preferStoredScroll = useRef(
-    navigationType === 'POP' && (storedViewStateRef.current?.scroll ?? 0) > 0,
-  )
-  const [chips, setChips] = useState<ChipState>(emptyChips)
+  const preferStoredScroll = useRef(false)
+  const chips = useSchoolChips(prefSchools)
+  const chipsClear = chips.clear
   const [q, setQ] = useState('')
   const scrolledFor = useRef<string | null>(null)
   // 貼り付いた見出しの判定に実測値を使う（CSS の --city-jump-h と二重管理しない）
   const jumpRef = useRef<HTMLElement>(null)
+  // 直前に表示していた slug。切り替わったときだけ一覧をクリアする
+  // （埋め込み直後に setPrefSchools([]) するとちらつく）。
+  // 埋め込みはビルド時点の値なので、正典は常に pref-index JSON 側。hydration 後に取り直す。
+  const lastPrefSlug = useRef<string | null>(boot.cityOrder != null ? (slug ?? null) : null)
 
+  // 県別軽量インデックスを読む。埋め込みの有無にかかわらず取り直す
+  // （HTML だけ古い / JSON だけ新しいズレを正典側で上書きする）。
+  // slug 切替時は前の県の一覧を残さない（見出しだけ新県・中身が旧県になるのを防ぐ）。
   useEffect(() => {
-    if (!pref) return
+    if (!slug || !pref) return
+    const slugChanged = lastPrefSlug.current !== slug
+    if (slugChanged) {
+      setLoading(true)
+      setError(null)
+      setPrefSchools([])
+      setCityOrder(null)
+      lastPrefSlug.current = slug
+    }
     let cancelled = false
-    void loadSearchIndexes()
-      .then(({ cities, schools: indexed }) => {
+    void loadPrefIndex(slug)
+      .then((payload) => {
         if (cancelled) return
-        setCityOrder(cities.filter((c) => c.pref === pref.name).map((c) => c.city))
-        setCityBySchool(
-          new Map(
-            indexed
-              .filter((s) => s.pref === pref.name)
-              .map((s) => [s.id, s.city ?? UNRESOLVED_CITY]),
-          ),
-        )
+        setPrefSchools(expandPrefIndex(payload, pref.name))
+        setCityOrder(payload.cities)
+        setLoading(false)
+        setError(null)
       })
       .catch(() => {
-        // 索引が取れなくても一覧自体は出す（市区町村コード順の代わりに名称順へ劣化）
-        if (!cancelled) {
+        if (cancelled) return
+        // 埋め込みで既に描けている slug の取り直し失敗では画面を潰さない。
+        if (slugChanged) {
+          setError('学校データの取得に失敗しました。時間をおいて再読み込みしてください。')
+          setPrefSchools([])
           setCityOrder([])
-          setCityBySchool(new Map())
         }
+        setLoading(false)
       })
     return () => {
       cancelled = true
     }
-  }, [pref])
+  }, [slug, pref])
 
-  const prefSchools = useMemo(
-    () => (pref ? schools.filter((s) => s.prefecture === pref.name) : []),
-    [schools, pref],
-  )
+  // 開閉・スクロール位置は effect で復元（初回 render では触らない）
+  useEffect(() => {
+    const state = readPrefViewState(slug)
+    storedViewStateRef.current = state
+    setOpenCities(new Set(state.open))
+    preferStoredScroll.current = navigationType === 'POP' && state.scroll > 0
+  }, [slug, navigationType])
 
   const groups = useMemo(() => {
-    if (cityBySchool == null || cityOrder == null) return []
-    const byCity = new Map<string, School[]>()
+    if (cityOrder == null) return []
+    const byCity = new Map<string, PrefListSchool[]>()
     for (const school of prefSchools) {
-      // 索引に無い校（索引取得失敗時の全校を含む）は city 値そのまま → 無ければ「その他」
-      const city = cityBySchool.get(school.id) ?? school.city ?? UNRESOLVED_CITY
+      const city = school.city ?? UNRESOLVED_CITY
       const list = byCity.get(city) ?? []
       list.push(school)
       byCity.set(city, list)
     }
     const collator = new Intl.Collator('ja')
+    // cityOrder に載っている市区町村だけが専用ページを持つ（「その他」＝解決不能の
+    // 受け皿にはページが無いので、リンクを出すとリンク切れになる）。
+    const known = new Set(cityOrder)
     const orderedLabels = [
       ...cityOrder.filter((c) => byCity.has(c)),
-      ...[...byCity.keys()].filter((c) => !cityOrder.includes(c)).sort(collator.compare),
+      ...[...byCity.keys()].filter((c) => !known.has(c)).sort(collator.compare),
     ]
     return orderedLabels.map((label) => {
       const list = (byCity.get(label) ?? []).slice()
       list.sort((a, b) => collator.compare(a.name_kana ?? a.name, b.name_kana ?? b.name))
-      return { label, schools: list }
+      return { label, schools: list, hasPage: known.has(label) }
     })
-  }, [prefSchools, cityBySchool, cityOrder])
-
-  /**
-   * 設置区分・課程の行へ続けて出す補足（地図ピンと同じ値: 参考偏差値と最新年度の一次募集倍率）。
-   * 行を増やさず同じメタ行に「 ・ 」で連結する（幅が足りなければ自然に折り返す）。
-   * 値のある学校だけを持つ Map なので、未収集の学校には行を足さない（「−」の羅列を作らない）。
-   * 数値は地図ピンと同じ devLabel / primaryAdmissionTrend から取り、表示の食い違いを作らない。
-   * chip 切替や市区町村の開閉で再計算しないよう memo 化する（MapPage の ratioBands と同じ方針）。
-   * これは React 描画側だけの表示で、プリレンダー HTML には出さない
-   * （§7.7 表示規約: 偏差値はプリレンダー内容に一切含めない・gen-seo-pages.mjs 冒頭）。
-   */
-  const factsById = useMemo(() => {
-    const facts = new Map<string, string>()
-    for (const school of prefSchools) {
-      const parts: string[] = []
-      if (topDev(school) != null) parts.push(t('prefPage.deviationLabel', { v: devLabel(school) }))
-      const latest = primaryAdmissionTrend(school)?.annual[0]
-      if (latest) {
-        parts.push(
-          t('prefPage.admissionLatest', { year: latest.year, ratio: latest.ratio.toFixed(2) }),
-        )
-      }
-      if (parts.length) facts.set(school.id, parts.join(' ・ '))
-    }
-    return facts
-  }, [prefSchools, t])
+  }, [prefSchools, cityOrder])
 
   /**
    * 校名しぼりこみ用の正規化済み文字列（校名＋ふりがな）。
    * 1 文字入力するたびに 440 校ぶんの正規化を走らせないよう、県の学校集合が変わった時だけ作る。
-   * 市区町村名は見出し側（groups の label）で突き合わせるのでここには含めない
-   * （school.city は索引由来の表示名と一致しないことがあるため）。
    */
   const haystackById = useMemo(() => {
     const map = new Map<string, string>()
@@ -256,9 +238,6 @@ export function PrefecturePage({ userData }: Props) {
   /**
    * ジャンプバーの実高を CSS 変数へ流す。貼り付く見出しの top とアンカー着地の
    * scroll-margin-top がこれを見る（--city-jump-h）。
-   * 固定値にできないのは、横スクロールバーを場所取りする環境（Windows のデスクトップ Chrome）で
-   * 15px ほど高くなるため。ずれると「見出しがバーに潜って切れる」か
-   * 「隙間から一覧が透ける」のどちらかが必ず出る。
    */
   useEffect(() => {
     const bar = jumpRef.current
@@ -283,12 +262,12 @@ export function PrefecturePage({ userData }: Props) {
   useEffect(() => {
     if (viewStateSlugRef.current === slug) return
     viewStateSlugRef.current = slug
-    storedViewStateRef.current = readPrefViewState(slug)
     restoredFor.current = null
     scrolledFor.current = null
-    // 別の県への遷移は戻る操作ではないので、その県の hash 着地を優先させる
-    preferStoredScroll.current = false
-    setOpenCities(new Set(storedViewStateRef.current.open))
+    chipsClear()
+    setQ('')
+    // chipsClear は useCallback で安定。依存に足すと参照だけで再発火する形になるため入れない。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [slug])
 
   // 市区町村の開閉状態を、現在のスクロール位置と一緒に県別へ保存する
@@ -340,14 +319,7 @@ export function PrefecturePage({ userData }: Props) {
 
   if (!pref) return <NotFoundPage />
 
-  const chipActive = chips.ownership.size > 0 || chips.course.size > 0 || chips.gender.size > 0
-  const matchesChips = (s: School): boolean => {
-    if (chips.ownership.size > 0 && !chips.ownership.has(ownershipChipOf(s))) return false
-    if (chips.course.size > 0 && !s.course_times.some((c) => chips.course.has(c))) return false
-    if (chips.gender.size > 0 && !chips.gender.has(s.gender_type)) return false
-    return true
-  }
-  const shownCount = prefSchools.filter(matchesChips).length
+  const shownCount = prefSchools.filter(chips.matches).length
 
   // 校名しぼりこみ。見出し（市区町村名）にも当てるので「文京」で文京区の 25 校がまとめて出る。
   const query = normalizeForMatch(q.trim())
@@ -357,10 +329,11 @@ export function PrefecturePage({ userData }: Props) {
       const cityHit = queryActive && normalizeForMatch(g.label).includes(query)
       return {
         label: g.label,
+        hasPage: g.hasPage,
         total: g.schools.length,
         schools: g.schools.filter(
           (s) =>
-            matchesChips(s) &&
+            chips.matches(s) &&
             (!queryActive || cityHit || (haystackById.get(s.id) ?? '').includes(query)),
         ),
       }
@@ -371,47 +344,11 @@ export function PrefecturePage({ userData }: Props) {
   /** 検索中は一致した市区町村を開いたまま固定する（結果が畳まれて見えなくならないように）。 */
   const isOpen = (label: string) => queryActive || openCities.has(label)
 
-  const count = (fn: (s: School) => boolean) => prefSchools.filter(fn).length
-  const chipDefs: Array<{ key: string; label: string; n: number; on: boolean; toggle: () => void }> = []
-  const toggleSet = <T,>(set: Set<T>, value: T): Set<T> => {
-    const next = new Set(set)
-    if (next.has(value)) next.delete(value)
-    else next.add(value)
-    return next
-  }
-  const ownershipDefs: Array<[OwnershipChip, string]> = [
-    ['public', t('prefPage.chipPublic')],
-    ['private', t('prefPage.chipPrivate')],
-    ['national', t('prefPage.chipNational')],
-  ]
-  for (const [key, label] of ownershipDefs) {
-    const n = count((s) => ownershipChipOf(s) === key)
-    if (n === 0) continue
-    chipDefs.push({
-      key: `own-${key}`, label, n, on: chips.ownership.has(key),
-      toggle: () => setChips((c) => ({ ...c, ownership: toggleSet(c.ownership, key) })),
-    })
-  }
-  for (const key of ['fulltime', 'parttime', 'correspondence'] as CourseTime[]) {
-    const n = count((s) => s.course_times.includes(key))
-    if (n === 0) continue
-    chipDefs.push({
-      key: `course-${key}`, label: COURSE_TIME_FULL[key], n, on: chips.course.has(key),
-      toggle: () => setChips((c) => ({ ...c, course: toggleSet(c.course, key) })),
-    })
-  }
-  for (const key of ['coed', 'girls', 'boys'] as GenderType[]) {
-    const n = count((s) => s.gender_type === key)
-    if (n === 0) continue
-    chipDefs.push({
-      key: `gender-${key}`, label: GEN_FULL[key], n, on: chips.gender.has(key),
-      toggle: () => setChips((c) => ({ ...c, gender: toggleSet(c.gender, key) })),
-    })
-  }
-
-  const openSchool = (school: School) => {
+  const openSchool = (school: PrefListSchool) => {
     trackEvent('search', { source: 'pref_page' })
-    setHome({ label: school.name, lat: school.latitude, lng: school.longitude })
+    if (school.latitude != null && school.longitude != null) {
+      setHome({ label: school.name, lat: school.latitude, lng: school.longitude })
+    }
     navigate(`/school/${school.id}`)
   }
 
@@ -535,27 +472,13 @@ export function PrefecturePage({ userData }: Props) {
               </div>
             )}
 
-            <div className="chip-row" role="group" aria-label={t('prefPage.chipsLabel')}>
-              {chipDefs.map((c) => (
-                <button
-                  key={c.key}
-                  type="button"
-                  className={`chip ${c.on ? 'on' : ''}`}
-                  aria-pressed={c.on}
-                  onClick={c.toggle}
-                >
-                  {c.label} {c.n}
-                </button>
-              ))}
-            </div>
-            {chipActive && (
-              <div className="mini-hint" aria-live="polite">
-                {t('prefPage.filterShowing', { total: prefSchools.length, shown: shownCount })}{' '}
-                <button type="button" className="chip" onClick={() => setChips(emptyChips())}>
-                  {t('prefPage.filterClear')}
-                </button>
-              </div>
-            )}
+            <SchoolFilterChips
+              chips={chips.chips}
+              active={chips.active}
+              total={prefSchools.length}
+              shown={shownCount}
+              onClear={chips.clear}
+            />
 
             {/* 0 件でも要素は残す（ref と ResizeObserver を付け替えないため）。高さ 0 は
                 --city-jump-h: 0px として正しく効き、貼り付く見出しが可視領域の上端に載る。 */}
@@ -597,14 +520,29 @@ export function PrefecturePage({ userData }: Props) {
               >
                 <summary>
                   {t('prefPage.cityHeading', { city: g.label, n: g.total })}
-                  {(chipActive || queryActive) && g.schools.length !== g.total
+                  {(chips.active || queryActive) && g.schools.length !== g.total
                     ? `（${t('prefPage.cityShown', { n: g.schools.length })}）`
                     : ''}
                 </summary>
+                {/* 市区町村ページへの実リンク（クロール経路・c5 C6）。summary の中に置くと
+                    details の開閉と競合するので、本文の先頭へ出す。
+                    「その他」（市区町村を解決できなかった受け皿）にはページが無い。 */}
+                {g.hasPage && (
+                  <p className="city-page-link">
+                    <a
+                      href={cityPagePath(pref.slug, g.label)}
+                      onClick={(e) => {
+                        e.preventDefault()
+                        navigate(cityPagePath(pref.slug, g.label))
+                      }}
+                    >
+                      {t('prefPage.cityPageLink', { city: g.label })} →
+                    </a>
+                  </p>
+                )}
                 <ul className="city-school-list">
                   {g.schools.map((s) => {
-                    const status = statusLabel(s)
-                    const facts = factsById.get(s.id)
+                    const status = fmt.listStatusLabel(s)
                     return (
                       <li key={s.id}>
                         <a
@@ -625,9 +563,8 @@ export function PrefecturePage({ userData }: Props) {
                             </span>
                           )}
                           <span className="city-school-meta">
-                            {ownershipFull(s)}・{s.course_times.map((c) => COURSE_TIME_FULL[c]).join('・')}
+                            {fmt.ownFull(s)}・{s.course_times.map((c) => fmt.courseFull(c)).join('・')}
                             {status ? `〔${status}〕` : ''}
-                            {facts ? ` ・ ${facts}` : ''}
                           </span>
                         </a>
                       </li>

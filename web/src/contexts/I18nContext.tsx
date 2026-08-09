@@ -35,7 +35,15 @@ function readStoredLocale(): Locale {
 }
 
 export function I18nProvider({ children }: { children: ReactNode }) {
-  const [locale, setLocaleState] = useState<Locale>(readStoredLocale)
+  // 初回 render は必ず DEFAULT_LOCALE にする。localStorage を初期値に使うと、
+  // ビルド時プリレンダー（常に既定言語）と食い違って hydration が壊れ、
+  // React がツリーを描き直す＝ちらつきが形を変えて戻る（plan_ssr-hydration.md C2）。
+  const [locale, setLocaleState] = useState<Locale>(DEFAULT_LOCALE)
+
+  // hydration 後に保存済みの言語へ戻す。同値なら React が bail out するので再描画は起きない。
+  useEffect(() => {
+    setLocaleState(readStoredLocale())
+  }, [])
 
   const setLocale = useCallback((next: Locale) => {
     setLocaleState(next)

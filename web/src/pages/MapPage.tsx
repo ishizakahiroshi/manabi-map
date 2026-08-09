@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
@@ -113,6 +113,61 @@ function attachBaseTileLayer(map: L.Map): () => void {
   }
 }
 
+/**
+ * 幅を固定した縮尺バー。
+ *
+ * Leaflet 標準の `L.control.scale` は「距離をきりのいい値（1/2/5 系）に丸めて、
+ * その分バーの長さを伸縮させる」ため、ズームするたびにバーの幅が跳ねて落ち着かない。
+ * ここでは逆に **バーの長さを 96px に固定し、そこに収まる実距離をラベルにする**。
+ * 数値は半端になるが（例: 1.4 km / 850 m）、画面上の長さが常に同じなので
+ * 「この長さ = だいたい何 km」という距離感がそのまま身につく。
+ */
+const SCALE_BAR_PX = 96
+
+/** 縮尺バーのラベル。有効数字 2 桁で丸める（表示上の誤差は 5% 未満） */
+function formatScaleLabel(meters: number): string {
+  if (meters >= 1000) {
+    const km = meters / 1000
+    return `${km >= 10 ? Math.round(km) : Math.round(km * 10) / 10} km`
+  }
+  return `${meters >= 100 ? Math.round(meters / 10) * 10 : Math.round(meters / 5) * 5} m`
+}
+
+class FixedScaleControl extends L.Control {
+  private line: HTMLElement | null = null
+  private leafletMap: L.Map | null = null
+
+  private update = (): void => {
+    if (!this.leafletMap || !this.line) return
+    const size = this.leafletMap.getSize()
+    const y = size.y / 2
+    const cx = size.x / 2
+    // 画面中央の水平線上で、バー幅ぶんの実距離を測る（緯度でメートル/px が変わるため
+    // 端ではなく中央で測る）
+    const left = this.leafletMap.containerPointToLatLng([cx - SCALE_BAR_PX / 2, y])
+    const right = this.leafletMap.containerPointToLatLng([cx + SCALE_BAR_PX / 2, y])
+    this.line.textContent = formatScaleLabel(left.distanceTo(right))
+  }
+
+  onAdd(map: L.Map): HTMLElement {
+    const box = L.DomUtil.create('div', 'leaflet-control-scale')
+    this.line = L.DomUtil.create('div', 'leaflet-control-scale-line', box)
+    this.line.style.width = `${SCALE_BAR_PX}px`
+    this.leafletMap = map
+    // 移動・ズームの「終わり」だけで更新する。ドラッグ中も追従させると
+    // 緯度の変化で数値がじわじわ動いて、かえって目障りになる。
+    map.on('moveend zoomend viewreset', this.update)
+    this.update()
+    return box
+  }
+
+  onRemove(map: L.Map): void {
+    map.off('moveend zoomend viewreset', this.update)
+    this.line = null
+    this.leafletMap = null
+  }
+}
+
 // 学科の UI 6 分類は course_type_master.ui_group を DB 側 trigger で
 // school_departments.ui_group に非正規化してあるので、フロントでは
 // department.ui_group をそのまま読むだけでよい（旧 deptGroupOf() は撤去）。
@@ -213,6 +268,13 @@ export function MapPage({ userData }: Props) {
   const [mapBounds, setMapBounds] = useState<L.LatLngBounds | null>(null)
   const [schoolListOpen, setSchoolListOpen] = useState(false)
   const [detail, setDetail] = useState<School | null>(null)
+  /** 詳細シートをピーク（校名だけ・地図が見える）で開くか。?school= の着地でだけ true */
+  const [detailPeek, setDetailPeek] = useState(false)
+  /** 詳細シートを開く。地図上の操作（ピン・一覧）は従来どおり全画面で開く */
+  const openDetail = useCallback((school: School, peek = false) => {
+    setDetail(school)
+    setDetailPeek(peek)
+  }, [])
 
   const BAND_CHIPS = useMemo(
     () =>
@@ -379,6 +441,9 @@ export function MapPage({ userData }: Props) {
       ACTIVE_REGION.mapZoom,
     )
     map.attributionControl.setPrefix(false)
+    // 縮尺バー（幅固定）。ズームを変えると「この長さが何 m / 何 km か」が出るので、
+    // 通学距離の感覚を地図の見た目だけでつかめる。日本向けなのでヤード・ポンドは出さない。
+    new FixedScaleControl({ position: 'bottomright' }).addTo(map)
     const cancelBaseLayer = attachBaseTileLayer(map)
 
     markerLayerRef.current = L.layerGroup().addTo(map)
@@ -434,17 +499,18 @@ export function MapPage({ userData }: Props) {
     mapRef.fitBounds(homeViewBounds(home, schools))
   }, [home, schools, mapRef])
 
-  // 「地図で見る」導線（/map?school=<id>）で開いたら、
-  // 該当校の詳細シートを開いて地図を寄せる（同じ id の再実行はしない）
+  // 「地図で見る」導線（/map?school=<id>）で開いたら、地図を該当校へ寄せて
+  // 詳細シートをピークで開く（同じ id の再実行はしない）。ここで全画面にすると
+  // 地図が隠れ、詳細ページに戻ったように見えてしまう
   useEffect(() => {
     if (!sharedSchoolId || sharedOpenedRef.current === sharedSchoolId || !mapRef || schools.length === 0) return
     sharedOpenedRef.current = sharedSchoolId
     const school = schools.find((s) => s.id === sharedSchoolId)
     if (school) {
-      setDetail(school)
+      openDetail(school, true)
       mapRef.setView([school.latitude, school.longitude], 13)
     }
-  }, [sharedSchoolId, schools, mapRef])
+  }, [sharedSchoolId, schools, mapRef, openDetail])
 
   useEffect(() => {
     document.body.dataset.sheetOpen = detail ? 'true' : 'false'
@@ -482,10 +548,10 @@ export function MapPage({ userData }: Props) {
           kosenBadge,
           integratedBadge,
         ),
-      }).on('click', () => setDetail(s)),
+      }).on('click', () => openDetail(s)),
     )
     cluster.addLayers(schoolMarkers)
-  }, [favorites, home, visibleSchools, fmt, t])
+  }, [favorites, home, visibleSchools, fmt, t, openDetail])
 
   const sortedVisible = useMemo(
     () => [...visibleSchools].sort((a, b) => shortSchoolName(a.name, a).localeCompare(shortSchoolName(b.name, b), 'ja')),
@@ -735,7 +801,7 @@ export function MapPage({ userData }: Props) {
           <ul className="school-list">
             {sortedVisible.map((s) => (
               <li key={s.id}>
-                <button type="button" className="school-list-item" onClick={() => setDetail(s)}>
+                <button type="button" className="school-list-item" onClick={() => openDetail(s)}>
                   <span className="school-list-name">{shortSchoolName(s.name, s)}</span>
                   <span className="school-list-meta">
                     {fmt.displayCode(s)}：{fmt.devLabel(s)}
@@ -758,6 +824,7 @@ export function MapPage({ userData }: Props) {
       {detail && (
         <SchoolDetailSheet
           school={detail}
+          initialPeek={detailPeek}
           onClose={() => {
             setDetail(null)
             // ?school= 経由なら、シートを閉じた時点で通常の地図 URL に戻す。

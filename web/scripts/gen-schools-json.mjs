@@ -4,8 +4,9 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { gzipSync } from 'node:zlib'
 import { createClient } from '@supabase/supabase-js'
-import { loadCivicData, resolveCityGroup } from './lib/municipalities.mjs'
+import { loadCivicData, resolveCityGroup, UNRESOLVED_CITY_LABEL } from './lib/municipalities.mjs'
 import {
+  buildOpenApiDocument,
   buildPublicSchoolRecords,
   DATASET_ATTRIBUTION,
   DATASET_CLAIM,
@@ -17,6 +18,7 @@ import {
 // docs/local/plan_seo-growth-strategy_c7 C1）。
 import { selectNeighbors } from '../src/lib/neighbors.ts'
 import { successorsByPredecessorId } from '../src/lib/successors.ts'
+import { GENERATOR_SCHOOL_SELECT } from '../src/lib/school-select.ts'
 
 const here = dirname(fileURLToPath(import.meta.url))
 const webRoot = join(here, '..')
@@ -91,8 +93,7 @@ async function runWithRetry(label, run, attempts = 4) {
   throw new Error(`${label}に失敗しました: ${lastMessage}`)
 }
 
-const select =
-  '*, school_departments(id, school_id, name, course_type, ui_group), school_field_sources(field_name, official_url, doc_title, published_at, source_page_or_table, last_verified_at, last_http_status, is_official_source), school_deviation_values(department_id, value, is_active), school_admission_stats(id, department_id, year, capacity, applicants, examinees, admitted, note, source_url), predecessor_relationships:school_relationships!school_relationships_successor_school_id_fkey(id, relationship_type_code, effective_on, official_url, notes, predecessor:schools!school_relationships_predecessor_school_id_fkey(id, record_key, name, lifecycle_status_code, closed_on)), school_name_history(id, name, name_kana, valid_from, valid_to, official_url, notes)'
+const select = GENERATOR_SCHOOL_SELECT
 // このページサイズは school_departments(school_id) の索引に依存する（migration 202607310101）。
 // 索引が無いと embed が親 1 行ごとに全件走査になり、全国 47 都道府県（学科 7,798 行）では
 // 250 件/ページでも 3.1 秒かかって Supabase の statement timeout（3 秒）に達する。
@@ -302,9 +303,26 @@ await writeFile(
   }, null, 2)}\n`,
 )
 
+// --- 呼び方の契約（OpenAPI）--------------------------------------------------
+// dataset.json が「何が入っているか」の台帳、openapi.json が「どう呼ぶか」の契約。
+// 記述の実体は scripts/lib/public-api.mjs に置く（DATA.md の生成元と同じ場所に集め、
+// 公開する項目とその説明が別々の場所で食い違わないようにする）。
+await writeFile(
+  join(publicApiRoot, 'openapi.json'),
+  `${JSON.stringify(
+    buildOpenApiDocument({
+      version: packageJson.version,
+      prefectureSlugs: Object.keys(prefApiCounts),
+    }),
+    null,
+    2,
+  )}\n`,
+)
+
+const detailRows = rows.filter((row) => row.latitude != null && row.longitude != null)
 const cityGroups = new Map()
 const unresolvedByPref = new Map()
-for (const row of rows) {
+for (const row of detailRows) {
   const resolved = resolveCityGroup(row, muniByPref)
   if (!resolved) {
     unresolvedByPref.set(row.prefecture, (unresolvedByPref.get(row.prefecture) ?? 0) + 1)
@@ -327,7 +345,7 @@ const cityIndex = [...cityGroups.values()]
   .sort((a, b) => (a.code < b.code ? -1 : a.code > b.code ? 1 : 0))
   .map(({ code: _code, ...entry }) => entry)
 
-const nameIndex = rows.map((row) => ({
+const nameIndex = detailRows.map((row) => ({
   i: row.id,
   n: row.name,
   k: row.name_kana ?? null,
@@ -414,7 +432,6 @@ function subsetPayload(subsetRows) {
 
 // 単体 JSON は個別ページを持つ学校（緯度経度あり = gen-seo-pages.mjs の生成対象・
 // React 側 mapSchoolRows のフィルタと同一集合）だけ出力する。近隣校の母集合も同じ。
-const detailRows = rows.filter((row) => row.latitude != null && row.longitude != null)
 const detailIds = new Set(detailRows.map((row) => row.id))
 const neighborUniverse = detailRows.map((row) => ({
   id: row.id,
@@ -441,6 +458,10 @@ for (const row of detailRows) {
     }),
   )
   single.successors = successorsById.get(row.id) ?? []
+  // 所属市区町村ページ（/pref/<slug>/<市区町村>/）への導線用。row.city の生値は表記が
+  // 揺れている（郡付き・政令市の区・null）ので、県ページ見出しと同じ解決済みラベルを別に持つ。
+  // 解決できない校（広域通信制のキャンパス列挙住所など）は null＝リンクを出さない。
+  single.cityGroup = resolveCityGroup(row, muniByPref)?.label ?? null
   // 前身校のうち個別ページが存在する id（詳細シートのリンク可否判定用）。
   single.linkableSchoolIds = (row.predecessor_relationships ?? [])
     .map((relationship) => relationship.predecessor?.id)
@@ -460,6 +481,42 @@ for (const pref of prefectures) {
   prefDataUrls[pref.slug] = `/school-data/${prefFilename}`
 }
 
+// 県ページ用の軽量インデックス（docs/local/plan_ssr-hydration_c3_initial-data.md）。
+// PrefecturePage が実際に参照するフィールドだけを短縮キーで持つ（searchIndex と同手法）。
+// 上の pref-<slug>.json は学校詳細と同じ全項目で東京 2.8MB / 北海道 6.5MB あり、
+// プリレンダー HTML へ埋め込めないため、埋め込み用にこれを別途作る。
+// 地図・詳細ページと同じく lat/lng がある校だけ（mapSchoolRows / gen-seo-pages の targets と一致）。
+// cities は city-index と同じ市区町村コード順。school.c は resolveCityGroup のラベル。
+const prefIndexUrls = {}
+for (const pref of prefectures) {
+  const prefRows = rows.filter(
+    (row) => row.prefecture === pref.name && row.latitude != null && row.longitude != null,
+  )
+  if (prefRows.length === 0) continue
+  const cities = cityIndex.filter((entry) => entry.prefSlug === pref.slug).map((entry) => entry.city)
+  const compactSchools = prefRows.map((row) => ({
+    i: row.id,
+    n: row.name,
+    k: row.name_kana ?? null,
+    c: resolveCityGroup(row, muniByPref)?.label ?? row.city ?? UNRESOLVED_CITY_LABEL,
+    o: row.ownership,
+    ls: row.lifecycle_status_code ?? null,
+    rs: row.recruitment_status_code ?? null,
+    ct: row.course_times?.length ? row.course_times : ['fulltime'],
+    g: row.gender_type ?? null,
+    lat: row.latitude != null ? Number(row.latitude) : null,
+    lng: row.longitude != null ? Number(row.longitude) : null,
+  }))
+  const prefIndexBody = {
+    slug: pref.slug,
+    cities,
+    schools: compactSchools,
+  }
+  const prefIndexFilename = `pref-index-${pref.slug}.json`
+  await writeFile(join(schoolDataDir, prefIndexFilename), `${JSON.stringify(prefIndexBody)}\n`)
+  prefIndexUrls[pref.slug] = `/school-data/${prefIndexFilename}`
+}
+
 const manifest = {
   url: `/${filename}`,
   hash,
@@ -475,6 +532,7 @@ const manifest = {
   schoolDataVersion: hash,
   schoolDataCount: detailRows.length,
   prefDataUrls,
+  prefIndexUrls,
   generatedAt,
 }
 await writeFile(join(publicDir, 'schools-manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`)
@@ -483,6 +541,7 @@ console.log(
   `wrote ${rows.length} schools to ${outputPath} (manifest url=${manifest.url}, ` +
   `cityIndex=${cityIndex.length}, nameIndex=${nameIndex.length}, ` +
   `schoolData=${detailRows.length}, prefData=${Object.keys(prefDataUrls).length}, ` +
+  `prefIndex=${Object.keys(prefIndexUrls).length}, ` +
   `publicApi=${publicApiRecords.length})`,
 )
 

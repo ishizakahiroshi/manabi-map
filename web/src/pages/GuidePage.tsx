@@ -1,10 +1,11 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import Markdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import siteFooterLinks from '../../data/site-footer-links.json'
 import { GUIDE_BY_SLUG } from '../lib/guides'
 import { useI18n } from '../contexts/I18nContext'
 import { useGoBack } from '../hooks/useGoBack'
+import { getInitialData } from '../lib/initialData'
 import { NotFoundPage } from './NotFoundPage'
 
 interface Props {
@@ -17,14 +18,27 @@ export function GuidePage({ slug }: Props) {
   const { locale, t } = useI18n()
   const guide = GUIDE_BY_SLUG.get(slug)
   const guideLabel = siteFooterLinks.links.find((link) => link.path === '/guide/school-visit')?.[locale] ?? ''
-  const [body, setBody] = useState<string | null>(null)
+  // プリレンダーが埋め込んだ本文があれば初回 render から使う（plan_ssr-hydration.md）。
+  // 埋め込みはビルド時点の値なので、正典は常に /guide/*.md。hydration 後に取り直す。
+  // fetch 失敗時も埋め込みを消さないので、画面が空になることはない。
+  const [body, setBody] = useState<string | null>(() => {
+    const embedded = getInitialData()?.docMarkdown
+    return guide && embedded?.key === `guide/${guide.slug}` ? embedded.text : null
+  })
   const [error, setError] = useState(false)
+  // 直前に表示していた slug。切り替わったときだけ body をクリアする
+  // （初回マウントで埋め込みを setBody(null) するとちらつく）。
+  const lastSlug = useRef<string | null>(body != null ? slug : null)
 
   useEffect(() => {
     if (!guide) return
-    let cancelled = false
-    setBody(null)
+    const slugChanged = lastSlug.current !== guide.slug
+    if (slugChanged) {
+      setBody(null)
+      lastSlug.current = guide.slug
+    }
     setError(false)
+    let cancelled = false
     fetch(`/guide/${guide.slug}.md`)
       .then((response) => {
         if (!response.ok) throw new Error(String(response.status))
@@ -34,7 +48,9 @@ export function GuidePage({ slug }: Props) {
         if (!cancelled) setBody(text)
       })
       .catch(() => {
-        if (!cancelled) setError(true)
+        // 埋め込みで既に描けている slug の取り直し失敗では画面を潰さない。
+        // 何も無い初回（slug 切替直後）だけ error 表示になる。
+        if (!cancelled && slugChanged) setError(true)
       })
     return () => {
       cancelled = true

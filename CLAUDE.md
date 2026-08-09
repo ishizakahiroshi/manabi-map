@@ -20,6 +20,7 @@ AI からの機能追加打診を防ぐため、明示的に切り捨ててい�
 - **塾送客メディア化**: 塾アフィリは信頼を損なわない範囲の 1〜2 枠のみ（§7.5）。広告の種類は下記「広告ポリシー」に厳格に従う
 - **商用偏差値サイトからのスクレイピング・数値転載**: 絶対にしない（`plan_data-acquisition-strategy.md`）
 - **有料課金・決済の本実装**: 本サービスは無料 OSS で通す。収益は広告＋塾アフィリのみ
+- **対外的な配布・広報活動（2026-08-07 全面保留）**: 学校・教育委員会・報道機関への持ち込みや打診、告知記事の執筆、被リンク目的の外部コンタクト。**AI はこれらの着手を提案・催促しないこと。**趣味プロジェクトであり収益動機がないため、「自分から人に届けに行く」活動を止めている。サイトの公開・検索エンジンからの自然流入・受け身の問い合わせ対応は従来どおり続ける（保留の対象外）。作者環境の正典は `docs/local/pending_outreach-and-distribution.md`（gitignored）
 
 ## 広告ポリシー（Non-negotiable・絶対に守る）
 
@@ -108,20 +109,45 @@ Cloudflare / Supabase / Google Search Console / GitHub Secrets の設定は、**
 
 親子構成の plan では、**親の `## context配分` の 1 行が子 plan 全体（内部 C1〜Cn）を指す**。親が `plan` でも子の大半が完了していることがある。**必ず子 plan の表と実行記録まで開く。**2026-08-06 に `plan_seo-growth-strategy.md` の C5 を未着手と誤診した実例がある（実際は内部 C1〜C5 が実装済み・本番反映済みで、残りは C6 のみ）。
 
-### ナビゲーション面は 3 つある（1 つ直して「対応した」にしない）
+### プリレンダーは React の実出力（初期 state に localStorage / fetch 結果を使わない）
 
-導線（メニュー項目・リンク）を足す・変えるときは、**必ず次の 3 面すべてを確認する**。
+2026-08-07 に、プリレンダー HTML を「`gen-seo-pages.mjs` が手書きする別物の HTML」から
+**「React コンポーネントの SSR 出力」へ切り替えた**（`docs/local/plan_ssr-hydration.md`）。
+
+- ビルド時に `web/src/entry-server.tsx` が `renderToString` で各ルートを描き、`#root` に入れる
+- ブラウザ側は `web/src/main.tsx` の `hydrateRoot` がそれを**捨てずに引き継ぐ**
+- 旧方式は `createRoot` が `#root` の中身を毎回捨てて描き直していたため、
+  クラスの付いていない手書き HTML が一瞬そのまま見えていた（＝初期表示のちらつきの原因）
+
+**新しくページ・Context・hook を足すときの不変条件:**
+
+- **`useState` の初期値で `localStorage` / `sessionStorage` を読まない。** 初回 render は既定値に固定し、
+  `useEffect` で復元する（`I18nContext.tsx` / `AppContext.tsx` が実例）。
+  破るとその値を持つ利用者だけ hydration が食い違い、React error #418 が出てツリーが描き直される
+- **fetch したデータで初期表示が変わるページは、そのデータを HTML に埋め込む。**
+  `web/src/lib/initialData.ts` の `#__MM_INITIAL__`（`type="application/json"`）に載せ、
+  初回 render から同期的に使う。埋め込みは必ず `#root` の**外**へ置く（中に入れると React の管理外の
+  要素が紛れて hydration が壊れる）
+- **静的出力の検査は「文字列の完全一致」で書かない。** `verify-static-output.mjs` が
+  `<h1>校名</h1>` の完全一致を見ていたため、React 出力に替えた瞬間に総崩れした。
+  「タグの有無 + 中身の包含」で判定する
+
+**県ページも SSR 済み**（`pref-index-<slug>.json` の短縮キーを `#__MM_INITIAL__` に埋め込む）。
+全件 JSON は県ページでは読まない。
+
+### ナビゲーション面は 2 つある（1 つ直して「対応した」にしない）
+
+導線（メニュー項目・リンク）を足す・変えるときは、**必ず次の面すべてを確認する**。
 
 | 面 | 実体 | 出る場所 |
 |---|---|---|
 | サイドバー | `web/src/components/Sidebar.tsx` | 全画面（ハンバーガーメニュー）。**アプリ利用者が最初に触る** |
-| フッター（React） | `web/src/components/SiteFooter.tsx` | トップ・県ハブ・学校ハブ・404 の 4 画面のみ。ページ最下部 |
-| フッター（プリレンダー） | `web/scripts/gen-seo-pages.mjs` の `FOOTER_HTML` | 検索・直リンク・クローラーが最初に受け取る静的 HTML |
+| フッター（React） | `web/src/components/SiteFooter.tsx` | トップ・県ハブ・学校ハブ・学校詳細・法務・ガイド・データ・プレス・404 等。ページ最下部 |
 
 - **`Sidebar.tsx` の中だけで 2 箇所ある**（「サービス情報」の項目群と、最下部のリンク行）
 - 表示ラベルの実体は `web/data/site-footer-links.json`。**コンポーネントに文字列を直書きしない**
   （公開方針の文言は `web/data/dataset-claims.json`。どちらも `verify-static-output.test.mjs` が再ハードコードを検出する）
-- 地図画面と学校詳細にはフッターが無いので、**フッターだけ直すと地図から辿れないまま残る**
+- 地図画面にはフッターが無いので、**フッターだけ直すと地図から辿れないまま残る**
 
 2026-08-07 に `/data/`（公開データと API）の導線を追加した際、フッターだけ直して「全ページから 1 ホップ」と報告し、
 サイドバーを見落とした。指摘を受けて直した後も `Sidebar.tsx` 内の 2 箇所目を見落として再指摘された。
@@ -141,7 +167,7 @@ Cloudflare / Supabase / Google Search Console / GitHub Secrets の設定は、**
 
 配置は 2 系統に分かれる:
 
-- **本リポ専用の 4 本**（`manabi-map-deploy` / `manabi-map-add-prefecture` / `manabi-map-info-wanted-field` / `manabi-map-field-backfill`）は **リポ内 `.claude/skills/` にある**（2026-07-23 に作者環境の横断棚から移設・以降ここへ新設）。`.gitignore` が `.claude/` を丸ごと除外しているため **clone には含まれない**（作者環境固有の絶対パスを公開しないため）
+- **本リポ専用の 5 本**（`manabi-map-deploy` / `manabi-map-add-prefecture` / `manabi-map-info-wanted-field` / `manabi-map-field-backfill` / `manabi-map-gsc-checkup`）は **リポ内 `.claude/skills/` にある**（2026-07-23 に作者環境の横断棚から移設・以降ここへ新設）。`.gitignore` が `.claude/` を丸ごと除外しているため **clone には含まれない**（作者環境固有の絶対パスを公開しないため）
 - **横断 skill**（`supabase-migrate` / `taxonomy-refactor` / `changelog-freshness` など）は作者環境の `~/.claude/skills/` 配下
 
 | 用途 | skill | 起動語 |
@@ -150,6 +176,7 @@ Cloudflare / Supabase / Google Search Console / GitHub Secrets の設定は、**
 | 新県データ投入（schools SQL + deviation SQL + 校パターン再分類 + course_type_master 確認） | `manabi-map-add-prefecture` | 「◯◯県 追加」「manabi-map に◯◯県入れて」「新県 データ投入」 |
 | nullable な学校情報を「情報提供募集中」型で追加（テンプレ・i18n・CSS・実装メモ生成） | `manabi-map-info-wanted-field` | 「情報提供募集中 field 追加」「空欄可能フィールド」「manabi-map-info-wanted-field」 |
 | 欠損項目の一括補完（公式カタログから抽出 → 出典つき SQL 生成 → gap を理由つきで記録） | `manabi-map-field-backfill` | 「欠損項目 補完」「学科 埋めて」「ふりがな 補完」「一括補完」 |
+| 検索インデックス状況の実測と sitemap 再送信（GSC 4 画面 → 前回値と比較 → 台帳追記。トラフィックの正体切り分けも） | `manabi-map-gsc-checkup` | 「GSC 見て」「インデックス状況どう」「sitemap 再送信」「アクセス数どう」 |
 | Supabase 本番へ migration 適用（Docker 不要・psql 直叩き・backup + schema_migrations 記録） | `supabase-migrate` | 「Supabase migration 適用」「本番 DB に SQL 流して」「pg_dump backup 取って」 |
 | フリーテキスト分類列 → master + FK + trigger 化（表記ゆれ・分類漏れ対策） | `taxonomy-refactor` | 「分類を master 化」「course_type refactor」「表記ゆれ対策」 |
 
@@ -183,6 +210,12 @@ pnpm dlx supabase db push
 
 - ユーザーの検索地点は「自宅住所」ではなく「中心地点」として扱う（企画書 §16.5）。お気に入り・メモ・個人偏差値記録は RLS で本人限定
 - 偏差値シードは公的資料のみ・`source_type='manabi_estimate'` / `estimate_method='v1_<pref>_<year>'`。商用サイト由来の値を混ぜない
+- **偏差値の掲載線（2026-08-07 確定）: 静的 HTML には載せる / 公開 API には出さない。**
+  プリレンダーが React の実出力になり、画面に出している値はそのまま HTML に載るようになった
+  （伏せると hydration が食い違い、初期表示のちらつきが戻るため原理的に隠せない）。
+  代わりに **公開 API 側で線を守る**。`web/scripts/verify-static-output.mjs` の `findDeviationLeak()` が
+  `/api/v1/` の全 JSON を走査し、`deviation` を含むキーが 1 つでもあればビルドを落とす。**このガードを緩めない。**
+  序列化の禁止語（ランキング / TOP / 狙い目 / おすすめ / 通学時間）は `FORBIDDEN_WORDS` で引き続き禁止する
 - 削除・訂正要請は takedown@manabi-map.app（24h 受信確認・7 日以内対応）
 
 ## secrets-scan 配線（このリポ固有）
