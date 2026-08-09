@@ -16,6 +16,7 @@ import { DataPage } from './pages/DataPage'
 import { MyPage } from './pages/MyPage'
 import { SchoolsHubPage } from './pages/SchoolsHubPage'
 import { PrefecturePage } from './pages/PrefecturePage'
+import { CityPage } from './pages/CityPage'
 import { NotFoundPage } from './pages/NotFoundPage'
 import { Sidebar } from './components/Sidebar'
 import { LoginSheet } from './components/LoginSheet'
@@ -99,6 +100,7 @@ export default function App() {
           <Route path="/data" element={<DataPage />} />
           <Route path="/schools" element={<SchoolsHubPage />} />
           <Route path="/pref/:pref" element={<PrefecturePage userData={userData} />} />
+          <Route path="/pref/:pref/:city" element={<CityPage userData={userData} />} />
           <Route path="/dashboard" element={<DashboardRoute isAdmin={isAdmin} checking={checkingAdmin} />} />
           {/* 未知の URL への SPA 内遷移。直リンクは Cloudflare Pages が dist/404.html を返す */}
           <Route path="*" element={<NotFoundPage />} />

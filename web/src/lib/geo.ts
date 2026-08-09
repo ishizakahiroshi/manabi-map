@@ -104,9 +104,8 @@ function normalizePostalInput(v: string): string {
 export function parsePostal(v: string): HomeLocation | null {
   const normalized = normalizePostalInput(v)
   if (!normalized) return null
-  if (!/^[\d-]+$/.test(normalized)) return null
+  if (!/^\d{3}$/.test(normalized) && !/^\d{7}$/.test(normalized) && !/^\d{3}-\d{4}$/.test(normalized)) return null
   const clean = normalized.replace(/[^0-9]/g, '')
-  if (clean.length < 3 || clean.length > 7) return null
   const p3 = parseInt(clean.slice(0, 3), 10)
   const pref = prefectureForPostal3(p3)
   if (!pref) return null
@@ -116,9 +115,7 @@ export function parsePostal(v: string): HomeLocation | null {
 /** 入力が（リージョン内かどうかに関わらず）郵便番号の形をしているか */
 function looksLikePostal(v: string): boolean {
   const normalized = normalizePostalInput(v)
-  if (!/^[\d-]+$/.test(normalized)) return false
-  const clean = normalized.replace(/[^0-9]/g, '')
-  return clean.length >= 3 && clean.length <= 7
+  return /^\d{3}$/.test(normalized) || /^\d{7}$/.test(normalized) || /^\d{3}-\d{4}$/.test(normalized)
 }
 
 export interface GeocodeCandidate {
@@ -329,11 +326,19 @@ export async function geocodeSearch(q: string): Promise<GeocodeCandidate[]> {
  * ホーム地点ラベルの短縮表示（「{label} の近く」向け）。
  * アクティブなリージョン内の都道府県名は文脈上自明なので落とす（旧: 群馬県ハードコード）。
  * 落とした結果が空・「周辺」だけ（例: 郵便番号の暫定ラベル「北海道周辺」）になる場合は元のまま返す。
+ * 「群馬県立渋川工業高等学校」のように県名の直後が「立」の場合は落とさない（落とすと
+ * 「立渋川工業高等学校」と頭が欠けて見える。学校名を検索地点にすると起きる）。
  */
 export function shortLabel(s: string): string {
   const base = (s || '').split(',').slice(0, 2).join(',')
   let out = base
-  for (const p of ACTIVE_REGION.prefectures) out = out.replace(p.name, '')
+  for (const p of ACTIVE_REGION.prefectures) {
+    const at = out.indexOf(p.name)
+    if (at < 0) continue
+    const rest = out.slice(at + p.name.length)
+    if (rest.startsWith('立')) continue
+    out = out.slice(0, at) + rest
+  }
   out = out.replace(/^[\s,、]+|[\s,、]+$/g, '')
   return out && out !== '周辺' ? out : base || s
 }

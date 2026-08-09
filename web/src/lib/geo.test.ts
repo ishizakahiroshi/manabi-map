@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { parsePostal, haversine, homeViewRadiusKm } from './geo'
+import { parsePostal, haversine, homeViewRadiusKm, shortLabel } from './geo'
 
 describe('parsePostal', () => {
   // ACTIVE_REGION = 東日本 20 都道県。郵便番号上 3 桁は県単位の暫定ラベル（都市名ではない）。
@@ -11,6 +11,10 @@ describe('parsePostal', () => {
   })
   it('先頭 3 桁のみ', () => {
     expect(parsePostal('371')?.label).toBe('群馬県周辺')
+  })
+  it('住所中の番地を郵便番号と誤認しない', () => {
+    expect(parsePostal('群馬県前橋市本町1-2-3')).toBe(null)
+    expect(parsePostal('東京都千代田区1丁目')).toBe(null)
   })
   it('先頭〒を除去', () => {
     expect(parsePostal('〒371-0026')?.label).toBe('群馬県周辺')
@@ -49,6 +53,9 @@ describe('parsePostal', () => {
   })
   it('桁不足/超過は null', () => {
     expect(parsePostal('12')).toBe(null)
+    expect(parsePostal('1234')).toBe(null)
+    expect(parsePostal('12345')).toBe(null)
+    expect(parsePostal('123456')).toBe(null)
     expect(parsePostal('12345678')).toBe(null)
   })
 })
@@ -96,5 +103,20 @@ describe('homeViewRadiusKm', () => {
   })
   it('学校 0 件は上限半径にフォールバック', () => {
     expect(homeViewRadiusKm(HOME, [])).toBe(40)
+  })
+})
+
+describe('shortLabel', () => {
+  it('住所ラベルからは県名を落とす', () => {
+    expect(shortLabel('群馬県渋川市渋川')).toBe('渋川市渋川')
+    expect(shortLabel('渋川市, 群馬県')).toBe('渋川市')
+  })
+  it('「◯◯県立」は落とさない（頭が「立」で欠けて見えるため）', () => {
+    expect(shortLabel('群馬県立渋川工業高等学校')).toBe('群馬県立渋川工業高等学校')
+    expect(shortLabel('東京都立日比谷高等学校')).toBe('東京都立日比谷高等学校')
+  })
+  it('落とすと空・「周辺」だけになる場合は元のまま', () => {
+    expect(shortLabel('群馬県周辺')).toBe('群馬県周辺')
+    expect(shortLabel('群馬県')).toBe('群馬県')
   })
 })

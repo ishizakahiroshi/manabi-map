@@ -54,7 +54,7 @@ export const ja: MessageTree = {
     privacy: 'プライバシー',
     terms: '利用規約',
     thirdParty: 'サードパーティライセンス',
-    deviationMethodology: '偏差値の方法と限界',
+    deviationMethodology: '推計の方法と限界',
   },
   tabs: {
     label: '主要ナビゲーション',
@@ -98,7 +98,7 @@ export const ja: MessageTree = {
     demo: 'デモを試す（ログイン不要）',
     demoTokyoStation: '東京都 千代田区',
     demoTokyoStationSub: '東京駅（丸の内）',
-    feature1: '高校名と偏差値を地図で見る',
+    feature1: '通える高校を地図で見る',
     feature2: '気になる学校を保存する',
     feature3: '文化祭・部活・通学メモを残す',
     needInput: '住所・郵便番号・地名を入れてください',
@@ -147,6 +147,17 @@ export const ja: MessageTree = {
     admissionLatest: '{year}年度 一次募集 {ratio}',
     favorited: 'お気に入り登録済み',
     backToAll: '都道府県一覧へ',
+    cityPageLink: '{city}の高校一覧ページ',
+  },
+  cityPage: {
+    title: '{city}の高校一覧（{n} 校）',
+    context: '{pref}{city}にある高校は {n} 校です。',
+    notice: '掲載は所在地の列挙・五十音順で、学校の序列ではありません。出願できる学校は学区・募集要項により異なるため、必ず各校の募集要項でご確認ください。',
+    nearbyHeading: '同じ県の近くの市区町村',
+    nearbyLink: '{city}（{n} 校）',
+    backToPref: '{pref}の高校一覧へ',
+    mapLink: 'この地域を地図で見る',
+    empty: 'この市区町村に掲載中の高校はありません。',
   },
   notFound: {
     title: 'ページが見つかりません',
@@ -367,6 +378,7 @@ export const ja: MessageTree = {
   },
   detail: {
     address: '所在地',
+    cityPageLink: '{city}の高校一覧',
     course: '課程',
     scale: '規模',
     ratio3y: '一次募集の3年平均（補助値）',
@@ -540,6 +552,7 @@ export const ja: MessageTree = {
     adminRebuildFail: '再ビルドを開始できませんでした',
     bottomBar: '学校詳細の操作',
     closeBar: '閉じる（下スワイプでも可）',
+    expandSheet: '詳細を見る',
   },
   report: {
     provide: '情報を提供する',

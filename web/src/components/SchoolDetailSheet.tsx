@@ -12,6 +12,8 @@ import {
 import { primaryAdmissionTrend } from '../lib/admission'
 import { neighborPlaceLabel, selectNeighbors } from '../lib/neighbors'
 import { successorsByPredecessorId, type SuccessorRef } from '../lib/successors'
+import { cityPagePath } from '../lib/prefIndex'
+import { prefectureByName } from '../lib/prefecture'
 import { useSchoolsCache } from '../hooks/useSchools'
 import { useApp } from '../contexts/AppContext'
 import { useAuth } from '../contexts/AuthContext'
@@ -44,6 +46,12 @@ export interface SchoolDetailExtras {
   neighbors: NeighborEntry[]
   successors: SuccessorRef[]
   linkableSchoolIds: ReadonlySet<string>
+  /**
+   * 解決済みの市区町村ラベル（県ページ見出しと同一）。市区町村ページ
+   * （/pref/<slug>/<市区町村>/・c5 C6）への導線に使う。解決不能校は null。
+   * 全件キャッシュ経路（地図から開いたシート）では extras 自体が無いのでリンクは出ない。
+   */
+  cityGroup: string | null
 }
 
 interface Props {
@@ -53,6 +61,12 @@ interface Props {
   extras?: SchoolDetailExtras | null
   /** 単独ページ（/school/:id）として表示中。「地図で見る」導線を出す。 */
   standalone?: boolean
+  /**
+   * 校名だけが見える低いシート（ピーク）で開く。「地図で見る」（/map?school=<id>）の
+   * 着地はこれ。全画面で開くと地図が完全に隠れ、詳細ページに戻ったように見えてしまう。
+   * ハンドル（または上スワイプ）で全画面へ展開できる。
+   */
+  initialPeek?: boolean
 }
 
 /**
@@ -61,7 +75,7 @@ interface Props {
  */
 const NEIGHBOR_PREVIEW_COUNT = 5
 
-export function SchoolDetailSheet({ school, onClose, userData, extras, standalone }: Props) {
+export function SchoolDetailSheet({ school, onClose, userData, extras, standalone, initialPeek }: Props) {
   const navigate = useNavigate()
   const { home, toast, setLoginOpen } = useApp()
   const { session } = useAuth()
@@ -106,6 +120,13 @@ export function SchoolDetailSheet({ school, onClose, userData, extras, standalon
   const schoolId = school?.id ?? null
   const open = school != null
 
+  /** ピーク（校名だけ）↔ 全画面。ピークで開いた時だけ、展開するまで地図が見える */
+  const [expanded, setExpanded] = useState(!initialPeek)
+  // 別の学校へ切り替わったとき（地図のピン → 別のピン等）は開き方をやり直す
+  useEffect(() => {
+    setExpanded(!initialPeek)
+  }, [schoolId, initialPeek])
+
   // 近隣校・後継校の算出用。受動購読（キャッシュがあれば使う・無くても全件 fetch を
   // 起動しない）。/school/:id 直リンク着地時は extras（単体 JSON 同梱の事前計算値）が
   // 渡され、地図・お気に入り等の全件ロード済み画面では下の共有ロジック計算が使われる。
@@ -129,7 +150,8 @@ export function SchoolDetailSheet({ school, onClose, userData, extras, standalon
   const successors: SuccessorRef[] =
     extras?.successors ?? (school ? (successorsById.get(school.id) ?? []) : [])
 
-  useFocusTrap(sheetRef, open)
+  // ピーク中は地図を触らせたいので、フォーカスを閉じ込めない（背景は隠れていない）
+  useFocusTrap(sheetRef, open && expanded)
   useEscapeKey(onClose, open)
 
   useEffect(() => {
@@ -216,6 +238,11 @@ export function SchoolDetailSheet({ school, onClose, userData, extras, standalon
   const dist = home ? haversine(home, { lat: school.latitude, lng: school.longitude }) : null
   const routeUrl = home ? googleMapsRoute(home, school) : null
   const genderRatio = fmt.genderRatioLabel(school)
+  // 所属市区町村ページ（c5 C6）。市区町村を解決できた校だけリンクを出す
+  // （解決できない = そのラベルのページが生成されていない）。
+  const cityPageSlug = prefectureByName(school.prefecture)?.slug ?? null
+  const cityPageHref =
+    cityPageSlug && extras?.cityGroup ? cityPagePath(cityPageSlug, extras.cityGroup) : null
   const admissionTrend = primaryAdmissionTrend(school)
   const hasCourseInfo = school.course_times.length > 0
   const hasScaleInfo =
@@ -246,6 +273,12 @@ export function SchoolDetailSheet({ school, onClose, userData, extras, standalon
     school.opened_on != null ||
     successors.length > 0
 
+  /**
+   * 学校ページの href。末尾スラッシュ付きにして canonical（/school/<id>/）と揃える。
+   * 付けないと Cloudflare Pages の 308 を 1 回挟むリンクになり、内部リンクが正規 URL を指さない。
+   */
+  const schoolHref = (id: string) => `/school/${id}/`
+
   /** シート内から別の学校ページへ SPA 遷移する（<a href> はクローラー・新規タブ用に残す） */
   const schoolLinkClick = (id: string) => (e: MouseEvent<HTMLAnchorElement>) => {
     if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return
@@ -270,7 +303,7 @@ export function SchoolDetailSheet({ school, onClose, userData, extras, standalon
       (!row.is_ratio_comparable || row.selection_stage_code !== 'primary'),
   )
   const admissionValue = (value: number | null): string =>
-    value == null ? t('detail.admissionNoValue') : value.toLocaleString()
+    value == null ? t('detail.admissionNoValue') : value.toLocaleString('en-US')
   const admissionRatio = (row: AdmissionSelection): string | null => {
     if (!row.is_ratio_comparable || row.capacity == null || row.capacity <= 0 || row.applicants == null) return null
     return (row.applicants / row.capacity).toFixed(2)
@@ -595,21 +628,30 @@ export function SchoolDetailSheet({ school, onClose, userData, extras, standalon
     touchCurrentY.current = null
     if (startY == null) return
     const endY = event.changedTouches[0]?.clientY ?? currentY ?? startY
-    if (endY - startY > 60) onClose()
+    // ピーク中の上スワイプは全画面へ。下スワイプは従来どおり閉じる
+    if (!expanded && startY - endY > 60) setExpanded(true)
+    else if (endY - startY > 60) onClose()
   }
 
   return (
     <div
       ref={sheetRef}
-      className="sheet full"
+      className={expanded ? 'sheet full' : 'sheet peek'}
       role="dialog"
-      aria-modal="true"
+      // ピーク中は背景（地図）を覆っていないので modal を宣言しない
+      aria-modal={expanded ? true : undefined}
       aria-label={school.name}
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
     >
-      <button className="handle" onClick={onClose} aria-label={t('common.close')} />
+      <button
+        className="handle"
+        onClick={expanded ? onClose : () => setExpanded(true)}
+        aria-label={expanded ? t('common.close') : t('detail.expandSheet')}
+      >
+        {!expanded && <span className="handle-hint">▲ {t('detail.expandSheet')}</span>}
+      </button>
       <div className="head">
         {standalone && (
           <button className="icon-btn" onClick={onClose} aria-label={t('common.back')}>
@@ -617,7 +659,17 @@ export function SchoolDetailSheet({ school, onClose, userData, extras, standalon
           </button>
         )}
         <span className="grow">
-          <h3 className="detail-title">{fmt.displayName(school)}</h3>
+          {/*
+            単独ページ（/school/:id）ではこれがページの主見出しなので h1。
+            地図から開くシートではページ内の一部なので h3 のまま。
+            見た目は .detail-title が決めるので変わらない（Tailwind preflight が
+            h1/h3 の既定サイズを打ち消している）。
+          */}
+          {standalone ? (
+            <h1 className="detail-title">{fmt.displayName(school)}</h1>
+          ) : (
+            <h3 className="detail-title">{fmt.displayName(school)}</h3>
+          )}
           {school.name_kana ? (
             <span className="school-kana">{school.name_kana}</span>
           ) : (
@@ -645,6 +697,21 @@ export function SchoolDetailSheet({ school, onClose, userData, extras, standalon
                 {school.postal_code ? `〒${school.postal_code}　` : ''}
                 {school.address}
               </b>
+              {/* 所属市区町村ページへの導線（c5 C6）。同じ市区町村の他校へ 1 ホップで移れる。
+                  静的 HTML にも <a href> として載るので、学校ページ → 市区町村ページの
+                  内部リンクにもなる。 */}
+              {cityPageHref && extras?.cityGroup && (
+                <a
+                  className="city-page-link-inline"
+                  href={cityPageHref}
+                  onClick={(e) => {
+                    e.preventDefault()
+                    navigate(cityPageHref)
+                  }}
+                >
+                  {t('detail.cityPageLink', { city: extras.cityGroup })} →
+                </a>
+              )}
             </div>
           )}
           <div>
@@ -718,7 +785,7 @@ export function SchoolDetailSheet({ school, onClose, userData, extras, standalon
                       <div>
                         {isLinkableSchool(relationship.predecessor.id) ? (
                           <a
-                            href={`/school/${relationship.predecessor.id}`}
+                            href={schoolHref(relationship.predecessor.id)}
                             onClick={schoolLinkClick(relationship.predecessor.id)}
                           >
                             {relationship.predecessor.name}
@@ -778,7 +845,7 @@ export function SchoolDetailSheet({ school, onClose, userData, extras, standalon
                 {successors.map((s, i) => (
                   <span key={s.id}>
                     {i > 0 && '、'}
-                    <a href={`/school/${s.id}`} onClick={schoolLinkClick(s.id)}>
+                    <a href={schoolHref(s.id)} onClick={schoolLinkClick(s.id)}>
                       {s.name}
                     </a>
                   </span>
@@ -1007,7 +1074,7 @@ export function SchoolDetailSheet({ school, onClose, userData, extras, standalon
             <ul>
               {neighbors.map(({ school: neighbor, distanceKm }) => (
                 <li key={neighbor.id}>
-                  <a href={`/school/${neighbor.id}`} onClick={schoolLinkClick(neighbor.id)}>
+                  <a href={schoolHref(neighbor.id)} onClick={schoolLinkClick(neighbor.id)}>
                     {neighbor.name}
                   </a>
                   <span className="neighbor-meta">

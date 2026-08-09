@@ -14,6 +14,9 @@
 
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
+import { buildCityCounts, cityPagePath } from './city-index-shared.mjs'
+
+export { buildCityCounts, cityPagePath }
 
 /** web ルート配下の data/*.json を読む。 */
 export async function loadCivicData(webRoot) {
@@ -105,6 +108,13 @@ export function resolveCityGroup(school, muniByPref) {
 /** 解決不能校の受け皿グループ（各県ページの末尾に置く）。 */
 export const UNRESOLVED_CITY_LABEL = 'その他'
 
+/**
+ * 市区町村ページの URL パス。
+ *
+ * **`src/lib/prefIndex.ts` の `cityPagePath` と同一の形にすること。**
+ * canonical・sitemap・BreadcrumbList の item・React 側リンクがすべてこの表記で
+ * 一致している必要がある（ズレると自 URL 不一致で verify:static が落ちる）。
+ */
 /**
  * 県内の学校を市区町村グループへ分ける。
  * 返り値: [{ label, code, kana, schools }] を市区町村コード順で。

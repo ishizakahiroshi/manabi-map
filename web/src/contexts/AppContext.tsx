@@ -58,7 +58,10 @@ export function loadLocalHome(): HomeLocation | null {
 
 export function AppProvider({ children }: { children: ReactNode }) {
   const { session } = useAuth()
-  const [home, setHomeState] = useState<HomeLocation | null>(loadLocalHome)
+  // 初回 render は必ず null。localStorage を初期値に使うとビルド時プリレンダーと食い違い、
+  // hydration が壊れる（plan_ssr-hydration.md C2）。
+  // 復元は下の [session] effect が担う（未ログイン時に loadLocalHome() を読む経路が既にある）。
+  const [home, setHomeState] = useState<HomeLocation | null>(null)
   const [toastMsg, setToastMsg] = useState('')
   const [toastShow, setToastShow] = useState(false)
   const [loginOpen, setLoginOpen] = useState(false)
@@ -126,6 +129,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // migratedFor は成功時のみ立てる（失敗時に再試行できるよう、エラーで固定しない）
   useEffect(() => {
     if (!session) {
+      // 実ログインからのサインアウト後は、前ユーザーの地点を次のユーザーへ移送しない。
+      // 初回の未ログイン状態では activeHomeUserId が null のため、匿名利用の引き継ぎは残る。
+      if (activeHomeUserId.current !== null) {
+        try { localStorage.removeItem(HOME_KEY) } catch { /* noop */ }
+        activeHomeUserId.current = null
+        migratedFor.current = null
+        setHomeState(null)
+        return
+      }
       activeHomeUserId.current = null
       migratedFor.current = null
       setHomeState(loadLocalHome())
