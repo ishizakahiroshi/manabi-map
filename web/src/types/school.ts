@@ -209,7 +209,6 @@ export interface School {
   recruitment_ended_on: string | null
   closed_on: string | null
   status_official_url: string | null
-  status_note: string | null
   course_times: CourseTime[]
   main_school_name: string | null
   campus_type: CampusType

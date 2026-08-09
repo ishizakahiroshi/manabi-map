@@ -6,8 +6,9 @@ import { fileURLToPath } from 'node:url'
 import test from 'node:test'
 import { gzipSync } from 'node:zlib'
 
-import { verifyStaticOutput } from './verify-static-output.mjs'
+import { isDetailSchool, verifyStaticOutput } from './verify-static-output.mjs'
 import {
+  buildOpenApiDocument,
   DATASET_ATTRIBUTION,
   DATASET_CLAIM,
   DATASET_LICENSE_URL,
@@ -58,19 +59,32 @@ async function collectTypeScriptSources(root) {
 }
 
 /** 検証対象の骨格（canonical / og:url / title / main）を持つ最小ページを合成する。
- * jsonLd は単体 object でも配列でもよい（配列は本番同様に script タグを分けて出す）。 */
-function page({ title, canonical, main, jsonLd, noindex = false, footer = '' }) {
+ * jsonLd は単体 object でも配列でもよい（配列は本番同様に script タグを分けて出す）。
+ * mainAttrs で SSR 出力特有の <main> クラスを再現する（plan_ssr-hydration.md C5 検査用）。
+ * initialData を渡すと #__MM_INITIAL__ script を #root の直後に出す。 */
+function page({ title, canonical, main, jsonLd, noindex = false, footer = '', mainAttrs = '', initialData = null }) {
   const canonicalTag = canonical ? `<link rel="canonical" href="${canonical}">` : ''
   const ogUrl = canonical ? `<meta property="og:url" content="${canonical}">` : ''
   const robots = noindex ? '<meta name="robots" content="noindex" />' : ''
   const jsonLdTag = (Array.isArray(jsonLd) ? jsonLd : jsonLd ? [jsonLd] : [])
     .map((block) => `<script type="application/ld+json">${JSON.stringify(block)}</script>`)
     .join('')
+  const mainOpen = mainAttrs ? `<main ${mainAttrs}>` : '<main>'
+  const initialScriptTag = initialData != null
+    ? `<script type="application/json" id="__MM_INITIAL__">${JSON.stringify(initialData).replace(/</g, '\\u003c')}</script>`
+    : ''
   return `<!doctype html><html><head><title>${title}</title>${robots}${canonicalTag}${ogUrl}${jsonLdTag}</head>` +
-    `<body><div id="root"><main>${main}</main></div>${footer}</body></html>`
+    `<body><div id="root">${mainOpen}${main}</main></div>${initialScriptTag}${footer}</body></html>`
 }
 
-/** 学校ページの BreadcrumbList JSON-LD（本番: ホーム › 県 › 市区町村 › 校名）。 */
+/** 前橋市の市区町村ページ（/pref/gunma/前橋市/）の URL パス。 */
+const MAEBASHI_PATH = `/pref/gunma/${encodeURIComponent('前橋市')}/`
+
+/**
+ * 学校ページの BreadcrumbList JSON-LD（本番: ホーム › 県 › 市区町村 › 校名）。
+ * 最後（校名）以外はすべて item を持つ — Google の要件で、中間段の item 欠落は
+ * 無効アイテムになる（c5 C6・2026-08-08 の GSC エラー）。
+ */
 function breadcrumbLd(schoolName) {
   return {
     '@context': 'https://schema.org',
@@ -78,10 +92,20 @@ function breadcrumbLd(schoolName) {
     itemListElement: [
       { '@type': 'ListItem', position: 1, name: 'ホーム', item: `${ORIGIN}/` },
       { '@type': 'ListItem', position: 2, name: '群馬県', item: `${ORIGIN}/pref/gunma/` },
-      { '@type': 'ListItem', position: 3, name: '前橋市' },
+      { '@type': 'ListItem', position: 3, name: '前橋市', item: `${ORIGIN}${MAEBASHI_PATH}` },
       { '@type': 'ListItem', position: 4, name: schoolName },
     ],
   }
+}
+
+/** 県ページ本文。市区町村ページへの実リンクを含む（c5 C6 のクロール経路）。 */
+function prefPageMain() {
+  return '<h1>群馬県の高校一覧（2 校）</h1>' +
+    '<nav><a href="#%E5%89%8D%E6%A9%8B%E5%B8%82">前橋市（2）</a></nav>' +
+    '<section id="前橋市"><h2>前橋市（2 校）</h2>' +
+    `<p><a href="${MAEBASHI_PATH}">前橋市の高校一覧ページ</a></p><ul>` +
+    SCHOOLS.map((s) => `<li><a href="/school/${s.id}/">${s.name}</a></li>`).join('') +
+    '</ul></section>'
 }
 
 function schoolLd(schoolName) {
@@ -101,6 +125,21 @@ const SCHOOLS = [
   { id: 'synthetic-b', name: '合成第二高等学校', prefecture: '群馬県', city: '前橋市', latitude: 36.5, longitude: 139.2, official_url: 'https://synthetic-b.ed.jp/', is_active: true },
 ]
 
+// dataset.json と openapi.json は同じ版を名乗る（本番は package.json の version）。
+const DATASET_VERSION = '0.0.0-synthetic'
+
+/** 公開 API の「呼び方の契約」。本番と同じ生成関数を使い、fixture 側に複製を作らない
+ * （複製すると、契約が変わったときに検査だけが古い形を通し続ける）。 */
+function syntheticOpenApi({ prefectureSlugs = ['gunma'], requiredSchoolFields } = {}) {
+  const document = buildOpenApiDocument({
+    version: DATASET_VERSION,
+    prefectureSlugs,
+    origin: ORIGIN,
+  })
+  if (requiredSchoolFields) document.components.schemas.School.required = requiredSchoolFields
+  return document
+}
+
 async function syntheticDist() {
   const dir = await mkdtemp(join(tmpdir(), 'manabi-map-static-'))
   const body = Buffer.from(JSON.stringify({ formatVersion: 2, sourceCatalog: [], schools: SCHOOLS }))
@@ -117,9 +156,10 @@ async function syntheticDist() {
     cityIndexUrl: '/city-index-0123456789.json', nameIndexUrl: '/school-name-index-0123456789.json',
     schoolDataVersion: 'a1b2c3d4e5', schoolDataCount: SCHOOLS.length,
     prefDataUrls: { gunma: '/school-data/pref-gunma.json' },
+    prefIndexUrls: { gunma: '/school-data/pref-index-gunma.json' },
   }))
 
-  // 学校単体 JSON / 県別分割 JSON（c7 C1）
+  // 学校単体 JSON / 県別分割 JSON（c7 C1）/ 県ページ軽量インデックス（SSR）
   await mkdir(join(dir, 'school-data'), { recursive: true })
   for (const school of SCHOOLS) {
     const neighbor = SCHOOLS.find((s) => s.id !== school.id)
@@ -135,9 +175,27 @@ async function syntheticDist() {
   await writeFile(join(dir, 'school-data', 'pref-gunma.json'), JSON.stringify({
     formatVersion: 2, sourceCatalog: [], schools: SCHOOLS,
   }))
+  await writeFile(join(dir, 'school-data', 'pref-index-gunma.json'), JSON.stringify({
+    slug: 'gunma',
+    cities: ['前橋市'],
+    schools: SCHOOLS.map((s) => ({
+      i: s.id,
+      n: s.name,
+      k: null,
+      c: s.city,
+      o: 'prefectural',
+      ls: 'active',
+      rs: 'recruiting',
+      ct: ['fulltime'],
+      g: 'coed',
+      lat: s.latitude,
+      lng: s.longitude,
+    })),
+  }))
 
   const publicSchools = SCHOOLS.map((school) => ({
     id: school.id,
+    record_key: `school-${school.id}`,
     name: school.name,
     prefecture: school.prefecture,
     official_url: school.official_url,
@@ -154,6 +212,7 @@ async function syntheticDist() {
   }))
   await writeFile(join(dir, 'api', 'v1', 'dataset.json'), JSON.stringify({
     api_version: 'v1',
+    version: DATASET_VERSION,
     generated_at: '2026-08-06T00:00:00.000Z',
     school_count: publicSchools.length,
     prefecture_count: 1,
@@ -161,11 +220,25 @@ async function syntheticDist() {
     provenance_policy: DATASET_CLAIM,
     license_url: DATASET_LICENSE_URL,
   }))
+  await writeFile(join(dir, 'api', 'v1', 'openapi.json'), JSON.stringify(syntheticOpenApi()))
+
+  // 公開 API の CORS（Cloudflare Pages の _headers はそのまま dist へコピーされる）
+  await writeFile(join(dir, '_headers'), [
+    '/*',
+    '  X-Content-Type-Options: nosniff',
+    '/api/v1/*',
+    '  Cache-Control: public, max-age=3600',
+    '  Access-Control-Allow-Origin: *',
+    '',
+  ].join('\n'))
 
   await writeFile(join(dir, 'index.html'), page({
     title: 'Manabi Map',
     canonical: `${ORIGIN}/`,
     main: '<h1>親子で使う、学校選びの地図ノート。</h1><nav><a href="/pref/gunma/">群馬県</a></nav>',
+    // SSR 検査: HomePage は <main id="main-content" class="content home-content"> を出す。
+    // トップは初期データ script が不要なため initialData を渡さない（本番と同じ）。
+    mainAttrs: 'id="main-content" class="content home-content"',
     jsonLd: [
       { '@context': 'https://schema.org', '@type': 'WebSite', '@id': `${ORIGIN}/#website`, name: 'Manabi Map' },
       { '@context': 'https://schema.org', '@type': 'Organization', '@id': `${ORIGIN}/#organization`, name: 'Manabi Map' },
@@ -181,11 +254,31 @@ async function syntheticDist() {
   await writeFile(join(dir, 'pref', 'gunma', 'index.html'), page({
     title: '群馬県の高校一覧（2 校） | Manabi Map',
     canonical: `${ORIGIN}/pref/gunma/`,
-    main: '<h1>群馬県の高校一覧（2 校）</h1>' +
-      '<nav><a href="#%E5%89%8D%E6%A9%8B%E5%B8%82">前橋市（2）</a></nav>' +
-      '<section id="前橋市"><h2>前橋市（2 校）</h2><ul>' +
+    main: prefPageMain(),
+    // SSR 検査: PrefecturePage は <main id="main-content" class="content hub-content"> を出す。
+    // 県ページは pref-index 軽量データを初期として埋め込むので #__MM_INITIAL__ も必須。
+    mainAttrs: 'id="main-content" class="content hub-content"',
+    initialData: { slug: 'gunma', cities: ['前橋市'] },
+  }))
+  // 市区町村ページ（c5 C6）。ディレクトリ名は日本語のまま置き、URL では percent-encode される。
+  await mkdir(join(dir, 'pref', 'gunma', '前橋市'), { recursive: true })
+  await writeFile(join(dir, 'pref', 'gunma', '前橋市', 'index.html'), page({
+    title: '前橋市の高校一覧（2 校） | Manabi Map',
+    canonical: `${ORIGIN}${MAEBASHI_PATH}`,
+    main: '<h1>前橋市の高校一覧（2 校）</h1><p>群馬県前橋市にある高校は 2 校です。</p><ul>' +
       SCHOOLS.map((s) => `<li><a href="/school/${s.id}/">${s.name}</a></li>`).join('') +
-      '</ul></section>',
+      '</ul>',
+    mainAttrs: 'id="main-content" class="content hub-content"',
+    initialData: { slug: 'gunma', city: '前橋市', schools: [], cityCounts: [{ c: '前橋市', n: 2 }] },
+    jsonLd: {
+      '@context': 'https://schema.org',
+      '@type': 'BreadcrumbList',
+      itemListElement: [
+        { '@type': 'ListItem', position: 1, name: 'ホーム', item: `${ORIGIN}/` },
+        { '@type': 'ListItem', position: 2, name: '群馬県', item: `${ORIGIN}/pref/gunma/` },
+        { '@type': 'ListItem', position: 3, name: '前橋市' },
+      ],
+    },
   }))
   await mkdir(join(dir, 'press'), { recursive: true })
   await writeFile(join(dir, 'press', 'index.html'), page({
@@ -233,6 +326,7 @@ async function syntheticDist() {
     DATASET_CLAIM,
     `${ORIGIN}/data/`,
     `${ORIGIN}/api/v1/schools.json`,
+    `${ORIGIN}/api/v1/openapi.json`,
     '',
   ].join('\n'))
   await writeFile(join(dir, '404.html'), page({
@@ -248,7 +342,8 @@ async function syntheticDist() {
     await writeFile(join(schoolDir, 'index.html'), page({
       title: `${school.name}（${school.prefecture}前橋市）の地図・アクセス・学科 | Manabi Map`,
       canonical: `${ORIGIN}/school/${school.id}/`,
-      main: `<h1>${school.name}</h1>` +
+      // h1 は React の実出力なので class="detail-title" を持つ（SSR 検査対応）。
+      main: `<h1 class="detail-title">${school.name}</h1>` +
         `<section><h2>${school.name}の近くにある高校</h2>` +
         '<p>直線距離の近い順に 1 校。実際の通学経路・所要時間は交通手段により異なります。</p>' +
         `<ul><li><a href="/school/${neighbor.id}/">${neighbor.name}</a>（前橋市・約 1.0 km）</li></ul></section>`,
@@ -256,12 +351,17 @@ async function syntheticDist() {
         schoolLd(school.name),
         breadcrumbLd(school.name),
       ],
+      // SSR 検査: 学校詳細は <main id="main-content"> を出す（class="content" は loading 時のみ。
+      // 本番は school != null の分岐なので class が付かない）。
+      mainAttrs: 'id="main-content"',
+      initialData: { schools: [school] },
     }))
   }
   await writeFile(join(dir, 'sitemap.xml'), [
     `<loc>${ORIGIN}/</loc>`,
     `<loc>${ORIGIN}/schools/</loc>`,
     `<loc>${ORIGIN}/pref/gunma/</loc>`,
+    `<loc>${ORIGIN}${MAEBASHI_PATH}</loc>`,
     `<loc>${ORIGIN}/data/</loc>`,
     `<loc>${ORIGIN}/press/</loc>`,
     `<loc>${ORIGIN}/legal/terms/</loc>`,
@@ -284,12 +384,33 @@ test('gzip magic, manifest, sitemap, all pages and size gate pass together', asy
   assert.equal(result.schoolCount, 2)
   assert.equal(result.seoSchoolCount, 2)
   assert.equal(result.prefPageCount, 1)
-  assert.equal(result.sitemapUrlCount, 14)
-  assert.equal(result.sitemapUniqueUrlCount, 14)
+  assert.equal(result.cityPageCount, 1)
+  assert.equal(result.sitemapUrlCount, 15)
+  assert.equal(result.sitemapUniqueUrlCount, 15)
   assert.equal(result.schoolDataCount, 2)
   assert.equal(result.prefDataCount, 1)
   assert.equal(result.publicApiSchoolCount, 2)
   assert.equal(result.publicApiPrefCount, 1)
+})
+
+test('name index target set excludes a synthetic school without coordinates', () => {
+  const mixedSchools = [
+    ...SCHOOLS,
+    {
+      id: 'synthetic-no-coordinates',
+      name: '合成座標なし高等学校',
+      prefecture: '群馬県',
+      city: '前橋市',
+      latitude: null,
+      longitude: null,
+      official_url: 'https://synthetic-no-coordinates.ed.jp/',
+      is_active: true,
+    },
+  ]
+
+  const detailTargets = mixedSchools.filter(isDetailSchool)
+  assert.deepEqual(detailTargets.map((school) => school.id), ['synthetic-a', 'synthetic-b'])
+  assert.equal(detailTargets.length, 2)
 })
 
 test('the prerendered data page contains every configured footer link', async (t) => {
@@ -431,6 +552,84 @@ test('a school page without the neighbor section is rejected', async (t) => {
   )
 })
 
+test('a school page missing SSR detail-title class is rejected (plan_ssr-hydration C5)', async (t) => {
+  const dir = await syntheticDist()
+  t.after(() => rm(dir, { recursive: true, force: true }))
+  // synthetic-b を「class="detail-title" が無い h1」で上書き。#_MM_INITIAL__ は残す。
+  await writeFile(join(dir, 'school', 'synthetic-b', 'index.html'), page({
+    title: '合成第二高等学校（群馬県前橋市）の地図・アクセス・学科 | Manabi Map',
+    canonical: `${ORIGIN}/school/synthetic-b/`,
+    main: '<h1>合成第二高等学校</h1>' +
+      '<section><h2>合成第二高等学校の近くにある高校</h2>' +
+      '<p>直線距離の近い順に 1 校。</p>' +
+      '<ul><li><a href="/school/synthetic-a/">合成第一高等学校</a>（前橋市・約 1.0 km）</li></ul></section>',
+    mainAttrs: 'id="main-content"',
+    initialData: { schools: [SCHOOLS[1]] },
+    jsonLd: [schoolLd('合成第二高等学校'), breadcrumbLd('合成第二高等学校')],
+  }))
+  await assert.rejects(
+    verifyStaticOutput({ distDir: dir, maxFileBytes: 1024 * 1024 }),
+    /SSR marker class="detail-title"/,
+  )
+})
+
+test('a school page missing __MM_INITIAL__ script is rejected (plan_ssr-hydration C5)', async (t) => {
+  const dir = await syntheticDist()
+  t.after(() => rm(dir, { recursive: true, force: true }))
+  await writeFile(join(dir, 'school', 'synthetic-b', 'index.html'), page({
+    title: '合成第二高等学校（群馬県前橋市）の地図・アクセス・学科 | Manabi Map',
+    canonical: `${ORIGIN}/school/synthetic-b/`,
+    main: '<h1 class="detail-title">合成第二高等学校</h1>' +
+      '<section><h2>合成第二高等学校の近くにある高校</h2>' +
+      '<p>直線距離の近い順に 1 校。</p>' +
+      '<ul><li><a href="/school/synthetic-a/">合成第一高等学校</a>（前橋市・約 1.0 km）</li></ul></section>',
+    mainAttrs: 'id="main-content"',
+    // initialData を意図的に渡さない → #__MM_INITIAL__ script が出ない
+    jsonLd: [schoolLd('合成第二高等学校'), breadcrumbLd('合成第二高等学校')],
+  }))
+  await assert.rejects(
+    verifyStaticOutput({ distDir: dir, maxFileBytes: 1024 * 1024 }),
+    /is missing #__MM_INITIAL__ initial data script/,
+  )
+})
+
+test('a pref page missing __MM_INITIAL__ script is rejected (plan_ssr-hydration C5)', async (t) => {
+  const dir = await syntheticDist()
+  t.after(() => rm(dir, { recursive: true, force: true }))
+  // gunma 県ページを #_MM_INITIAL__ 無しで上書き。class="content hub-content" は残す。
+  await writeFile(join(dir, 'pref', 'gunma', 'index.html'), page({
+    title: '群馬県の高校一覧（2 校） | Manabi Map',
+    canonical: `${ORIGIN}/pref/gunma/`,
+    main: prefPageMain(),
+    mainAttrs: 'id="main-content" class="content hub-content"',
+    // initialData を意図的に渡さない → #__MM_INITIAL__ script が出ない
+  }))
+  await assert.rejects(
+    verifyStaticOutput({ distDir: dir, maxFileBytes: 1024 * 1024 }),
+    /is missing #__MM_INITIAL__ initial data script/,
+  )
+})
+
+test('a top page missing SSR home-content class is rejected (plan_ssr-hydration C5)', async (t) => {
+  const dir = await syntheticDist()
+  t.after(() => rm(dir, { recursive: true, force: true }))
+  // トップを class="content home-content" 無しで上書き。SSR が走っていない想定。
+  await writeFile(join(dir, 'index.html'), page({
+    title: 'Manabi Map',
+    canonical: `${ORIGIN}/`,
+    main: '<h1>親子で使う、学校選びの地図ノート。</h1><nav><a href="/pref/gunma/">群馬県</a></nav>',
+    mainAttrs: 'id="main-content"',
+    jsonLd: [
+      { '@context': 'https://schema.org', '@type': 'WebSite', '@id': `${ORIGIN}/#website`, name: 'Manabi Map' },
+      { '@context': 'https://schema.org', '@type': 'Organization', '@id': `${ORIGIN}/#organization`, name: 'Manabi Map' },
+    ],
+  }))
+  await assert.rejects(
+    verifyStaticOutput({ distDir: dir, maxFileBytes: 1024 * 1024 }),
+    /SSR marker class="content home-content"/,
+  )
+})
+
 test('a school page without BreadcrumbList JSON-LD is rejected', async (t) => {
   const dir = await syntheticDist()
   t.after(() => rm(dir, { recursive: true, force: true }))
@@ -532,6 +731,59 @@ test('a deviation field anywhere under /api/v1/ is rejected', async (t) => {
   )
 })
 
+test('deviation text in public API free-text values is rejected', async () => {
+  const leakCases = [
+    ['status_description', (record) => { record.status_description = '合成校の偏差値 58 前後という記述' }],
+    ['name_history', (record) => { record.name_history = [{ notes: '偏差値 58 とする古いメモ' }] }],
+    ['predecessors', (record) => { record.predecessors = [{ notes: 'deviation value 58' }] }],
+  ]
+
+  for (const [label, inject] of leakCases) {
+    const dir = await syntheticDist()
+    try {
+      const path = join(dir, 'api', 'v1', 'schools.json')
+      const payload = JSON.parse(await readFile(path, 'utf8'))
+      inject(payload.schools[0])
+      await writeFile(path, JSON.stringify(payload))
+      await assert.rejects(
+        verifyStaticOutput({ distDir: dir, maxFileBytes: 1024 * 1024 }),
+        new RegExp(`deviation text found in api/v1/schools\\.json.*${label.replace('.', '\\.')}`),
+      )
+    } finally {
+      await rm(dir, { recursive: true, force: true })
+    }
+  }
+})
+
+test('status_note is rejected from app JSON and SSR initial data', async () => {
+  const jsonDir = await syntheticDist()
+  try {
+    const path = join(jsonDir, 'school-data', 'synthetic-a.json')
+    const payload = JSON.parse(await readFile(path, 'utf8'))
+    payload.schools[0].status_note = 'internal synthetic note'
+    await writeFile(path, JSON.stringify(payload))
+    await assert.rejects(
+      verifyStaticOutput({ distDir: jsonDir, maxFileBytes: 1024 * 1024 }),
+      /internal school field found in school-data\/synthetic-a\.json.*status_note/,
+    )
+  } finally {
+    await rm(jsonDir, { recursive: true, force: true })
+  }
+
+  const htmlDir = await syntheticDist()
+  try {
+    const path = join(htmlDir, 'school', 'synthetic-a', 'index.html')
+    const html = await readFile(path, 'utf8')
+    await writeFile(path, html.replace('</script>', '"status_note":"internal synthetic note"}</script>'))
+    await assert.rejects(
+      verifyStaticOutput({ distDir: htmlDir, maxFileBytes: 1024 * 1024 }),
+      /internal school field found in .*index\.html at HTML initial data/,
+    )
+  } finally {
+    await rm(htmlDir, { recursive: true, force: true })
+  }
+})
+
 test('a public API record without official_url is rejected', async (t) => {
   const dir = await syntheticDist()
   t.after(() => rm(dir, { recursive: true, force: true }))
@@ -581,6 +833,56 @@ test('a missing prefecture API file reports the missing source prefecture slug',
   )
 })
 
+test('an openapi prefecture enum that drifts from the published files is rejected', async (t) => {
+  const dir = await syntheticDist()
+  t.after(() => rm(dir, { recursive: true, force: true }))
+  await writeFile(
+    join(dir, 'api', 'v1', 'openapi.json'),
+    JSON.stringify(syntheticOpenApi({ prefectureSlugs: ['gunma', 'tokyo'] })),
+  )
+  await assert.rejects(
+    verifyStaticOutput({ distDir: dir, maxFileBytes: 1024 * 1024 }),
+    /openapi\.json prefecture enum does not match/,
+  )
+})
+
+test('an openapi required field that the public records do not have is rejected', async (t) => {
+  const dir = await syntheticDist()
+  t.after(() => rm(dir, { recursive: true, force: true }))
+  await writeFile(
+    join(dir, 'api', 'v1', 'openapi.json'),
+    JSON.stringify(syntheticOpenApi({ requiredSchoolFields: ['id', 'name', 'total_students'] })),
+  )
+  await assert.rejects(
+    verifyStaticOutput({ distDir: dir, maxFileBytes: 1024 * 1024 }),
+    /declares "total_students" as required/,
+  )
+})
+
+test('losing the public API CORS header is rejected', async (t) => {
+  const dir = await syntheticDist()
+  t.after(() => rm(dir, { recursive: true, force: true }))
+  const path = join(dir, '_headers')
+  const headers = await readFile(path, 'utf8')
+  await writeFile(path, headers.replace('  Access-Control-Allow-Origin: *\n', ''))
+  await assert.rejects(
+    verifyStaticOutput({ distDir: dir, maxFileBytes: 1024 * 1024 }),
+    /Access-Control-Allow-Origin/,
+  )
+})
+
+test('llms.txt without the openapi entry point is rejected', async (t) => {
+  const dir = await syntheticDist()
+  t.after(() => rm(dir, { recursive: true, force: true }))
+  const path = join(dir, 'llms.txt')
+  const llms = await readFile(path, 'utf8')
+  await writeFile(path, llms.replace(`${ORIGIN}/api/v1/openapi.json\n`, ''))
+  await assert.rejects(
+    verifyStaticOutput({ distDir: dir, maxFileBytes: 1024 * 1024 }),
+    /llms\.txt is missing dataset claim or public API URLs/,
+  )
+})
+
 test('an admission metric without its matching source is rejected', async (t) => {
   const dir = await syntheticDist()
   t.after(() => rm(dir, { recursive: true, force: true }))
@@ -613,6 +915,33 @@ test('a Wikipedia field source in the public API is rejected', async (t) => {
     verifyStaticOutput({ distDir: dir, maxFileBytes: 1024 * 1024 }),
     /forbidden source domain/,
   )
+})
+
+test('a forbidden source name in a public API string value is rejected with its JSON path', async (t) => {
+  const dir = await syntheticDist()
+  t.after(() => rm(dir, { recursive: true, force: true }))
+  const path = join(dir, 'api', 'v1', 'schools.json')
+  const payload = JSON.parse(await readFile(path, 'utf8'))
+  payload.schools[0].status_description = '合成資料の説明（Wikipedia の記載は採用しない）'
+  await writeFile(path, JSON.stringify(payload))
+  await assert.rejects(
+    verifyStaticOutput({ distDir: dir, maxFileBytes: 1024 * 1024 }),
+    /forbidden source mention "Wikipedia" in api\/v1\/schools\.json at \$\.schools\[0\]\.status_description/,
+  )
+})
+
+test('ordinary public API string values do not trigger the forbidden source mention check', async (t) => {
+  const dir = await syntheticDist()
+  t.after(() => rm(dir, { recursive: true, force: true }))
+  for (const path of [
+    join(dir, 'api', 'v1', 'schools.json'),
+    join(dir, 'api', 'v1', 'schools', 'gunma.json'),
+  ]) {
+    const payload = JSON.parse(await readFile(path, 'utf8'))
+    payload.schools[0].status_description = '統合に伴う学校状態の説明（合成資料で確認）'
+    await writeFile(path, JSON.stringify(payload))
+  }
+  await verifyStaticOutput({ distDir: dir, maxFileBytes: 1024 * 1024 })
 })
 
 test('a reviewed private-school association source host is accepted', async (t) => {
@@ -746,6 +1075,38 @@ test('the public API allowlist omits deviation data and unsourced optional field
   assert.equal(result.provenance.last_built_at, builtAt)
 })
 
+test('status_description is public only when its official field source is registered', () => {
+  const baseRow = {
+    id: 'synthetic-status-description',
+    name: '合成状態説明高等学校',
+    prefecture: '群馬県',
+    official_url: 'https://synthetic-status-description.ed.jp/',
+    is_active: true,
+    status_description: '合成資料で確認した学校状態の説明',
+  }
+  const official = toPublicSchoolRecord({
+    ...baseRow,
+    school_field_sources: [{
+      field_name: 'schools.status_description',
+      official_url: 'https://synthetic-status-description.ed.jp/status.pdf',
+      doc_title: '合成状態資料',
+      is_official_source: true,
+    }],
+  }, [], '2026-08-07T00:00:00.000Z')
+  assert.equal(official.status_description, baseRow.status_description)
+
+  const nonOfficial = toPublicSchoolRecord({
+    ...baseRow,
+    school_field_sources: [{
+      field_name: 'schools.status_description',
+      official_url: 'https://example.invalid/third-party',
+      doc_title: '合成三次資料',
+      is_official_source: false,
+    }],
+  }, [], '2026-08-07T00:00:00.000Z')
+  assert.equal('status_description' in nonOfficial, false)
+})
+
 // --- DATA.md のフィールド定義（plan_dataset-field-reference C3）--------------
 // master / 型に値が増えたのに DATA.md が古い、を機械で落とす。
 // 生成は repo 内だけで完結する（DB 接続不要）ので CI でもそのまま動く。
@@ -777,6 +1138,106 @@ test('DATA.md のフィールド定義が公開 API の全フィールドを説�
     assert.ok(
       dataMd.includes(`| \`${name}\` |`),
       `DATA.md に ${name} の説明が無い`,
+    )
+  }
+})
+
+// 公開レコードが実際に出しうる全キーが DATA.md で説明されているか。
+// FIELD_DOCS は BASIC_FIELDS から導けるが、条件付きで足されるキー
+// （departments / lifecycle / admission_recruitment_units）は手書きなので
+// 書き漏らせる。実際の出力から突き合わせて検出する。
+test('公開レコードが出す全キーが DATA.md で説明されている', async () => {
+  const { DATA_MD_PATH } = await import('./gen-dataset-fields.mjs')
+  const builtAt = '2026-08-07T00:00:00.000Z'
+  const source = (fieldName) => ({
+    field_name: fieldName,
+    official_url: 'https://example.ed.jp/doc',
+    doc_title: 'x',
+    is_official_source: true,
+  })
+  // 条件分岐をすべて満たす最大構成の行
+  const row = {
+    is_active: true,
+    official_url: 'https://example.ed.jp/',
+    status_official_url: 'https://example.ed.jp/status',
+    lifecycle_status_code: 'active',
+    recruitment_status_code: 'recruiting',
+    total_students: 300,
+    enrollment_year: 2026,
+    male_ratio: 0.5,
+    school_field_sources: [
+      source('schools.total_students'),
+      source('schools.enrollment_year'),
+      source('schools.male_ratio'),
+      source('school_departments.name'),
+      source('school_departments.course_type'),
+    ],
+    school_departments: [{ name: '普通科', course_type: 'general' }],
+    main_school_name: '本校',
+    legally_established_on: '2024-11-01',
+    updated_at: '2026-08-07T00:00:00.000Z',
+    recruitment_ended_year: 2026,
+
+    school_name_history: [
+      { name: '旧・例高等学校', name_kana: 'きゅうれい', valid_from: '1950-04-01', valid_to: '2024-03-31', official_url: 'https://example.ed.jp/h', notes: 'x' },
+    ],
+    predecessor_relationships: [
+      {
+        relationship_type_code: 'merged_into',
+        effective_on: '2024-04-01',
+        official_url: 'https://example.ed.jp/r',
+        notes: 'y',
+        predecessor: { record_key: 'school-old', name: '旧・例高等学校', closed_on: '2024-03-31', lifecycle_status_code: 'closed' },
+      },
+    ],
+    admission_recruitment_units: [
+      {
+        unit_key: 'u1',
+        unit_kind_code: 'k',
+        label: '一般',
+        school_admission_selection_stats: [
+          {
+            year: 2026,
+            capacity: 100,
+            school_admission_stat_sources: [
+              { fact_kind_code: 'capacity', official_url: 'https://example.ed.jp/s' },
+            ],
+          },
+        ],
+      },
+    ],
+  }
+  const record = toPublicSchoolRecord(row, [], builtAt)
+  assert.ok(record, '最大構成の行が公開対象にならない')
+  // 分岐がすべて発火していることを先に確かめる（発火しなければ検査の意味がない）
+  for (const key of ['departments', 'lifecycle', 'admission_recruitment_units', 'name_history', 'predecessors']) {
+    assert.ok(key in record, `テスト行が ${key} を発火させていない`)
+  }
+
+  const dataMd = await readFile(DATA_MD_PATH, 'utf8')
+  for (const key of Object.keys(record)) {
+    assert.ok(
+      dataMd.includes(`| \`${key}\` |`),
+      `DATA.md に ${key} の説明が無い（gen-dataset-fields.mjs の OBJECT_DOCS / FIELD_DOCS に追記する）`,
+    )
+  }
+
+  // ネストしたキーも検出する。statistics の 1 項目が増えただけでも
+  // 説明の無いフィールドが公開されるため、トップレベルだけでは足りない。
+  const nestedKeys = new Set()
+  const walk = (value) => {
+    if (Array.isArray(value)) return value.forEach(walk)
+    if (!value || typeof value !== 'object') return
+    for (const [key, child] of Object.entries(value)) {
+      nestedKeys.add(key)
+      walk(child)
+    }
+  }
+  walk(record)
+  for (const key of nestedKeys) {
+    assert.ok(
+      dataMd.includes(`\`${key}\``),
+      `DATA.md に ${key} の説明が無い（ネストしたキー。gen-dataset-fields.mjs へ追記する）`,
     )
   }
 })

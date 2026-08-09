@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useApp } from '../contexts/AppContext'
 import { useI18n } from '../contexts/I18nContext'
@@ -10,7 +10,8 @@ import {
   type SearchIndexes,
 } from '../lib/searchIndex'
 import { PREFECTURES, REGION_KEYS } from '../lib/prefecture'
-import { GUIDES } from '../lib/guides'
+import { GUIDES, guideNavLabel } from '../lib/guides'
+import siteFooterLinks from '../../data/site-footer-links.json'
 import { trackEvent } from '../lib/analytics'
 import type { HomeLocation } from '../types/school'
 import { AdSlot } from './../components/AdSlot'
@@ -30,7 +31,9 @@ type Hint = { text: string; tone: 'accent' | 'ok' | 'bad' | 'soft' }
 export function HomePage() {
   const navigate = useNavigate()
   const { setHome, toast, setLoginOpen } = useApp()
-  const { t } = useI18n()
+  const { t, locale } = useI18n()
+  // 見出しは site-footer-links.json の /guide/ 行と同じラベルを使う（言葉の実体を 1 箇所に保つ）。
+  const guideSectionLabel = siteFooterLinks.links.find((link) => link.path === '/guide/school-visit')?.[locale] ?? ''
   const [q, setQ] = useState('')
   const [hint, setHint] = useState<Hint | null>(null)
   const [candidates, setCandidates] = useState<GeocodeCandidate[] | null>(null)
@@ -40,6 +43,10 @@ export function HomePage() {
   const [indexes, setIndexes] = useState<SearchIndexes | null>(null)
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const lastQuery = useRef('')
+
+  useEffect(() => () => {
+    if (timer.current) clearTimeout(timer.current)
+  }, [])
 
   // 市区町村・校名の軽量索引は検索欄フォーカス時に遅延読込する
   // （schools.json 全体はトップで読まない）。失敗しても住所検索は生きるので静かに諦める。
@@ -117,6 +124,7 @@ export function HomePage() {
   }
 
   const clearQuery = () => {
+    if (timer.current) clearTimeout(timer.current)
     setQ('')
     setHint(null)
     setCandidates(null)
@@ -367,11 +375,11 @@ export function HomePage() {
       </nav>
 
       <section aria-labelledby="school-guide-heading">
-        <div className="divider" id="school-guide-heading">学校選びガイド</div>
-        <nav className="demo-links" aria-label="学校選びガイド">
+        <div className="divider" id="school-guide-heading">{guideSectionLabel}</div>
+        <nav className="demo-links" aria-label={guideSectionLabel}>
           {GUIDES.map((guide) => (
             <a key={guide.slug} href={`/guide/${guide.slug}/`}>
-              {guide.navLabel}
+              {guideNavLabel(guide, locale)}
             </a>
           ))}
         </nav>

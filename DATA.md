@@ -4,7 +4,7 @@ Manabi Map（まなびマップ）は、親子で学校選びを考えるため�
 
 ## 収録内容
 
-公開用データセットには、学校名、所在地、座標、設置区分、学校種、課程、学科、学校状態、公式サイト URL などを収録します。更新のたびにリポジトリの `web/public/` にある学校データから、公開用 JSON と CSV を生成します。
+公開用データセットには、学校名、所在地、座標、設置区分、学校種、共学別学、中高一貫かどうか、課程、校地種別、学科、学校状態、入試統計（募集人員・志願者・受検者・合格者）、公式サイト URL などを収録します。各項目の型と意味は下記「フィールド定義」を参照してください。更新のたびにリポジトリの `web/public/` にある学校データから、公開用 JSON と CSV を生成します。
 
 偏差値の編集推計は含めません。数値だけを切り出した序列化や二次利用を避け、方法と限界を文脈とともに扱うためです。
 
@@ -22,8 +22,13 @@ Manabi Map（まなびマップ）は、親子で学校選びを考えるため�
 - 全都道府県: `https://manabi-map.app/api/v1/schools.json`
 - 県別: `https://manabi-map.app/api/v1/schools/<prefecture>.json`（例: `gunma`）
 - メタデータ: `https://manabi-map.app/api/v1/dataset.json`
+- 呼び方の定義（OpenAPI 3.1）: `https://manabi-map.app/api/v1/openapi.json`
 
 いずれもリリース時に更新する静的 JSON です。検索条件付きリクエストや POST は提供しません。`/api/v1/` 内では後方互換性を維持し、破壊的変更が必要な場合は `/api/v2/` を新設します。
+
+認証は不要で、CORS はすべての origin に開いています（`Access-Control-Allow-Origin: *`）。ブラウザ上で動くプログラムからもそのまま読めます。
+
+`openapi.json` には、3 つのエンドポイントと、どの学校にも必ずある項目（`id` / `record_key` / `name` / `prefecture` / `official_url` / `provenance`）だけを定義しています。それ以外の項目は出典が確認できた学校にだけ現れるため、型と収録条件は下記「フィールド定義」が正典です。
 
 ## フィールド定義
 
@@ -53,11 +58,20 @@ Manabi Map（まなびマップ）は、親子で学校選びを考えるため�
 | `official_url` | string | 必須 | 学校公式サイトの URL。**これが確認できない学校は公開 API に収録しない** |
 | `course_times` | string[] \| null | 任意 | 課程。値は下記「課程（course_times）」。複数持つ学校がある |
 | `campus_type` | string (enum) \| null | 任意 | 校地の種別。値は下記「校地種別（campus_type）」 |
+| `is_integrated` | boolean | 必須 | 中高一貫かどうか。`type`（高校 / 高専）とは別軸の属性。**true でも高校段階の外部募集を行う学校（併設型）はある**ので、募集の有無は `lifecycle.recruitment_status_code` で確認する |
+| `main_school_name` | string \| null | 任意 | 本校の名称。`campus_type` が `main` 以外（サテライト校地・連携校・サポート校）のとき、どの本校に属するかを示す |
+| `legally_established_on` | string (date) \| null | 任意 | 法的な設置日。`lifecycle.opened_on`（開校日）とは別概念で、学校再編では設置日が先行することがある |
+| `updated_at` | string (ISO 8601) \| null | 任意 | このレコードの最終更新時刻。`provenance.last_built_at` はビルド全体の時刻なので、学校ごとの鮮度はこちらで見る |
 | `total_students` | number \| null | 出典があるときのみ | 全校生徒数。出典が登録された学校だけに出る |
 | `enrollment_year` | number \| null | 出典があるときのみ | `total_students` / `male_ratio` の基準年度 |
 | `male_ratio` | number \| null | 出典があるときのみ | 男子比率（0〜1）。出典が登録された学校だけに出る |
+| `status_description` | string \| null | 出典があるときのみ | 一次資料で確認した学校状態の公開用説明。収集作業の内部記録である `status_note` とは別で、出典が登録された学校だけに出る |
 | `provenance` | object | 必須 | 出典情報。読み方は下記「provenance の読み方」 |
-| `lifecycle` | object | 必須 | 学校の状態。読み方は下記「lifecycle の読み方」 |
+| `lifecycle` | object | `status_official_url` があるときのみ | 学校の状態。読み方は下記「lifecycle の読み方」 |
+| `departments` | object[] | 学科名の出典があるときのみ | 学科の一覧。読み方は下記「departments の読み方」 |
+| `admission_recruitment_units` | object[] | 出典つきの入試統計があるときのみ | 募集単位ごとの入試統計。読み方は下記「admission_recruitment_units の読み方」 |
+| `name_history` | object[] | 旧校名があるときのみ | 改称の履歴。読み方は下記「name_history の読み方」 |
+| `predecessors` | object[] | 前身校があるときのみ | 統合・改組の前身校。読み方は下記「predecessors の読み方」 |
 
 ### 列挙値
 
@@ -144,7 +158,7 @@ Manabi Map（まなびマップ）は、親子で学校選びを考えるため�
 | `last_verified_at` | 最後に到達を確認した時刻 |
 | `last_http_status` | 最後に確認したときの HTTP ステータス。404 でも行は消さず、到達できなかった状態として残す |
 
-**`field_sources` が空配列のとき**は「項目単位の出典が登録されていない」を意味する。データが誤っているという意味ではない。`latitude` / `longitude` / `course_times` / `campus_type` は出典が登録されていれば値を出し、`total_students` / `enrollment_year` / `male_ratio` は**出典が登録された学校にだけフィールド自体が現れる**。
+**`field_sources` が空配列のとき**は「項目単位の出典が登録されていない」を意味する。データが誤っているという意味ではない。`latitude` / `longitude` / `course_times` / `campus_type` は出典が登録されていれば値を出し、`total_students` / `enrollment_year` / `male_ratio` / `status_description` は**出典が登録された学校にだけフィールド自体が現れる**。
 
 出典が一次資料でないと判定された項目（`is_official_source` が false）は、公開 API に値を出さない。
 
@@ -157,7 +171,81 @@ Manabi Map（まなびマップ）は、親子で学校選びを考えるため�
 | `opened_on` | 開校日（不明なら null） |
 | `closed_on` | 閉校日（不明なら null） |
 | `recruitment_ended_on` | 募集終了日（不明なら null） |
+| `recruitment_ended_year` | 募集終了年度。日付まで特定できない資料のときはこちらだけ入る |
 | `status_official_url` | 状態の根拠にした一次資料の URL |
+
+#### `departments` の読み方
+
+学科名の出典（`school_departments.name`）が登録されている学校にだけ現れる配列。
+
+| キー | 説明 |
+|---|---|
+| `name` | 学科名（学校が公表している表記） |
+| `course_type` | 学科分類。**分類の出典（`school_departments.course_type`）が別途登録されている場合にだけ現れる** |
+
+#### `admission_recruitment_units` の読み方
+
+募集単位ごとの入試統計。**出典が確認できた統計が 1 件以上ある学校にだけ現れる**。
+品質フラグが立っている統計は除外する。
+
+| キー | 説明 |
+|---|---|
+| `unit_key` | 募集単位の安定キー |
+| `unit_kind_code` | 募集単位の種別 |
+| `label` | 募集単位の表示名 |
+| `course_time` | 対象の課程 |
+| `valid_from_year` / `valid_to_year` | この募集単位が有効な年度の範囲 |
+| `statistics` | 年度ごとの統計。下表 |
+
+`statistics` の各要素:
+
+| キー | 説明 |
+|---|---|
+| `year` | 年度 |
+| `selection_stage_code` / `selection_track_code` | 選抜の段階・区分 |
+| `stage_label_raw` / `track_label_raw` | 一次資料での表記そのまま |
+| `selection_scope_raw` / `population_scope_raw` / `scope_key` | 集計範囲 |
+| `map_role_code` | 地図・一覧で代表値として使う役割 |
+| `is_ratio_comparable` | 倍率として他年度と比較してよいか |
+| `capacity` / `applicants` / `examinees` / `admitted` | 募集人員 / 志願者 / 受検者 / 合格者。**その指標の出典があるものだけ現れる** |
+| `sources` | この統計の出典。`fact_kind_code` が対応する指標を示す |
+
+#### `name_history` の読み方
+
+改称の履歴。旧校名で持っている外部データと突き合わせるために使う。**旧校名がある学校にだけ現れる**。
+
+| キー | 説明 |
+|---|---|
+| `name` | そのときの学校名 |
+| `name_kana` | ふりがな（不明なら null） |
+| `valid_from` / `valid_to` | その名称が有効だった期間 |
+| `official_url` | 改称の根拠にした一次資料の URL |
+| `notes` | 補足 |
+
+#### `predecessors` の読み方
+
+統合・改組の前身校。**前身校がある学校にだけ現れる**。
+学校統合では前身校と後継校を法的に別の学校として扱うため、過年度の入試実績を
+現行校の倍率へ混ぜないよう分離している。前身校側の詳細は `predecessor.record_key` で引く。
+
+| キー | 説明 |
+|---|---|
+| `relationship_type_code` | 関係の種別（改称 / 統合 / 分割 / 改組 / 承継） |
+| `effective_on` | その関係が発生した日 |
+| `official_url` | 関係の根拠にした一次資料の URL |
+| `notes` | 補足 |
+| `predecessor` | 前身校の識別情報。下 4 行 |
+| `predecessor.record_key` | 前身校の安定キー。データセット内の別レコードを指す |
+| `predecessor.name` | 前身校の名称 |
+| `predecessor.closed_on` | 前身校の閉校日 |
+| `predecessor.lifecycle_status_code` | 前身校の状態 |
+
+### 収録しない項目
+
+| 項目 | 理由 |
+|---|---|
+| 偏差値の編集推計 | 数値だけを切り出した序列化を避けるため。方法と限界の説明とあわせてアプリ上でのみ扱う |
+| 出典を確認できない項目 | 収録基準のとおり。値があっても公開側へは出さない |
 
 <!-- END GENERATED: dataset-fields -->
 

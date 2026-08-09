@@ -2,11 +2,14 @@ import { useEffect, useState } from 'react'
 import datasetClaims from '../../data/dataset-claims.json'
 import { useI18n } from '../contexts/I18nContext'
 import { useGoBack } from '../hooks/useGoBack'
+import { getInitialData } from '../lib/initialData'
 import { PREFECTURES } from '../lib/prefecture'
 
 type DatasetMetadata = {
   school_count: number
   prefecture_count: number
+  /** 生成時刻（ISO 8601）。利用者が更新を検知するための主キー。 */
+  generated_at?: string
   /** slug → 収録校数。県別エンドポイント一覧の正典。 */
   prefectures?: Record<string, number>
 }
@@ -14,7 +17,16 @@ type DatasetMetadata = {
 export function DataPage() {
   const goBack = useGoBack('/')
   const { t } = useI18n()
-  const [metadata, setMetadata] = useState<DatasetMetadata | null>(null)
+  // プリレンダーが埋め込んだ件数を初回 render に使う（plan_ssr-hydration.md）。
+  // 無いと収録範囲が「収録対象」のままの HTML になり、hydration 後に件数へ差し替わる。
+  //
+  // ただし埋め込みは「ビルドした瞬間の値」でしかない。データだけ差し替える運用や
+  // HTML が CDN キャッシュに残っている状況では古くなるので、**正典は常に
+  // /api/v1/dataset.json 側**とし、hydration 後に必ず取り直して上書きする。
+  // 埋め込みを持っていても fetch を省略しない（値が同じなら React が bail out する）。
+  const [metadata, setMetadata] = useState<DatasetMetadata | null>(
+    () => getInitialData()?.datasetMetadata ?? null,
+  )
 
   useEffect(() => {
     let active = true
@@ -28,6 +40,7 @@ export function DataPage() {
       })
       .catch(() => {
         // 件数が読めなくても、API URL・方針・訂正窓口は表示し続ける。
+        // 埋め込みがあればそれが残るので、画面が空になることはない。
       })
     return () => {
       active = false
@@ -79,10 +92,49 @@ export function DataPage() {
           <li><a href="/api/v1/schools.json">全都道府県: /api/v1/schools.json</a></li>
           <li><a href="/api/v1/schools/{'{prefecture}'}.json">県別: /api/v1/schools/{'{prefecture}'}.json</a></li>
           <li><a href="/api/v1/dataset.json">メタデータ: /api/v1/dataset.json</a></li>
+          <li><a href="/api/v1/openapi.json">呼び方の定義（OpenAPI 3.1）: /api/v1/openapi.json</a></li>
         </ul>
         <p>
           いずれも静的 JSON です。検索条件付きリクエストや POST は提供しません。
           互換性を壊す変更が必要な場合は /api/v2/ を新設し、/api/v1/ は維持します。
+        </p>
+        <p>
+          認証は不要で、CORS はすべての origin に開いています。ブラウザ上で動くプログラムからも
+          そのまま読めます。各項目の型と収録条件は <a href="/api/v1/openapi.json">openapi.json</a> と
+          リポジトリの DATA.md にまとめています。
+        </p>
+
+        <h2>更新されたかを知る方法</h2>
+        <p>
+          データはビルドのたびに作り直します。更新の有無は、全件 JSON（22MB 前後）を
+          毎回ダウンロードしなくても判定できます。方法は 2 つあります。
+        </p>
+        <h3>メタデータの generated_at を見る</h3>
+        <p>
+          <a href="/api/v1/dataset.json">/api/v1/dataset.json</a> は数 KB です。
+          この中の <code>generated_at</code>（ISO 8601）と <code>school_count</code> を
+          前回取得したときの値と比べれば、更新されたかどうかが分かります。
+          変わっていたときだけ本体を取り直す使い方を想定しています。
+          {metadata?.generated_at && (
+            <>
+              {' '}現在の値は <code>{metadata.generated_at}</code> です。
+            </>
+          )}
+        </p>
+        <h3>ETag を使って条件付きで取得する</h3>
+        <p>
+          すべてのエンドポイントは <code>ETag</code> と <code>Cache-Control: public, max-age=3600</code> を返します。
+          前回のレスポンスで受け取った ETag を <code>If-None-Match</code> ヘッダに付けて送ると、
+          中身が変わっていない場合は <code>304 Not Modified</code> が本文なしで返ります。
+          22MB を転送せずに「変わっていない」ことを確認できます。
+        </p>
+        <p>
+          curl なら <code>curl --etag-save etag.txt --etag-compare etag.txt https://manabi-map.app/api/v1/schools.json</code> の形です。
+          多くの HTTP クライアントライブラリはこの往復を自動で行います。
+        </p>
+        <p>
+          更新の頻度は決めていません。学校データの追加・訂正があったときに作り直すため、
+          定期的に確認する場合は 1 日 1 回程度で十分です。
         </p>
 
         {prefectureApiLinks.length > 0 && (

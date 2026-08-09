@@ -67,7 +67,6 @@ function school(admissionSelections: AdmissionSelection[]): School {
     recruitment_ended_on: null,
     closed_on: null,
     status_official_url: null,
-    status_note: null,
     course_times: ['fulltime'],
     main_school_name: null,
     campus_type: 'main',

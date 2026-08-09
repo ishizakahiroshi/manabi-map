@@ -22,11 +22,12 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { gunzipSync } from 'node:zlib'
-import { createElement } from 'react'
-import { renderToStaticMarkup } from 'react-dom/server'
-import Markdown from 'react-markdown'
-import remarkGfm from 'remark-gfm'
-import { loadCivicData, groupSchoolsByCity, resolveCityGroup } from './lib/municipalities.mjs'
+import {
+  buildCityCounts,
+  cityPagePath,
+  loadCivicData,
+  resolveCityGroup,
+} from './lib/municipalities.mjs'
 import {
   DATASET_ATTRIBUTION,
   DATASET_CLAIM,
@@ -43,12 +44,25 @@ import { primaryAdmissionTrend } from '../src/lib/admission.ts'
 import { successorsByPredecessorId } from '../src/lib/successors.ts'
 import { GUIDES } from '../src/lib/guides.ts'
 
+// ビルド時プリレンダー本体（plan_ssr-hydration.md）。React の実出力をそのまま #root へ入れ、
+// ブラウザ側は hydrateRoot で引き継ぐ。dist-ssr は package.json の build:ssr が作る。
+// src/entry-server.tsx を tsx で直 import しないのは、src/lib/supabase.ts の
+// import.meta.env が Vite のビルドを通らないと解決できないため。
+const ssrEntryUrl = new URL('../dist-ssr/entry-server.js', import.meta.url)
+let renderApp
+try {
+  ;({ render: renderApp } = await import(ssrEntryUrl.href))
+} catch (cause) {
+  throw new Error(
+    'dist-ssr/entry-server.js を読み込めませんでした。先に `pnpm build:ssr` を実行してください。',
+    { cause },
+  )
+}
+
 const SITE_ORIGIN = 'https://manabi-map.app'
 
 const here = dirname(fileURLToPath(import.meta.url))
 const webRoot = join(here, '..')
-const siteFooterLinks = JSON.parse(await readFile(join(webRoot, 'data', 'site-footer-links.json'), 'utf8'))
-
 const distArgIndex = process.argv.indexOf('--dist')
 const distDir = distArgIndex >= 0 ? process.argv[distArgIndex + 1] : join(webRoot, 'dist')
 
@@ -206,9 +220,20 @@ function withJsonLd(html, jsonLd) {
   return replaceOrThrow(html, /<\/head>/, () => `    ${script}\n  </head>`, 'head 閉じタグ')
 }
 
-/** #root に静的コンテンツ（クローラー向けの初期 HTML。mount 時に React が置き換える）を注入。 */
-function withRootContent(html, content) {
-  return replaceOrThrow(html, /<div id="root"><\/div>/, () => `<div id="root">${content}</div>`, '#root')
+/**
+ * #root にプリレンダー済みの React 出力を入れる（mount 時に hydrateRoot が引き継ぐ）。
+ *
+ * afterRoot（初期データの JSON script）は必ず #root の **外** に置く。
+ * 中に入れると React の管理下に無い要素が紛れて hydration が食い違う
+ * （plan_ssr-hydration.md）。
+ */
+function withRootContent(html, content, afterRoot = '', route = '/') {
+  return replaceOrThrow(
+    html,
+    /<div id="root"><\/div>/,
+    () => `<div id="root" data-mm-route="${escapeHtml(route)}">${content}</div>${afterRoot}`,
+    '#root',
+  )
 }
 
 /**
@@ -267,7 +292,7 @@ function streetAddressOf(school) {
   return rest || null
 }
 
-function renderSchoolPage(school) {
+async function renderSchoolPage(school) {
   const url = `${SITE_ORIGIN}/school/${school.id}/`
   const place = placeLabel(school.prefecture, school.city)
   const typeLabel = school.type === 'kosen' ? '高等専門学校' : '高校'
@@ -539,17 +564,25 @@ function renderSchoolPage(school) {
   }
 
   // BreadcrumbList（UUID URL の検索結果表示を救済する唯一の手段・c7 C4）。
-  // 県までは実 URL（/pref/<slug>/）へリンクし、市区町村ハブは存在しないため
-  // item を省略した name のみの ListItem にする（schema.org 的に有効）。
-  // 市区町村名は県ページの見出しと同じ resolveCityGroup の label を使う。
+  //
+  // **最後の要素以外は必ず item を持たせる。** Google の要件は
+  // 「position / name / item が必須。最後の項目だけ item を省略できる」で、
+  // 中間段の item 欠落は無効アイテム＝リッチリザルト対象外になる。
+  // schema.org の語彙としては name のみの ListItem も有効なため、
+  // 2026-08-08 に GSC が「項目「item」がありません」を検出するまで気づけなかった
+  // （旧実装は市区町村ハブが無いことを理由に 3 段目の item を省いていた）。
+  //
+  // 市区町村は専用ページ（/pref/<slug>/<市区町村>/・c5 C6）へリンクする。
+  // item を与えられない中間段は段ごと出さない（県 slug が解決できない場合は 2 段へ縮める）。
   const prefSlug = prefSlugByName.get(school.prefecture)
+  const prefUrl = prefSlug ? `${SITE_ORIGIN}/pref/${prefSlug}/` : null
   const cityGroup = resolveCityGroup(school, muniByPref)
   const breadcrumbEntries = [
     { name: 'ホーム', item: `${SITE_ORIGIN}/` },
-    prefSlug
-      ? { name: school.prefecture, item: `${SITE_ORIGIN}/pref/${prefSlug}/` }
-      : { name: school.prefecture },
-    ...(cityGroup ? [{ name: cityGroup.label }] : []),
+    ...(prefUrl ? [{ name: school.prefecture, item: prefUrl }] : []),
+    ...(prefUrl && cityGroup
+      ? [{ name: cityGroup.label, item: `${SITE_ORIGIN}${cityPagePath(prefSlug, cityGroup.label)}` }]
+      : []),
     { name: school.name },
   ]
   const breadcrumbLd = {
@@ -562,8 +595,20 @@ function renderSchoolPage(school) {
     })),
   }
 
+  void staticContent
   const withHead = renderHead(template, { title, description, url })
-  return withRootContent(withJsonLd(withJsonLd(withHead, jsonLd), breadcrumbLd), staticContent)
+  // 単体 JSON（gen-schools-json.mjs が dist へ出したもの）をそのまま渡して SSR する。
+  // 同じ payload を #root の外へ埋め、ブラウザの初回 render でも同じ内容を描かせる。
+  const payload = JSON.parse(
+    await readFile(join(distDir, 'school-data', `${school.id}.json`), 'utf8'),
+  )
+  const rendered = renderApp(`/school/${school.id}`, { schoolDetail: payload })
+  return withRootContent(
+    withJsonLd(withJsonLd(withHead, jsonLd), breadcrumbLd),
+    rendered.html,
+    rendered.initialScript,
+    `/school/${school.id}`,
+  )
 }
 
 const targets = schools.filter((s) => s.latitude != null && s.longitude != null)
@@ -636,105 +681,81 @@ const activePrefectures = prefectures.filter((p) =>
 if (activePrefectures.length === 0) {
   throw new Error('gen-seo-pages: 都道府県が 1 件も解決できない（prefectures.json と実データの不一致）')
 }
-const REGION_LABELS = {
-  'hokkaido-tohoku': '北海道・東北',
-  kanto: '関東',
-  chubu: '中部',
-  kinki: '近畿',
-  'chugoku-shikoku': '中国・四国',
-  'kyushu-okinawa': '九州・沖縄',
-}
-
-/** サイト共通フッター（プリレンダー用）。React の SiteFooter と項目を一致させる。 */
-const FOOTER_HTML =
-  '<footer><nav aria-label="サイト情報">' +
-  siteFooterLinks.links
-    .map(({ path, ja }) => `<a href="${escapeHtml(path)}/">${escapeHtml(ja)}</a>`)
-    .join(' ') +
-  '</nav></footer>'
-
-/** 設置区分・課程・共学別学の内訳（県ハブの事実の集計。序列は作らない）。 */
-function breakdownText(list) {
-  const count = (fn) => list.filter(fn).length
-  const parts = []
-  const publicCount = count((s) => ['prefectural', 'municipal', 'union'].includes(s.ownership))
-  const privateCount = count((s) => s.ownership === 'private')
-  const nationalCount = count((s) => s.ownership === 'national')
-  const own = [`公立 ${publicCount} 校`, `私立 ${privateCount} 校`]
-  if (nationalCount > 0) own.push(`国立 ${nationalCount} 校`)
-  parts.push(own.join('・'))
-  const courses = ['fulltime', 'parttime', 'correspondence']
-    .map((c) => [COURSE_LABELS[c], count((s) => (s.course_times ?? ['fulltime']).includes(c))])
-    .filter(([, n]) => n > 0)
-    .map(([label, n]) => `${label} ${n}`)
-  if (courses.length) parts.push(courses.join('・'))
-  const genders = ['coed', 'girls', 'boys']
-    .map((g) => [GENDER_LABELS[g], count((s) => s.gender_type === g)])
-    .filter(([, n]) => n > 0)
-    .map(([label, n]) => `${label} ${n}`)
-  if (genders.length) parts.push(genders.join('・'))
-  return parts.join(' ／ ')
-}
-
-/** 学校 1 校ぶんのリスト行（県ハブ用）。閉校予定・募集停止は一覧でも隠さない。 */
-function schoolListItem(school) {
-  const meta = [
-    ownershipLabel(school),
-    ...(school.course_times ?? ['fulltime']).map((c) => COURSE_LABELS[c]).filter(Boolean),
-  ].filter(Boolean)
-  const statusLabels = []
-  if (school.lifecycle_status_code !== 'active') {
-    statusLabels.push(LIFECYCLE_LABELS[school.lifecycle_status_code] ?? '')
-  }
-  if (school.recruitment_status_code !== 'recruiting') {
-    statusLabels.push(RECRUITMENT_LABELS[school.recruitment_status_code] ?? '')
-  }
-  const status = statusLabels.filter(Boolean).length
-    ? `〔${escapeHtml(statusLabels.filter(Boolean).join('・'))}〕`
-    : ''
-  return (
-    `<li><a href="/school/${escapeHtml(school.id)}/">${escapeHtml(school.name)}</a>` +
-    (meta.length ? `（${escapeHtml(meta.join('・'))}）` : '') +
-    status +
-    '</li>'
+/**
+ * 県別軽量インデックスを読む。県ページと市区町村ページの共通の正典
+ * （plan_ssr-hydration_c3_initial-data.md「県ページの設計」）。
+ */
+async function readPrefIndex(pref, prefSchools) {
+  const prefIndex = JSON.parse(
+    await readFile(join(distDir, 'school-data', `pref-index-${pref.slug}.json`), 'utf8'),
   )
+  if (prefIndex?.slug !== pref.slug || !Array.isArray(prefIndex.schools) || !Array.isArray(prefIndex.cities)) {
+    throw new Error(`gen-seo-pages: pref-index が不正です: ${pref.slug}`)
+  }
+  if (prefIndex.schools.length !== prefSchools.length) {
+    throw new Error(
+      `gen-seo-pages: pref-index 件数不一致 ${pref.slug}: ` +
+      `index=${prefIndex.schools.length} targets=${prefSchools.length}`,
+    )
+  }
+  return prefIndex
 }
 
-function renderPrefPage(pref, prefSchools) {
+function renderPrefPage(pref, prefIndex) {
   const url = `${SITE_ORIGIN}/pref/${pref.slug}/`
-  const title = `${pref.name}の高校一覧（${prefSchools.length} 校） | Manabi Map`
+  const count = prefIndex.schools.length
+  const title = `${pref.name}の高校一覧（${count} 校） | Manabi Map`
   const description =
-    `${pref.name}の高校一覧（${prefSchools.length} 校）。市区町村ごとに校名・設置区分・課程を掲載。` +
+    `${pref.name}の高校一覧（${count} 校）。市区町村ごとに校名・設置区分・課程を掲載。` +
     '地図で場所を確認し、気になる学校の保存や家族での見学メモ共有ができる無料の学校選びサービスです。'
-  const groups = groupSchoolsByCity(prefSchools, muniByPref)
-
-  const jumpLinks = groups
-    .map((g) => `<a href="#${encodeURIComponent(g.label)}">${escapeHtml(g.label)}（${g.schools.length}）</a>`)
-    .join(' ')
-  const sections = groups
-    .map(
-      (g) =>
-        `<section id="${escapeHtml(g.label)}">` +
-        `<h2>${escapeHtml(g.label)}（${g.schools.length} 校）</h2>` +
-        `<ul>${g.schools.map(schoolListItem).join('')}</ul>` +
-        '</section>',
-    )
-    .join('')
-
-  const main =
-    '<main>' +
-    `<nav aria-label="パンくず"><a href="/">トップ</a> › <a href="/schools/">都道府県一覧</a> › ${escapeHtml(pref.name)}</nav>` +
-    `<h1>${escapeHtml(pref.name)}の高校一覧（${prefSchools.length} 校）</h1>` +
-    '<p>掲載は市区町村ごと・五十音順で、学校の序列ではありません。' +
-    '出願できる学校は学区・募集要項により異なるため、必ず各校の募集要項でご確認ください。</p>' +
-    `<p>内訳: ${escapeHtml(breakdownText(prefSchools))}</p>` +
-    `<nav aria-label="市区町村へ移動">${jumpLinks}</nav>` +
-    sections +
-    '<p><a href="/schools/">都道府県一覧へ</a> ／ <a href="/">住所から地図でさがす</a></p>' +
-    '</main>'
-
   const withHead = renderHead(template, { title, description, url })
-  return withRootContent(withHead, main + FOOTER_HTML)
+  const rendered = renderApp(`/pref/${pref.slug}`, { prefPage: prefIndex })
+  return withRootContent(withHead, rendered.html, rendered.initialScript, `/pref/${pref.slug}`)
+}
+
+/**
+ * 市区町村ページ（/pref/<県 slug>/<市区町村>/・c5 C6）。
+ *
+ * 掲載は **所在地の列挙**。「◯◯市から通える高校」型の見出し・本文は書かない
+ * （学区データを保有しないため。docs/local/plan_seo-growth-strategy.md §やらないこと）。
+ * 並び順は五十音順固定で、偏差値順・倍率順のソートは実装しない。
+ *
+ * 埋め込みは該当市区町村の学校だけに絞る（県全体を入れると東京 430 校 × 62 ページで
+ * dist が数 MB 膨らむ）。近隣導線に要る県内の他市区町村は件数だけの cityCounts で渡す。
+ */
+function renderCityPage(pref, prefIndex, cityCounts, city, count) {
+  const path = cityPagePath(pref.slug, city)
+  const url = `${SITE_ORIGIN}${path}`
+  const title = `${city}の高校一覧（${count} 校） | Manabi Map`
+  const description =
+    `${pref.name}${city}にある高校 ${count} 校の一覧。校名・設置区分・課程を五十音順に掲載し、` +
+    '地図で場所を確認できます。お気に入り保存・見学メモの家族共有ができる無料の学校選びサービスです。'
+  const payload = {
+    slug: pref.slug,
+    city,
+    schools: prefIndex.schools.filter((entry) => entry.c === city),
+    cityCounts,
+  }
+  if (payload.schools.length !== count) {
+    throw new Error(
+      `gen-seo-pages: 市区町村の件数不一致 ${pref.slug}/${city}: ` +
+      `payload=${payload.schools.length} cityCounts=${count}`,
+    )
+  }
+  // 最終段（市区町村）は item 省略が正しい形（Google は現在ページの URL を使う）。
+  // 中間段の県は必ず item を持たせる（学校ページの breadcrumbEntries と同じ不変条件）。
+  const breadcrumbLd = {
+    '@context': 'https://schema.org',
+    '@type': 'BreadcrumbList',
+    itemListElement: [
+      { name: 'ホーム', item: `${SITE_ORIGIN}/` },
+      { name: pref.name, item: `${SITE_ORIGIN}/pref/${pref.slug}/` },
+      { name: city },
+    ].map((entry, index) => ({ '@type': 'ListItem', position: index + 1, ...entry })),
+  }
+  const withHead = renderHead(template, { title, description, url })
+  const rendered = renderApp(path, { cityPage: payload })
+  return withRootContent(withJsonLd(withHead, breadcrumbLd), rendered.html, rendered.initialScript, path)
 }
 
 function renderSchoolsHubPage() {
@@ -747,50 +768,17 @@ function renderSchoolsHubPage() {
   const description =
     `${coverageText(schools)}都道府県から高校一覧を開き、市区町村ごとの学校と地図を確認できます。` +
     'お気に入り保存・見学メモの家族共有ができる無料の学校選びサービスです。'
-  const regions = Object.entries(REGION_LABELS)
-    .map(([key, label]) => {
-      const prefs = activePrefectures.filter((p) => p.region === key)
-      if (prefs.length === 0) return ''
-      const links = prefs
-        .map((p) => {
-          const count = targets.filter((s) => s.prefecture === p.name).length
-          return `<li><a href="/pref/${p.slug}/">${escapeHtml(p.name)}の高校一覧（${count} 校）</a></li>`
-        })
-        .join('')
-      return `<section><h2>${escapeHtml(label)}</h2><ul>${links}</ul></section>`
-    })
-    .join('')
-  const main =
-    '<main>' +
-    `<nav aria-label="パンくず"><a href="/">トップ</a> › 都道府県一覧</nav>` +
-    `<h1>${escapeHtml(heading)}</h1>` +
-    '<p>都道府県を選ぶと、市区町村ごとの高校一覧が開きます。掲載は所在地の列挙で、学校の序列ではありません。</p>' +
-    regions +
-    '<p><a href="/">住所から地図でさがす</a></p>' +
-    '</main>'
   const withHead = renderHead(template, { title, description, url })
-  return withRootContent(withHead, main + FOOTER_HTML)
+  return withRootContent(withHead, renderApp('/schools').html, '', '/schools')
 }
 
 // --- /press と /legal/*（E-E-A-T の機械可読化） ------------------------------
-
-/** public/legal/*.md をビルド時に HTML 化する（React 側 LegalPage と同じ react-markdown で変換）。 */
-async function renderLegalHtml(doc) {
-  const md = await readFile(join(distDir, 'legal', `${doc}.md`), 'utf8')
-  return renderToStaticMarkup(createElement(Markdown, { remarkPlugins: [remarkGfm] }, md))
-}
-
-/** public/guide/*.md を React 側 GuidePage と同じ Markdown 実装で HTML 化する。 */
-async function renderGuideHtml(slug) {
-  const md = await readFile(join(distDir, 'guide', `${slug}.md`), 'utf8')
-  return renderToStaticMarkup(createElement(Markdown, { remarkPlugins: [remarkGfm] }, md))
-}
 
 const LEGAL_DOCS = [
   { doc: 'terms', title: '利用規約' },
   { doc: 'privacy', title: 'プライバシーポリシー' },
   { doc: 'third-party', title: 'サードパーティライセンス' },
-  { doc: 'deviation-methodology', title: '偏差値の方法と限界' },
+  { doc: 'deviation-methodology', title: '推計の方法と限界' },
 ]
 
 // Organization はトップと /press の両方に出し、`@id` で同一実体として紐づける
@@ -836,18 +824,8 @@ function renderDataPage() {
   const description =
     `${datasetCoverage}の学校基本情報を、` +
     '出典 URL とともに CC BY-SA 4.0 で公開する静的 JSON API です。'
-  // 県別エンドポイントは 1 件の例示だと残り 46 件の綴りを読者に推測させる。
-  // dataset.json の実収録（slug→校数）だけを列挙し、生成物と一覧を必ず一致させる。
-  const datasetPrefCounts = publicDataset.prefectures ?? {}
-  const prefectureApiLinks = prefectures
-    .filter((p) => datasetPrefCounts[p.slug] != null)
-    .map((p) => {
-      const count = Number(datasetPrefCounts[p.slug]).toLocaleString('en-US')
-      return (
-        `<li><a href="/api/v1/schools/${p.slug}.json">` +
-        `${escapeHtml(p.name)}: /api/v1/schools/${p.slug}.json</a>（${count} 校）</li>`
-      )
-    })
+  // 県別エンドポイントの一覧は DataPage が publicDataset.prefectures から描く
+  // （初期データとして埋め込む。この関数では head と JSON-LD だけを組み立てる）。
   const datasetJsonLd = {
     '@context': 'https://schema.org',
     '@type': 'Dataset',
@@ -873,38 +851,15 @@ function renderDataPage() {
     isAccessibleForFree: true,
     measurementTechnique: '学校・教育委員会・官公庁が公表した一次資料を項目単位で記録し、出典 URL を同梱',
   }
-  const main =
-    '<main>' +
-    '<h1>学校基本情報データセット・公開 API</h1>' +
-    `<p>${datasetCoverage}の学校基本情報を、` +
-    '出典へ戻れる形で公開しています。</p>' +
-    `<p><strong>${escapeHtml(DATASET_CLAIM)}</strong></p>` +
-    '<h2>収録基準</h2>' +
-    '<p>学校公式 URL を確認できる学校と、学校・教育委員会・官公庁の一次資料へたどれる項目だけを収録します。' +
-    '出典を確認できない項目は公開側へ出しません。</p>' +
-    '<p>偏差値の編集推計は、数値だけを切り出した序列化を避けるため公開 API には含めません。' +
-    'アプリ上では方法と限界の説明と組み合わせて扱います。</p>' +
-    '<h2>安定エンドポイント</h2>' +
-    '<ul>' +
-    '<li><a href="/api/v1/schools.json">全都道府県: /api/v1/schools.json</a></li>' +
-    '<li><a href="/api/v1/schools/{prefecture}.json">県別: /api/v1/schools/{prefecture}.json</a></li>' +
-    '<li><a href="/api/v1/dataset.json">メタデータ: /api/v1/dataset.json</a></li>' +
-    '</ul>' +
-    '<p>いずれも静的 JSON です。検索条件付きリクエストや POST は提供しません。' +
-    '互換性を壊す変更が必要な場合は /api/v2/ を新設し、/api/v1/ は維持します。</p>' +
-    '<h2>県別エンドポイント一覧</h2>' +
-    `<p>${prefectureApiLinks.length} 件すべてを列挙します。括弧内は収録校数です。</p>` +
-    `<ul>${prefectureApiLinks.join('')}</ul>` +
-    '<h2>ライセンスと出典表記</h2>' +
-    `<p>データは <a href="${DATASET_LICENSE_URL}">CC BY-SA 4.0</a> です。` +
-    `利用・再配布時は「${escapeHtml(DATASET_ATTRIBUTION)}」と表記してください。</p>` +
-    '<p><a href="https://github.com/ishizakahiroshi/manabi-map/blob/main/DATA.md" rel="noopener">' +
-    '生成方法と詳しい収録方針（DATA.md）</a></p>' +
-    '<h2>訂正窓口</h2>' +
-    '<p>掲載情報の削除・訂正は <a href="mailto:takedown@manabi-map.app">takedown@manabi-map.app</a> へお知らせください。</p>' +
-    '</main>'
   const withHead = renderHead(template, { title, description, url })
-  return withRootContent(withJsonLd(withHead, datasetJsonLd), main + FOOTER_HTML)
+  // 収録件数は DataPage が /api/v1/dataset.json から取るので、同じものを埋め込む。
+  const rendered = renderApp('/data', { datasetMetadata: publicDataset })
+  return withRootContent(
+    withJsonLd(withHead, datasetJsonLd),
+    rendered.html,
+    rendered.initialScript,
+    '/data',
+  )
 }
 
 function renderPressPage() {
@@ -913,79 +868,8 @@ function renderPressPage() {
   const description =
     'Manabi Map（まなびマップ）のメディア関係者・教育関係者向け基礎情報。運営者・連絡先・配布素材・' +
     '掲載情報の訂正窓口（takedown@manabi-map.app）を公開しています。'
-  const main =
-    '<main>' +
-    '<h1>メディア関係者・教育関係者の方へ</h1>' +
-    '<p>Manabi Map（まなびマップ）は、親子で使う「学校選びの地図ノート」です。' +
-    '住所を入れると通える高校が地図に表示され、気になる学校をお気に入り保存し、' +
-    '文化祭・説明会・通学経路・親子の感想を学校ごとに家族でメモできます。</p>' +
-    '<p>序列づけや合否煽りではなく、中学生と保護者が納得して進路を選ぶための管理ツールを目指した' +
-    '個人 OSS プロジェクトです。広告は進路・教育関連のみで、無差別アドネットワークは使用しません。</p>' +
-    '<h2>サービス基礎情報</h2>' +
-    '<dl>' +
-    '<dt>サービス名</dt><dd>Manabi Map（まなびマップ）</dd>' +
-    `<dt>URL</dt><dd><a href="${SITE_ORIGIN}/">${SITE_ORIGIN}</a></dd>` +
-    '<dt>初回公開</dt><dd>2026-07-05（群馬県版）。2026-07-31 に全国 47 都道府県へ拡大</dd>' +
-    '<dt>開発者</dt><dd>ishizakahiroshi（個人 OSS）</dd>' +
-    '<dt>ライセンス</dt><dd>コード AGPL-3.0 ／ データ CC BY-SA 4.0</dd>' +
-    '<dt>料金</dt><dd>無料（広告は進路・教育関連のみ控えめに掲載）</dd>' +
-    '<dt>対象</dt><dd>中学生・高校生とその保護者</dd>' +
-    '</dl>' +
-    '<h2>配布素材</h2>' +
-    '<ul>' +
-    '<li><a href="/press/manabi-map-poster.pdf">掲示ポスター（A3 縦・PDF）</a></li>' +
-    '<li><a href="/press/manabi-map-handout.pdf">保護者配布・面談用 handout（A4 縦・PDF）</a></li>' +
-    '</ul>' +
-    '<p>進路指導部の先生や保護者へ紹介いただく際に、ご自由にダウンロード・印刷・配布いただけます（改変は不可）。</p>' +
-    '<h2>プレスキット</h2>' +
-    '<ul>' +
-    '<li><a href="/press/press-release.pdf">プレスリリース（PDF）</a></li>' +
-    '<li><a href="/press/logo-pack.zip">ロゴ一式（SVG / PNG・ZIP）</a></li>' +
-    '</ul>' +
-    '<h2>学校・教育委員会向け</h2>' +
-    '<p><a href="/press/listing-checklist.html">掲載可否チェックシート（印刷用 HTML）</a>を、校内・保護者向けの紹介前確認にご利用いただけます。</p>' +
-    '<h2>取材・お問い合わせ</h2>' +
-    '<ul>' +
-    '<li>一般のお問い合わせ・取材依頼: <a href="mailto:hello@manabi-map.app">hello@manabi-map.app</a></li>' +
-    '<li>掲載情報の削除・訂正要請: <a href="mailto:takedown@manabi-map.app">takedown@manabi-map.app</a>' +
-    '（24 時間以内に受信確認 ／ 7 日以内に対応）</li>' +
-    '</ul>' +
-    '<h2>掲載データについて</h2>' +
-    `<p><strong>${escapeHtml(DATASET_CLAIM)}</strong>を公開方針としています。` +
-    '学校・教育委員会・官公庁が自ら公表した資料を根拠に編集しています。' +
-    '数値の考え方と限界は <a href="/legal/deviation-methodology/">偏差値の方法と限界</a> で公開しています。' +
-    'コードは <a href="https://github.com/ishizakahiroshi/manabi-map" rel="noopener">GitHub</a> で公開中です。' +
-    '<a href="/data/">公開データセットと API</a> も参照できます。</p>' +
-    '</main>'
   const withHead = renderHead(template, { title, description, url })
-  return withRootContent(withJsonLd(withHead, ORGANIZATION_JSON_LD), main + FOOTER_HTML)
-}
-
-// --- トップへの静的ブロック注入 ---------------------------------------------
-
-function renderTopContent() {
-  const regions = Object.entries(REGION_LABELS)
-    .map(([key, label]) => {
-      const prefs = activePrefectures.filter((p) => p.region === key)
-      if (prefs.length === 0) return ''
-      const links = prefs
-        .map((p) => `<a href="/pref/${p.slug}/">${escapeHtml(p.name)}</a>`)
-        .join(' ')
-      return `<section><h3>${escapeHtml(label)}</h3><p>${links}</p></section>`
-    })
-    .join('')
-  return (
-    '<main>' +
-    '<h1>親子で使う、学校選びの地図ノート。</h1>' +
-    '<p>住所を入れると、通える高校が地図に表示されます。気になる学校を保存して、家族でメモを残せます。</p>' +
-    `<p>${escapeHtml(coverageText(schools))}</p>` +
-    `<nav aria-label="一覧から探す"><h2><a href="/schools/">一覧から探す（都道府県）</a></h2>${regions}</nav>` +
-    '<section><h2>学校選びガイド</h2><ul>' +
-    GUIDES.map((guide) => `<li><a href="/guide/${guide.slug}/">${escapeHtml(guide.navLabel)}</a></li>`).join('') +
-    '</ul></section>' +
-    '</main>' +
-    FOOTER_HTML
-  )
+  return withRootContent(withJsonLd(withHead, ORGANIZATION_JSON_LD), renderApp('/press').html, '', '/press')
 }
 
 // --- 404（ソフト 404 の解消） ------------------------------------------------
@@ -1004,13 +888,8 @@ function render404Page() {
     '<meta name="robots" content="noindex" />\n    <meta name="description"',
     'noindex(404)',
   )
-  const main =
-    '<main>' +
-    '<h1>ページが見つかりません</h1>' +
-    '<p>URL が変更されたか、ページが存在しません。</p>' +
-    '<p><a href="/">トップへ（住所から地図でさがす）</a> ／ <a href="/schools/">都道府県一覧</a></p>' +
-    '</main>'
-  return withRootContent(html, main + FOOTER_HTML)
+  // 存在しない URL を渡して NotFoundPage を描かせる（React Router の * ルート）。
+  return withRootContent(html, renderApp('/__not-found__').html, '', '/__not-found__')
 }
 
 // --- 書き出し ----------------------------------------------------------------
@@ -1020,24 +899,46 @@ function render404Page() {
 //   これをやらないとトップだけプレースホルダのまま残る）
 // WebSite JSON-LD はテンプレート（index.html）由来。Organization をトップにも注入し、
 // /press と `@id` で同一実体として紐づける（c7 C4）。
+const topRendered = renderApp('/')
 await writeFile(
   join(distDir, 'index.html'),
-  withRootContent(withJsonLd(template, ORGANIZATION_JSON_LD), renderTopContent()),
+  withRootContent(
+    withJsonLd(template, ORGANIZATION_JSON_LD),
+    topRendered.html,
+    topRendered.initialScript,
+    '/',
+  ),
 )
 
 for (const school of targets) {
   const outDir = join(distDir, 'school', school.id)
   await mkdir(outDir, { recursive: true })
-  await writeFile(join(outDir, 'index.html'), renderSchoolPage(school))
+  await writeFile(join(outDir, 'index.html'), await renderSchoolPage(school))
 }
 
 const prefPages = []
+const cityPages = []
 for (const pref of activePrefectures) {
   const prefSchools = targets.filter((s) => s.prefecture === pref.name)
+  const prefIndex = await readPrefIndex(pref, prefSchools)
   const outDir = join(distDir, 'pref', pref.slug)
   await mkdir(outDir, { recursive: true })
-  await writeFile(join(outDir, 'index.html'), renderPrefPage(pref, prefSchools))
+  await writeFile(join(outDir, 'index.html'), renderPrefPage(pref, prefIndex))
   prefPages.push(`/pref/${pref.slug}/`)
+
+  // 市区町村ページ（c5 C6）。対象は pref-index の cities に載っている市区町村だけ＝
+  // 総務省コードへ解決できたもの。「その他」（解決不能の受け皿）にはページを作らない。
+  // ディレクトリ名は日本語のまま置き、URL では percent-encode される（cityPagePath と対応）。
+  const cityCounts = buildCityCounts(prefIndex)
+  for (const { c: city, n } of cityCounts) {
+    const cityDir = join(distDir, 'pref', pref.slug, city)
+    await mkdir(cityDir, { recursive: true })
+    await writeFile(
+      join(cityDir, 'index.html'),
+      renderCityPage(pref, prefIndex, cityCounts, city, n),
+    )
+    cityPages.push(cityPagePath(pref.slug, city))
+  }
 }
 
 await mkdir(join(distDir, 'schools'), { recursive: true })
@@ -1052,24 +953,38 @@ await writeFile(join(distDir, 'data', 'index.html'), renderDataPage())
 for (const { doc, title } of LEGAL_DOCS) {
   const url = `${SITE_ORIGIN}/legal/${doc}/`
   const description = `Manabi Map（まなびマップ）の${title}。運営方針・データの扱い・お問い合わせ窓口を公開しています。`
-  const body = await renderLegalHtml(doc)
+  // 本文は生 Markdown のまま React へ渡す（LegalPage が react-markdown で描く）。
+  // node 側で HTML 化して流し込むと、React の出力と 1 文字でも違った時点で hydration が壊れる。
+  const markdown = await readFile(join(distDir, 'legal', `${doc}.md`), 'utf8')
   const withHead = renderHead(template, { title: `${title} | Manabi Map`, description, url })
+  const rendered = renderApp(`/legal/${doc}`, {
+    docMarkdown: { key: `legal/${doc}`, text: markdown },
+  })
   const outDir = join(distDir, 'legal', doc)
   await mkdir(outDir, { recursive: true })
-  await writeFile(join(outDir, 'index.html'), withRootContent(withHead, `<main>${body}</main>${FOOTER_HTML}`))
+  await writeFile(
+    join(outDir, 'index.html'),
+    withRootContent(withHead, rendered.html, rendered.initialScript, `/legal/${doc}`),
+  )
 }
 
 for (const guide of GUIDES) {
   const url = `${SITE_ORIGIN}/guide/${guide.slug}/`
-  const body = await renderGuideHtml(guide.slug)
+  const markdown = await readFile(join(distDir, 'guide', `${guide.slug}.md`), 'utf8')
   const withHead = renderHead(template, {
     title: `${guide.title} | Manabi Map`,
     description: guide.description,
     url,
   })
+  const rendered = renderApp(`/guide/${guide.slug}`, {
+    docMarkdown: { key: `guide/${guide.slug}`, text: markdown },
+  })
   const outDir = join(distDir, 'guide', guide.slug)
   await mkdir(outDir, { recursive: true })
-  await writeFile(join(outDir, 'index.html'), withRootContent(withHead, `<main>${body}</main>${FOOTER_HTML}`))
+  await writeFile(
+    join(outDir, 'index.html'),
+    withRootContent(withHead, rendered.html, rendered.initialScript, `/guide/${guide.slug}`),
+  )
 }
 
 await writeFile(join(distDir, '404.html'), render404Page())
@@ -1082,6 +997,7 @@ const urls = [
   { path: '/' },
   { path: '/schools/' },
   ...prefPages.map((path) => ({ path })),
+  ...cityPages.map((path) => ({ path })),
   { path: '/data/' },
   { path: '/press/' },
   ...LEGAL_DOCS.map(({ doc }) => ({ path: `/legal/${doc}/` })),
@@ -1111,6 +1027,7 @@ if (pageStats.admissionTablesWithoutSource > 0) {
 
 console.log(
   `wrote ${targets.length} school pages, ${prefPages.length} pref hubs, ` +
+  `${cityPages.length} city pages, ` +
   `${LEGAL_DOCS.length} legal pages, ${GUIDES.length} guides, data, press, 404 and sitemap.xml (${urls.length} urls) to ${distDir}`,
 )
 
@@ -1140,6 +1057,8 @@ const llms = [
   '- 全件 API: https://manabi-map.app/api/v1/schools.json',
   '- 県別 API: https://manabi-map.app/api/v1/schools/{prefecture}.json',
   '- API メタデータ: https://manabi-map.app/api/v1/dataset.json',
+  '- API の呼び方（OpenAPI 3.1）: https://manabi-map.app/api/v1/openapi.json',
+  '- 認証は不要です。CORS は全 origin に開いています。',
   '- 偏差値の編集推計は公開 API に含めません。',
   '- データセットの説明: https://github.com/ishizakahiroshi/manabi-map/blob/main/DATA.md',
   '',
