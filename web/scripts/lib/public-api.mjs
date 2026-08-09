@@ -423,7 +423,7 @@ export function buildOpenApiDocument({ version, prefectureSlugs, origin = DATASE
             'どの学校にも必ずある項目だけを定義しています。学科・入試統計・前身校などは' +
             '出典が確認できた学校にだけ現れるため、全項目の型と収録条件は externalDocs を参照してください。',
           externalDocs: { description: '全フィールドの定義', url: DATASET_FIELDS_DOC_URL },
-          required: ['id', 'record_key', 'name', 'prefecture', 'official_url', 'provenance'],
+          required: ['id', 'record_key', 'name', 'prefecture', 'official_url', 'is_integrated', 'provenance'],
           properties: {
             id: { type: 'string', format: 'uuid', description: '内部 ID。外部参照には record_key を推奨。' },
             record_key: { type: 'string', description: 'school-<uuid> 形式の安定キー。' },
@@ -433,6 +433,10 @@ export function buildOpenApiDocument({ version, prefectureSlugs, origin = DATASE
               type: 'string',
               format: 'uri',
               description: '学校公式サイト。これを確認できない学校は収録しません。',
+            },
+            is_integrated: {
+              type: 'boolean',
+              description: '中高一貫かどうか。募集の有無は lifecycle.recruitment_status_code で確認します。',
             },
             provenance: {
               type: 'object',
