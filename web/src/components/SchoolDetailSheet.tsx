@@ -303,7 +303,7 @@ export function SchoolDetailSheet({ school, onClose, userData, extras, standalon
       (!row.is_ratio_comparable || row.selection_stage_code !== 'primary'),
   )
   const admissionValue = (value: number | null): string =>
-    value == null ? t('detail.admissionNoValue') : value.toLocaleString()
+    value == null ? t('detail.admissionNoValue') : value.toLocaleString('en-US')
   const admissionRatio = (row: AdmissionSelection): string | null => {
     if (!row.is_ratio_comparable || row.capacity == null || row.capacity <= 0 || row.applicants == null) return null
     return (row.applicants / row.capacity).toFixed(2)

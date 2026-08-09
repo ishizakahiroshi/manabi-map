@@ -12,6 +12,10 @@ describe('parsePostal', () => {
   it('先頭 3 桁のみ', () => {
     expect(parsePostal('371')?.label).toBe('群馬県周辺')
   })
+  it('住所中の番地を郵便番号と誤認しない', () => {
+    expect(parsePostal('群馬県前橋市本町1-2-3')).toBe(null)
+    expect(parsePostal('東京都千代田区1丁目')).toBe(null)
+  })
   it('先頭〒を除去', () => {
     expect(parsePostal('〒371-0026')?.label).toBe('群馬県周辺')
   })
@@ -49,6 +53,9 @@ describe('parsePostal', () => {
   })
   it('桁不足/超過は null', () => {
     expect(parsePostal('12')).toBe(null)
+    expect(parsePostal('1234')).toBe(null)
+    expect(parsePostal('12345')).toBe(null)
+    expect(parsePostal('123456')).toBe(null)
     expect(parsePostal('12345678')).toBe(null)
   })
 })

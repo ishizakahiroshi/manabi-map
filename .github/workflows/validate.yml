@@ -75,10 +75,18 @@ jobs:
 
       - name: Build SSR bundle
         if: env.HAS_SUPABASE_BUILD_ACCESS == 'true'
+        env:
+          VITE_SUPABASE_URL: https://example.supabase.co
+          VITE_SUPABASE_ANON_KEY: ci-public-placeholder
+          VERSION_OVERRIDE: ci-${{ github.sha }}
         run: pnpm build:ssr
 
       - name: Generate SEO pages
         if: env.HAS_SUPABASE_BUILD_ACCESS == 'true'
+        env:
+          VITE_SUPABASE_URL: https://example.supabase.co
+          VITE_SUPABASE_ANON_KEY: ci-public-placeholder
+          VERSION_OVERRIDE: ci-${{ github.sha }}
         run: pnpm exec tsx scripts/gen-seo-pages.mjs
 
       - name: Verify static output, SEO, gzip, and 25 MiB limit

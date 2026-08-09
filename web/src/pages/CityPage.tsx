@@ -15,7 +15,7 @@ import {
   type PrefListSchool,
 } from '../lib/prefIndex'
 import { prefectureBySlug } from '../lib/prefecture'
-import { ownershipFull, listStatusLabel, COURSE_TIME_FULL } from '../lib/format'
+import { useFormat } from '../hooks/useFormat'
 import { trackEvent } from '../lib/analytics'
 import { useSchoolChips } from '../hooks/useSchoolChips'
 import { SchoolFilterChips } from '../components/SchoolFilterChips'
@@ -68,6 +68,7 @@ export function CityPage({ userData }: Props) {
   const { setHome } = useApp()
   const { t } = useI18n()
   const { favorites } = userData
+  const fmt = useFormat()
   const pref = slug ? prefectureBySlug(slug) : null
   const goBack = useGoBack(slug ? `/pref/${slug}` : '/schools')
 
@@ -237,7 +238,7 @@ export function CityPage({ userData }: Props) {
 
             <ul className="city-school-list flat">
               {shown.map((s) => {
-                const status = listStatusLabel(s)
+                const status = fmt.listStatusLabel(s)
                 return (
                   <li key={s.id}>
                     <a
@@ -258,7 +259,7 @@ export function CityPage({ userData }: Props) {
                         </span>
                       )}
                       <span className="city-school-meta">
-                        {ownershipFull(s)}・{s.course_times.map((c) => COURSE_TIME_FULL[c]).join('・')}
+                        {fmt.ownFull(s)}・{s.course_times.map((c) => fmt.courseFull(c)).join('・')}
                         {status ? `〔${status}〕` : ''}
                       </span>
                     </a>

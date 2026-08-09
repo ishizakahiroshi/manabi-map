@@ -29,6 +29,10 @@ import {
 const DEFAULT_MAX_FILE_MIB = 25
 const SITE_ORIGIN = 'https://manabi-map.app'
 
+export function isDetailSchool(school) {
+  return school?.latitude != null && school?.longitude != null
+}
+
 function escapeHtml(value) {
   return String(value)
     .replaceAll('&', '&amp;')
@@ -280,6 +284,58 @@ function findDeviationLeak(value, path = '$') {
   return null
 }
 
+const DEVIATION_TEXT = /(偏差値|deviation)/iu
+const DEVIATION_TEXT_ALLOWLIST = new Map([
+  ['api/v1/dataset.json', new Set(['$.provenance_policy', '$.exclusion_policy'])],
+  ['api/v1/openapi.json', new Set(['$.info.description'])],
+])
+
+/** 公開 API の自由記述にも偏差値の値・説明を混ぜない。許可はファイル全体ではなくパス単位。 */
+function findDeviationText(value, path = '$', allowedPaths = new Set()) {
+  if (typeof value === 'string') {
+    return !allowedPaths.has(path) && DEVIATION_TEXT.test(value) ? path : null
+  }
+  if (Array.isArray(value)) {
+    for (let index = 0; index < value.length; index += 1) {
+      const leak = findDeviationText(value[index], `${path}[${index}]`, allowedPaths)
+      if (leak) return leak
+    }
+    return null
+  }
+  if (!value || typeof value !== 'object') return null
+  for (const [key, item] of Object.entries(value)) {
+    const leak = findDeviationText(item, `${path}.${key}`, allowedPaths)
+    if (leak) return leak
+  }
+  return null
+}
+
+const INTERNAL_SCHOOL_FIELDS = new Set(['status_note'])
+
+function findForbiddenKey(value, forbiddenKeys, path = '$') {
+  if (Array.isArray(value)) {
+    for (let index = 0; index < value.length; index += 1) {
+      const leak = findForbiddenKey(value[index], forbiddenKeys, `${path}[${index}]`)
+      if (leak) return leak
+    }
+    return null
+  }
+  if (!value || typeof value !== 'object') return null
+  for (const [key, item] of Object.entries(value)) {
+    if (forbiddenKeys.has(key)) return `${path}.${key}`
+    const leak = findForbiddenKey(item, forbiddenKeys, `${path}.${key}`)
+    if (leak) return leak
+  }
+  return null
+}
+
+function assertNoInternalSchoolFields(value, relativePath) {
+  const leakPath = findForbiddenKey(value, INTERNAL_SCHOOL_FIELDS)
+  if (leakPath) {
+    throw new Error(`internal school field found in ${relativePath} at ${leakPath}`)
+  }
+}
+
 function findForbiddenSourceMention(value, path = '$') {
   if (typeof value === 'string') {
     const match = FORBIDDEN_SOURCE_TEXT_PATTERNS.find(({ pattern }) => pattern.test(value))
@@ -310,7 +366,11 @@ async function readPage(absoluteDist, relativePath, label) {
     throw error
   }
   if (!stat.isFile()) throw new Error(`prerendered page is not a regular file: ${label}`)
-  return readFile(path, 'utf8')
+  const html = await readFile(path, 'utf8')
+  if (/"status_note"\s*:/.test(html)) {
+    throw new Error(`internal school field found in ${relativePath} at HTML initial data`)
+  }
+  return html
 }
 
 export async function verifyStaticOutput({
@@ -362,12 +422,13 @@ export async function verifyStaticOutput({
   const cityIndex = JSON.parse(await readFile(join(absoluteDist, manifest.cityIndexUrl.slice(1)), 'utf8'))
   if (!Array.isArray(cityIndex)) throw new Error('city index payload is not an array')
   const nameIndex = JSON.parse(await readFile(join(absoluteDist, manifest.nameIndexUrl.slice(1)), 'utf8'))
-  if (!Array.isArray(nameIndex) || nameIndex.length !== manifest.count) {
-    throw new Error(`name index count mismatch: manifest=${manifest.count} payload=${nameIndex?.length}`)
+  if (!Array.isArray(nameIndex)) {
+    throw new Error('name index payload is not an array')
   }
 
   const schoolsPath = join(absoluteDist, manifest.url.slice(1))
   const { schools, isGzip } = decodeSchoolsPayload(await readFile(schoolsPath))
+  assertNoInternalSchoolFields({ schools }, manifest.url)
   if (schools.length !== manifest.count) {
     throw new Error(`manifest count mismatch: manifest=${manifest.count} payload=${schools.length}`)
   }
@@ -382,7 +443,10 @@ export async function verifyStaticOutput({
     throw new Error('dist/index.html に未置換の __COVERAGE__ が残っている（gen-seo-pages が走っていない可能性）')
   }
 
-  const targets = schools.filter((school) => school?.latitude != null && school?.longitude != null)
+  const targets = schools.filter(isDetailSchool)
+  if (nameIndex.length !== targets.length) {
+    throw new Error(`name index count mismatch: targets=${targets.length} payload=${nameIndex.length}`)
+  }
 
   // 県ハブは prefectures.json（総務省コード表由来）とデータの突き合わせで決まる。
   const { prefectures, muniByPref } = await loadCivicData(join(dirname(fileURLToPath(import.meta.url)), '..'))
@@ -405,10 +469,11 @@ export async function verifyStaticOutput({
   // 先に全県ぶん読む（この後の検査もこの Map を参照し、同じファイルを二度読まない）。
   const prefIndexBySlug = new Map()
   for (const pref of activePrefectures) {
-    prefIndexBySlug.set(
-      pref.slug,
-      JSON.parse(await readFile(join(absoluteDist, 'school-data', `pref-index-${pref.slug}.json`), 'utf8')),
+    const prefIndex = JSON.parse(
+      await readFile(join(absoluteDist, 'school-data', `pref-index-${pref.slug}.json`), 'utf8'),
     )
+    assertNoInternalSchoolFields(prefIndex, `school-data/pref-index-${pref.slug}.json`)
+    prefIndexBySlug.set(pref.slug, prefIndex)
   }
   // 市区町村ページ（c5 C6）。対象は pref-index の cities に載っている市区町村＝総務省
   // コードへ解決できたものだけ（「その他」にはページを作らない・gen-seo-pages と同条件）。
@@ -481,6 +546,7 @@ export async function verifyStaticOutput({
       throw error
     }
     const single = JSON.parse(singleText)
+    assertNoInternalSchoolFields(single, `school-data/${target.id}.json`)
     if (!Array.isArray(single?.schools) || single.schools.length !== 1 || single.schools[0]?.id !== target.id) {
       throw new Error(`school-data JSON does not contain the school itself: /school-data/${target.id}.json`)
     }
@@ -501,6 +567,7 @@ export async function verifyStaticOutput({
     const prefPayload = JSON.parse(
       await readFile(join(schoolDataRoot, `pref-${pref.slug}.json`), 'utf8'),
     )
+    assertNoInternalSchoolFields(prefPayload, `school-data/pref-${pref.slug}.json`)
     const expectedPrefCount = schools.filter((school) => school.prefecture === pref.name).length
     if (!Array.isArray(prefPayload?.schools) || prefPayload.schools.length !== expectedPrefCount) {
       throw new Error(
@@ -527,7 +594,7 @@ export async function verifyStaticOutput({
     const prefIndex = prefIndexBySlug.get(pref.slug)
     const expectedTargets = schools.filter(
       (school) =>
-        school.prefecture === pref.name && school.latitude != null && school.longitude != null,
+        school.prefecture === pref.name && isDetailSchool(school),
     ).length
     if (
       prefIndex?.slug !== pref.slug ||
@@ -647,8 +714,17 @@ export async function verifyStaticOutput({
   if (apiJsonFiles.length < 3) throw new Error('/api/v1/ static JSON files are missing')
   for (const file of apiJsonFiles) {
     const value = JSON.parse(await readFile(file.path, 'utf8'))
+    assertNoInternalSchoolFields(value, file.relativePath)
     const leakPath = findDeviationLeak(value)
     if (leakPath) throw new Error(`deviation data found in ${file.relativePath} at ${leakPath}`)
+    const textLeakPath = findDeviationText(
+      value,
+      '$',
+      DEVIATION_TEXT_ALLOWLIST.get(file.relativePath) ?? new Set(),
+    )
+    if (textLeakPath) {
+      throw new Error(`deviation text found in ${file.relativePath} at ${textLeakPath}`)
+    }
     // openapi.json はデータではなくスキーマ。official_url は「出典 URL の値」ではなく
     // プロパティ定義なので、以降の出典ホスト・出典名の検査は当てない
     // （偏差値ガードは上で当て済み。ここで抜けるのはガードの緩和ではない）。
