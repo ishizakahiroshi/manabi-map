@@ -155,6 +155,7 @@ function response(data: unknown[] = []): MockResponse {
 function configureClient(options: {
   selects?: Record<string, MockResponse>
   upsert?: (table: string, payload: unknown, options: unknown) => Promise<MockResponse>
+  onDelete?: (table: string, filters: Record<string, unknown>) => Promise<MockResponse>
   onUpdate?: (table: string, payload: unknown, filters: Record<string, unknown>) => void
 }) {
   mocks.client.from = (table: string) => {
@@ -183,7 +184,22 @@ function configureClient(options: {
       }
       return builder
     }
-    return { select, upsert, update }
+    const remove = () => {
+      mocks.calls.push({ table, operation: 'delete', args: [] })
+      const filters: Record<string, unknown> = {}
+      const builder = {
+        eq(column: string, value: unknown) {
+          filters[column] = value
+          mocks.calls.push({ table, operation: 'eq', args: [column, value] })
+          return builder
+        },
+        then(resolve: (value: MockResponse) => unknown, reject: (reason: unknown) => unknown) {
+          return (options.onDelete?.(table, { ...filters }) ?? Promise.resolve(OK)).then(resolve, reject)
+        },
+      }
+      return builder
+    }
+    return { select, upsert, update, delete: remove }
   }
 }
 
@@ -276,6 +292,65 @@ describe('useUserData audit regressions', () => {
 
     expect(writes()).toEqual([])
     expect(mocks.state.toast).toHaveBeenCalledWith('common.dataLoadFailed')
+  })
+
+  it('deleteNote は本人のメモ行を削除し、失敗時は元に戻す', async () => {
+    const schoolId = '00000000-0000-4000-8000-000000000010'
+    configureClient({
+      selects: {
+        user_school_favorites: response(),
+        user_school_notes: response([{ school_id: schoolId, note: '合成メモ', commute_note: '' }]),
+        user_school_deviations: response(),
+      },
+      onDelete: async (_table, filters) => {
+        expect(filters).toEqual({
+          user_id: '00000000-0000-4000-8000-000000000001',
+          school_id: schoolId,
+        })
+        return { data: null, error: { message: 'synthetic delete failure' } }
+      },
+    })
+
+    mount()
+    await settle()
+    mocks.calls.length = 0
+    const data = mocks.harness.getResult<ReturnType<typeof useUserData>>()
+
+    await expect(data.deleteNote(schoolId)).rejects.toEqual({ message: 'synthetic delete failure' })
+    const restored = mocks.harness.getResult<ReturnType<typeof useUserData>>().notes[schoolId]
+    expect(restored).toEqual({ school_id: schoolId, note: '合成メモ', commute_note: '' })
+    expect(writes().filter((call) => call.operation === 'delete')).toHaveLength(1)
+  })
+
+  it('deleteMine は学校単位の全記録を削除する', async () => {
+    const schoolId = '00000000-0000-4000-8000-000000000010'
+    const departmentId = '00000000-0000-4000-8000-000000000011'
+    configureClient({
+      selects: {
+        user_school_favorites: response(),
+        user_school_notes: response(),
+        user_school_deviations: response([
+          { school_id: schoolId, department_id: departmentId, value: 38, note: null, visibility: 'private' },
+          { school_id: schoolId, department_id: null, value: 0, note: '合成記録', visibility: 'private' },
+        ]),
+      },
+      onDelete: async (_table, filters) => {
+        expect(filters).toEqual({
+          user_id: '00000000-0000-4000-8000-000000000001',
+          school_id: schoolId,
+        })
+        return OK
+      },
+    })
+
+    mount()
+    await settle()
+    const data = mocks.harness.getResult<ReturnType<typeof useUserData>>()
+
+    await data.deleteMine(schoolId)
+
+    expect(mocks.harness.getResult<ReturnType<typeof useUserData>>().mine[schoolId]).toBeUndefined()
+    expect(writes().filter((call) => call.operation === 'delete')).toHaveLength(1)
   })
 
   it('setPriority の連打は DB 書込を直列化し最後の値へ収束する', async () => {

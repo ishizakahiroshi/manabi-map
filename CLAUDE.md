@@ -184,12 +184,13 @@ Cloudflare / Supabase / Google Search Console / GitHub Secrets の設定は、**
 
 ## 運用ルール（このプロジェクト固有）
 
-### ブランチ / リリースフロー（2026-07-05 制定）
+### ブランチ / リリースフロー（2026-08-10 更新）
 
 - **main = 本番**。Cloudflare Pages の Git 連携により main への push が即・自動で https://manabi-map.app にデプロイされる。**main へ直接コミットしない**
 - **修正・機能追加は `develop` ブランチで行う**。develop への push は Cloudflare Pages が**プレビュー環境**（`https://<hash>.manabi-map.pages.dev`）を自動生成するので、そこで動作確認する（Supabase 認証のリダイレクトは `*.manabi-map.pages.dev` 登録済みでプレビューでも動く）
-- リリース手順: develop で修正 → プレビューで確認 → main へマージ（= 本番デプロイ）→ 節目で `manual_release-vX.Y.Z_日付.md` を作成し `git tag vX.Y.Z` を打つ（タグは記録用アンカー・デプロイには無影響）
-- 参照: `docs/local/archive/v0.1.1/manual_release-v0.1.0_2026-07-05.md`（初回リリースの記録・定常手順）
+- リリース手順: 各バージョンの release plan（`docs/local/plan_release-vX.Y.Z*.md`）を正典として、develop で修正 → Preview で確認 → plan の blocker と検証結果を更新 → ユーザーの明示承認後に main へマージ（= 本番デプロイ）→ 本番成功を確認して、versioned release の場合だけ `git tag vX.Y.Z` を打つ（タグは記録用アンカー・デプロイには無影響）
+- 新しいリリースごとの `manual_release-vX.Y.Z_日付.md` は作成しない。実装ファイル、migration、テスト結果、Preview / Production URL、外部通知の確認時刻、残作業、status は release plan の申し送りへ追記する。過去の `manual_release-*.md` は履歴参照のみとする
+- バックアップ・復元・メンテナンスモードなどの運用 runbook は、リリース記録とは別に `docs/local/manual_*.md` で管理する
 
 ### Supabase DB 変更の適用方針
 
@@ -237,5 +238,6 @@ pnpm dlx supabase db push
 | 進行中の plan | `docs/local/plan_*.md` |
 | **外部サービス設定の台帳（Cloudflare / Supabase / Google / GitHub）** | `docs/local/reference_external-services.md` — 上記「外部サービスの設定は推測で答えない」の参照先 |
 | 設定済み項目・調査結果などの参照資料 | `docs/local/reference_*.md`（SEO / Search Console・Supabase provider・データ収集 playbook 等） |
-| 手順書（バックアップ・復元・メンテナンスモード・リリース） | `docs/local/manual_*.md` |
+| リリース計画・実行記録 | `docs/local/plan_release-vX.Y.Z*.md` |
+| 運用 runbook（バックアップ・復元・メンテナンスモード） | `docs/local/manual_*.md` |
 | 過去バージョンの企画・設計・実装記録（アーカイブ・非公開） | `docs/local/archive/<version>/`（v0.1.1 に MVP 詳細企画書 / OSS 憲章 / データ取得戦略 / モック / phase-1 実装 plan / recap 等） |

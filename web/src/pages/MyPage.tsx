@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { shortSchoolName } from '../lib/format'
-import { useApp } from '../contexts/AppContext'
+import { formatHomeCoordinates, useApp } from '../contexts/AppContext'
 import { useAuth } from '../contexts/AuthContext'
 import { useI18n } from '../contexts/I18nContext'
 import { useFormat } from '../hooks/useFormat'
@@ -18,11 +18,11 @@ interface Props {
 export function MyPage({ userData, favCount, noteCount }: Props) {
   const navigate = useNavigate()
   const { schools } = useSchools()
-  const { setLoginOpen, toast } = useApp()
+  const { home, homeLoadState, setLoginOpen, toast } = useApp()
   const { session, kind, displayName, signOut } = useAuth()
   const { t } = useI18n()
   const fmt = useFormat()
-  const { notes, mine } = userData
+  const { notes, mine, deleteNote, deleteMine } = userData
   const [familyOpen, setFamilyOpen] = useState(false)
 
   const noteSchools = useMemo(
@@ -45,6 +45,7 @@ export function MyPage({ userData, favCount, noteCount }: Props) {
   )
 
   const needsLogin = !session || kind === 'anon'
+  const homeCoordinates = home ? formatHomeCoordinates(home) : null
 
   const handleLogin = () => setLoginOpen(true)
 
@@ -54,6 +55,26 @@ export function MyPage({ userData, favCount, noteCount }: Props) {
       toast(t('nav.logoutDone'))
     } catch {
       toast(t('nav.logoutFail'))
+    }
+  }
+
+  const handleDeleteNote = async (schoolId: string, schoolName: string) => {
+    if (!window.confirm(t('mypage.deleteNoteConfirm', { school: schoolName }))) return
+    try {
+      await deleteNote(schoolId)
+      toast(t('mypage.deleteNoteDone'))
+    } catch {
+      toast(t('mypage.deleteNoteFail'))
+    }
+  }
+
+  const handleDeleteMine = async (schoolId: string, schoolName: string) => {
+    if (!window.confirm(t('mypage.deleteMineConfirm', { school: schoolName }))) return
+    try {
+      await deleteMine(schoolId)
+      toast(t('mypage.deleteMineDone'))
+    } catch {
+      toast(t('mypage.deleteMineFail'))
     }
   }
 
@@ -85,9 +106,41 @@ export function MyPage({ userData, favCount, noteCount }: Props) {
         <section className="mypage-section">
           <button className="mypage-link" onClick={() => navigate('/')}>
             <span className="ic" aria-hidden="true">🏠</span>
-            <span>
+            <span className="mypage-home-details" aria-live="polite">
               <b>{t('mypage.homeSettings')}</b>
-              <small>{t('mypage.homeSettingsSub')}</small>
+              {homeLoadState === 'loading' && (
+                <small className="mypage-home-status">{t('mypage.homeSettingsLoading')}</small>
+              )}
+              {homeLoadState === 'error' && (
+                <>
+                  <small className="mypage-home-status mypage-home-error">{t('mypage.homeSettingsError')}</small>
+                  <small>{t('mypage.homeSettingsSub')}</small>
+                </>
+              )}
+              {homeLoadState === 'ready' && home && homeCoordinates && (
+                <>
+                  <small className="mypage-home-status">{t('mypage.homeSettingsSet')}</small>
+                  <small className="mypage-home-location" title={home.label}>
+                    <span className="sr-only">{t('mypage.homeLocation')}: </span>
+                    <span aria-hidden="true">📍</span>{' '}{home.label}
+                  </small>
+                  <small className="mypage-home-coordinates">
+                    {t('mypage.homeCoordinates', homeCoordinates)}
+                  </small>
+                </>
+              )}
+              {homeLoadState === 'ready' && !home && (
+                <>
+                  <small className="mypage-home-status">{t('mypage.homeSettingsUnset')}</small>
+                  <small>{t('mypage.homeSettingsSub')}</small>
+                </>
+              )}
+              {homeLoadState === 'ready' && home && !homeCoordinates && (
+                <>
+                  <small className="mypage-home-status mypage-home-error">{t('mypage.homeSettingsError')}</small>
+                  <small>{t('mypage.homeSettingsSub')}</small>
+                </>
+              )}
             </span>
             <span className="arrow" aria-hidden="true">›</span>
           </button>
@@ -119,11 +172,26 @@ export function MyPage({ userData, favCount, noteCount }: Props) {
             noteSchools.map((s) => {
               const note = notes[s.id]
               const text = (note?.note || note?.commute_note || '').split('\n')[0]
+              const schoolName = shortSchoolName(s.name, s)
               return (
-                <button className="mypage-card" key={s.id} onClick={() => navigate(`/school/${s.id}`)}>
-                  <b>{shortSchoolName(s.name, s)}</b>
-                  <small>{text}</small>
-                </button>
+                <article className="mypage-card mypage-note-card" key={s.id}>
+                  <button
+                    type="button"
+                    className="mypage-card-main"
+                    onClick={() => navigate(`/school/${s.id}`)}
+                  >
+                    <b>{schoolName}</b>
+                    <small>{text}</small>
+                  </button>
+                  <button
+                    type="button"
+                    className="mypage-card-delete"
+                    aria-label={t('mypage.deleteNote', { school: schoolName })}
+                    onClick={() => void handleDeleteNote(s.id, schoolName)}
+                  >
+                    <span aria-hidden="true">🗑️</span>
+                  </button>
+                </article>
               )
             })
           )}
@@ -143,11 +211,26 @@ export function MyPage({ userData, favCount, noteCount }: Props) {
                 .filter(([, value]) => value != null)
                 .map(([name, value]) => `${name}: ${value}`)
                 .join(' / ')
+              const schoolName = shortSchoolName(s.name, s)
               return (
-                <button className="mypage-card" key={s.id} onClick={() => navigate(`/school/${s.id}`)}>
-                  <b>{shortSchoolName(s.name, s)}</b>
-                  <small>{values || record?.note || fmt.displayCode(s)}</small>
-                </button>
+                <article className="mypage-card mypage-mine-card" key={s.id}>
+                  <button
+                    type="button"
+                    className="mypage-card-main"
+                    onClick={() => navigate(`/school/${s.id}`)}
+                  >
+                    <b>{schoolName}</b>
+                    <small>{values || record?.note || fmt.displayCode(s)}</small>
+                  </button>
+                  <button
+                    type="button"
+                    className="mypage-card-delete"
+                    aria-label={t('mypage.deleteMine', { school: schoolName })}
+                    onClick={() => void handleDeleteMine(s.id, schoolName)}
+                  >
+                    <span aria-hidden="true">🗑️</span>
+                  </button>
+                </article>
               )
             })
           )}
