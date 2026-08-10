@@ -995,14 +995,6 @@ export function SchoolDetailSheet({ school, onClose, userData, extras, standalon
             </a>
             <br />
             {t('detail.disclaimer')}
-            <br />
-            <a
-              href="https://github.com/ishizakahiroshi/manabi-map/issues/new?labels=data-correction"
-              target="_blank"
-              rel="noreferrer"
-            >
-              {t('detail.correction')}
-            </a>
           </p>
           </>
           )}
