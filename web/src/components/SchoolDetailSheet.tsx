@@ -86,14 +86,16 @@ export function SchoolDetailSheet({ school, onClose, userData, extras, standalon
   const touchStartY = useRef<number | null>(null)
   const touchCurrentY = useRef<number | null>(null)
   const {
-    favorites, notes, mine, loading: userDataLoading, loadError: userDataLoadError,
-    toggleFavorite, setPriority, saveNote, saveMineValue, saveMineNote, saveMineConsent,
+    favorites, notes, mine, dataUserId, loading: userDataLoading, loadError: userDataLoadError,
+    toggleFavoriteWithResult, setPriority, saveNote, saveMineValue, saveMineNote, saveMineConsent,
   } = userData
 
   const [memo, setMemo] = useState('')
   const [commuteNote, setCommuteNote] = useState('')
   const [mineNote, setMineNote] = useState('')
   const [mineDeptDraft, setMineDeptDraft] = useState<Record<string, string>>({})
+  /** 認証切替の最初の render から、前ユーザーの入力 state を表示しないための owner。 */
+  const [personalDataUserId, setPersonalDataUserId] = useState<string | null>(null)
   /** ユーザーが手編集したフィールドはサーバ再hydrateで上書きしない（保存によるデータ消失防止） */
   const dirtyRef = useRef({ memo: false, commute: false, mineNote: false, depts: false })
   const [saving, setSaving] = useState(false)
@@ -119,6 +121,19 @@ export function SchoolDetailSheet({ school, onClose, userData, extras, standalon
 
   const schoolId = school?.id ?? null
   const open = school != null
+  const sessionUserId = session?.user.id ?? null
+  const personalDataReady = dataUserId === sessionUserId && personalDataUserId === sessionUserId
+
+  useEffect(() => {
+    if (dataUserId === sessionUserId && personalDataUserId === sessionUserId) return
+    dirtyRef.current = { memo: false, commute: false, mineNote: false, depts: false }
+    setPersonalDataUserId(sessionUserId)
+    setMemo('')
+    setCommuteNote('')
+    setMineNote('')
+    setMineDeptDraft({})
+    setSaving(false)
+  }, [dataUserId, personalDataUserId, sessionUserId])
 
   /** ピーク（校名だけ）↔ 全画面。ピークで開いた時だけ、展開するまで地図が見える */
   const [expanded, setExpanded] = useState(!initialPeek)
@@ -478,8 +493,8 @@ export function SchoolDetailSheet({ school, onClose, userData, extras, standalon
   const handleFav = async () => {
     if (requireLogin()) return
     try {
-      const added = await toggleFavorite(school.id)
-      toast(added ? t('detail.favAdded') : t('detail.favRemoved'))
+      const result = await toggleFavoriteWithResult(school.id)
+      if (result.status === 'success') toast(result.isFavorite ? t('detail.favAdded') : t('detail.favRemoved'))
     } catch {
       toast(t('detail.saveFail'))
     }
@@ -503,8 +518,12 @@ export function SchoolDetailSheet({ school, onClose, userData, extras, standalon
     }
     setSaving(true)
     try {
-      await saveNote(school.id, memo, commuteNote)
-      if (mineNote !== (mineRec?.note ?? '')) await saveMineNote(school.id, mineNote)
+      const noteStatus = await saveNote(school.id, memo, commuteNote)
+      if (noteStatus !== 'success') return
+      if (mineNote !== (mineRec?.note ?? '')) {
+        const mineNoteStatus = await saveMineNote(school.id, mineNote)
+        if (mineNoteStatus !== 'success') return
+      }
       dirtyRef.current = { memo: false, commute: false, mineNote: false, depts: dirtyRef.current.depts }
       toast(t('detail.saveDone'))
     } catch {
@@ -542,8 +561,8 @@ export function SchoolDetailSheet({ school, onClose, userData, extras, standalon
   const handleConsent = async (checked: boolean) => {
     if (requireLogin()) return
     try {
-      await saveMineConsent(school.id, checked)
-      if (checked) toast(t('detail.consentDone'))
+      const status = await saveMineConsent(school.id, checked)
+      if (status === 'success' && checked) toast(t('detail.consentDone'))
     } catch {
       toast(t('detail.saveFailShort'))
     }
@@ -1121,7 +1140,7 @@ export function SchoolDetailSheet({ school, onClose, userData, extras, standalon
                   min={20}
                   max={80}
                   placeholder={t('common.dash')}
-                  value={mineDeptDraft[d.id] ?? ''}
+                  value={personalDataReady ? (mineDeptDraft[d.id] ?? '') : ''}
                   onChange={(e) => {
                     dirtyRef.current.depts = true
                     setMineDeptDraft((prev) => ({ ...prev, [d.id]: e.target.value }))
@@ -1140,7 +1159,7 @@ export function SchoolDetailSheet({ school, onClose, userData, extras, standalon
           <textarea
             className="mine-note"
             placeholder={t('detail.myNotePlaceholder')}
-            value={mineNote}
+            value={personalDataReady ? mineNote : ''}
             onChange={(e) => {
               dirtyRef.current.mineNote = true
               setMineNote(e.target.value)
@@ -1264,7 +1283,7 @@ export function SchoolDetailSheet({ school, onClose, userData, extras, standalon
             <textarea
               id="commute-note"
               placeholder={t('detail.commutePlaceholder')}
-              value={commuteNote}
+              value={personalDataReady ? commuteNote : ''}
               onChange={(e) => {
                 dirtyRef.current.commute = true
                 setCommuteNote(e.target.value)
@@ -1277,7 +1296,7 @@ export function SchoolDetailSheet({ school, onClose, userData, extras, standalon
           <h4>📝 {t('detail.memo')}</h4>
           <textarea
             placeholder={t('detail.memoPlaceholder')}
-            value={memo}
+            value={personalDataReady ? memo : ''}
             onChange={(e) => {
               dirtyRef.current.memo = true
               setMemo(e.target.value)

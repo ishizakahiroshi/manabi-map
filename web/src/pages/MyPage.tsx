@@ -61,8 +61,8 @@ export function MyPage({ userData, favCount, noteCount }: Props) {
   const handleDeleteNote = async (schoolId: string, schoolName: string) => {
     if (!window.confirm(t('mypage.deleteNoteConfirm', { school: schoolName }))) return
     try {
-      await deleteNote(schoolId)
-      toast(t('mypage.deleteNoteDone'))
+      const status = await deleteNote(schoolId)
+      if (status === 'success') toast(t('mypage.deleteNoteDone'))
     } catch {
       toast(t('mypage.deleteNoteFail'))
     }
@@ -71,8 +71,8 @@ export function MyPage({ userData, favCount, noteCount }: Props) {
   const handleDeleteMine = async (schoolId: string, schoolName: string) => {
     if (!window.confirm(t('mypage.deleteMineConfirm', { school: schoolName }))) return
     try {
-      await deleteMine(schoolId)
-      toast(t('mypage.deleteMineDone'))
+      const status = await deleteMine(schoolId)
+      if (status === 'success') toast(t('mypage.deleteMineDone'))
     } catch {
       toast(t('mypage.deleteMineFail'))
     }

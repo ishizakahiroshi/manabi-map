@@ -23,7 +23,7 @@ export function FavoritesPage({ userData }: Props) {
   const { toast } = useApp()
   const { t } = useI18n()
   const fmt = useFormat()
-  const { favorites, notes, mine, loadError, reload, toggleFavorite } = userData
+  const { favorites, notes, mine, loadError, reload, toggleFavoriteWithResult } = userData
   const [detail, setDetail] = useState<School | null>(null)
   const [familyOpen, setFamilyOpen] = useState(false)
 
@@ -41,8 +41,9 @@ export function FavoritesPage({ userData }: Props) {
   const handleRemoveFavorite = async (schoolId: string, schoolName: string) => {
     if (!window.confirm(t('favorites.removeFavoriteConfirm', { school: schoolName }))) return
     try {
-      const stillFavorite = await toggleFavorite(schoolId)
-      if (stillFavorite) {
+      const result = await toggleFavoriteWithResult(schoolId)
+      if (result.status !== 'success') return
+      if (result.isFavorite) {
         toast(t('favorites.removeFavoriteFail'))
         return
       }
