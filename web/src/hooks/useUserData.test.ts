@@ -16,6 +16,7 @@ const mocks = vi.hoisted(() => {
   const state = {
     session: { user: { id: '00000000-0000-4000-8000-000000000001' } } as { user: { id: string } } | null,
     toast: vi.fn(),
+    maintenance: false,
   }
   let cursor = 0
   let currentResult: unknown
@@ -111,6 +112,9 @@ const mocks = vi.hoisted(() => {
         renderTarget = target
         renderNow()
       },
+      rerender() {
+        renderNow()
+      },
       getResult<T>() {
         return currentResult as T
       },
@@ -140,7 +144,7 @@ vi.mock('../contexts/I18nContext', () => ({
   useI18n: () => ({ t: (key: string) => key }),
 }))
 vi.mock('./useMaintenanceMode', () => ({
-  useMaintenanceMode: () => ({ isOn: false }),
+  useMaintenanceMode: () => ({ isOn: mocks.state.maintenance }),
 }))
 
 import { useUserData } from './useUserData'
@@ -152,8 +156,15 @@ function response(data: unknown[] = []): MockResponse {
   return { data, error: null }
 }
 
+function deferred<T>() {
+  let resolve!: (value: T) => void
+  const promise = new Promise<T>((next) => { resolve = next })
+  return { promise, resolve }
+}
+
 function configureClient(options: {
   selects?: Record<string, MockResponse>
+  select?: (table: string) => Promise<MockResponse>
   upsert?: (table: string, payload: unknown, options: unknown) => Promise<MockResponse>
   onDelete?: (table: string, filters: Record<string, unknown>) => Promise<MockResponse>
   onUpdate?: (table: string, payload: unknown, filters: Record<string, unknown>) => void
@@ -161,7 +172,7 @@ function configureClient(options: {
   mocks.client.from = (table: string) => {
     const select = (...args: unknown[]) => {
       mocks.calls.push({ table, operation: 'select', args })
-      return Promise.resolve(options.selects?.[table] ?? OK)
+      return options.select?.(table) ?? Promise.resolve(options.selects?.[table] ?? OK)
     }
     const upsert = (payload: unknown, upsertOptions: unknown) => {
       mocks.calls.push({ table, operation: 'upsert', args: [payload, upsertOptions] })
@@ -221,6 +232,7 @@ describe('useUserData audit regressions', () => {
     mocks.harness.reset()
     mocks.calls.length = 0
     mocks.state.session = { user: { id: '00000000-0000-4000-8000-000000000001' } }
+    mocks.state.maintenance = false
     mocks.state.toast.mockReset()
   })
 
@@ -264,7 +276,7 @@ describe('useUserData audit regressions', () => {
     await settle()
     mocks.calls.length = 0
 
-    await data.saveMineConsent(schoolId, false)
+    await expect(data.saveMineConsent(schoolId, false)).resolves.toBe('success')
 
     expect(departmentRow.visibility).toBe('private')
     expect(sentinelRow.visibility).toBe('private')
@@ -288,8 +300,31 @@ describe('useUserData audit regressions', () => {
     expect(data.loadError).toBe(true)
     mocks.calls.length = 0
 
-    await data.saveNote('00000000-0000-4000-8000-000000000010', '', '合成通学メモ')
+    await expect(
+      data.saveNote('00000000-0000-4000-8000-000000000010', '', '合成通学メモ'),
+    ).resolves.toBe('blocked')
 
+    expect(writes()).toEqual([])
+    expect(mocks.state.toast).toHaveBeenCalledWith('common.dataLoadFailed')
+  })
+
+  it('loadError 時の deleteNote は blocked を返し、成功扱いできない', async () => {
+    const schoolId = '00000000-0000-4000-8000-000000000010'
+    configureClient({
+      selects: {
+        user_school_favorites: response(),
+        user_school_notes: { data: null, error: { message: 'synthetic notes load failure' } },
+        user_school_deviations: response(),
+      },
+    })
+
+    mount()
+    await settle()
+    mocks.calls.length = 0
+
+    const result = await mocks.harness.getResult<ReturnType<typeof useUserData>>().deleteNote(schoolId)
+
+    expect(result).toBe('blocked')
     expect(writes()).toEqual([])
     expect(mocks.state.toast).toHaveBeenCalledWith('common.dataLoadFailed')
   })
@@ -347,10 +382,100 @@ describe('useUserData audit regressions', () => {
     await settle()
     const data = mocks.harness.getResult<ReturnType<typeof useUserData>>()
 
-    await data.deleteMine(schoolId)
+    await expect(data.deleteMine(schoolId)).resolves.toBe('success')
 
     expect(mocks.harness.getResult<ReturnType<typeof useUserData>>().mine[schoolId]).toBeUndefined()
     expect(writes().filter((call) => call.operation === 'delete')).toHaveLength(1)
+  })
+
+  it('お気に入りの blocked 結果を追加契約で識別し、既存 boolean 契約も維持する', async () => {
+    const schoolId = '00000000-0000-4000-8000-000000000010'
+    configureClient({
+      selects: {
+        user_school_favorites: response([{ school_id: schoolId, priority: 3, status: 'interested' }]),
+        user_school_notes: response(),
+        user_school_deviations: response(),
+      },
+    })
+
+    const data = mount()
+    await settle()
+    mocks.calls.length = 0
+    mocks.state.maintenance = true
+    mocks.harness.rerender()
+
+    await expect(data.toggleFavoriteWithResult(schoolId)).resolves.toEqual({ status: 'blocked', isFavorite: true })
+    await expect(data.toggleFavorite(schoolId)).resolves.toBe(true)
+    expect(writes()).toEqual([])
+  })
+
+  it('maintenance 中の deleteMine は blocked を返し state と DB を変更しない', async () => {
+    const schoolId = '00000000-0000-4000-8000-000000000010'
+    configureClient({
+      selects: {
+        user_school_favorites: response(),
+        user_school_notes: response(),
+        user_school_deviations: response([
+          { school_id: schoolId, department_id: '00000000-0000-4000-8000-000000000011', value: 38, note: null, visibility: 'private' },
+        ]),
+      },
+    })
+
+    mount()
+    await settle()
+    const before = mocks.harness.getResult<ReturnType<typeof useUserData>>().mine[schoolId]
+    mocks.calls.length = 0
+    mocks.state.maintenance = true
+    mocks.harness.rerender()
+
+    const result = await mocks.harness.getResult<ReturnType<typeof useUserData>>().deleteMine(schoolId)
+
+    expect(result).toBe('blocked')
+    expect(mocks.harness.getResult<ReturnType<typeof useUserData>>().mine[schoolId]).toEqual(before)
+    expect(writes()).toEqual([])
+    expect(mocks.state.toast).toHaveBeenCalledWith('maintenance.toast')
+  })
+
+  it('maintenance 中の保存系 mutation は全て blocked を返し state と DB を変更しない', async () => {
+    const schoolId = '00000000-0000-4000-8000-000000000010'
+    const departmentId = '00000000-0000-4000-8000-000000000011'
+    configureClient({
+      selects: {
+        user_school_favorites: response([{ school_id: schoolId, priority: 2, status: 'interested' }]),
+        user_school_notes: response([{ school_id: schoolId, note: '合成メモ', commute_note: '' }]),
+        user_school_deviations: response([{
+          school_id: schoolId,
+          department_id: departmentId,
+          value: 38,
+          note: null,
+          visibility: 'private',
+        }]),
+      },
+    })
+
+    mount()
+    await settle()
+    const data = mocks.harness.getResult<ReturnType<typeof useUserData>>()
+    const before = {
+      favorites: data.favorites,
+      notes: data.notes,
+      mine: data.mine,
+    }
+    mocks.calls.length = 0
+    mocks.state.maintenance = true
+    mocks.harness.rerender()
+
+    await expect(data.setPriority(schoolId, 4)).resolves.toBe('blocked')
+    await expect(data.saveNote(schoolId, '変更後', '通学メモ')).resolves.toBe('blocked')
+    await expect(data.saveMineValue(schoolId, departmentId, 55)).resolves.toBe('blocked')
+    await expect(data.saveMineNote(schoolId, '個人メモ変更後')).resolves.toBe('blocked')
+    await expect(data.saveMineConsent(schoolId, true)).resolves.toBe('blocked')
+
+    const after = mocks.harness.getResult<ReturnType<typeof useUserData>>()
+    expect(after.favorites).toEqual(before.favorites)
+    expect(after.notes).toEqual(before.notes)
+    expect(after.mine).toEqual(before.mine)
+    expect(writes()).toEqual([])
   })
 
   it('setPriority の連打は DB 書込を直列化し最後の値へ収束する', async () => {
@@ -389,13 +514,115 @@ describe('useUserData audit regressions', () => {
     await settle()
     expect(writes().filter((call) => call.operation === 'upsert')).toHaveLength(2)
     secondResolve(OK)
-    await Promise.all([firstSave, secondSave])
+    await expect(firstSave).resolves.toBe('success')
+    await expect(secondSave).resolves.toBe('success')
 
     const priorityWrites = writes()
       .filter((call) => call.operation === 'upsert')
       .map((call) => (call.args[0] as { priority: number }).priority)
     expect(priorityWrites).toEqual([1, 3])
     expect(mocks.harness.getResult<ReturnType<typeof useUserData>>().favorites['00000000-0000-4000-8000-000000000010'].priority).toBe(3)
+  })
+
+  it('userId 切替直後の render は旧ユーザーの個人データを返さず、B の完了後だけ B を返す', async () => {
+    const userA = '00000000-0000-4000-8000-000000000001'
+    const userB = '00000000-0000-4000-8000-000000000002'
+    const schoolA = '00000000-0000-4000-8000-000000000010'
+    const schoolB = '00000000-0000-4000-8000-000000000020'
+    configureClient({
+      select: (table) => {
+        const isB = mocks.state.session?.user.id === userB
+        const rows: Record<string, unknown[]> = {
+          user_school_favorites: [{ school_id: isB ? schoolB : schoolA, priority: 3, status: 'interested' }],
+          user_school_notes: [{ school_id: isB ? schoolB : schoolA, note: isB ? 'B の合成メモ' : 'A の合成メモ', commute_note: '' }],
+          user_school_deviations: [{ school_id: isB ? schoolB : schoolA, department_id: null, value: 0, note: isB ? 'B の合成記録' : 'A の合成記録', visibility: 'private' }],
+        }
+        return Promise.resolve(response(rows[table]))
+      },
+    })
+
+    mount()
+    await settle()
+    expect(Object.keys(mocks.harness.getResult<ReturnType<typeof useUserData>>().favorites)).toEqual([schoolA])
+
+    mocks.state.session = { user: { id: userB } }
+    mocks.harness.rerender()
+    const duringSwitch = mocks.harness.getResult<ReturnType<typeof useUserData>>()
+    expect(duringSwitch.favorites).toEqual({})
+    expect(duringSwitch.notes).toEqual({})
+    expect(duringSwitch.mine).toEqual({})
+    expect(duringSwitch.loading).toBe(true)
+    expect(duringSwitch.loadError).toBe(false)
+
+    await settle()
+    const afterSwitch = mocks.harness.getResult<ReturnType<typeof useUserData>>()
+    expect(Object.keys(afterSwitch.favorites)).toEqual([schoolB])
+    expect(Object.keys(afterSwitch.notes)).toEqual([schoolB])
+    expect(Object.keys(afterSwitch.mine)).toEqual([schoolB])
+    expect(afterSwitch.notes[schoolB].note).toBe('B の合成メモ')
+    expect(afterSwitch.notes[userA]).toBeUndefined()
+  })
+
+  it('sign out 直後の render は旧ユーザーの個人データと件数を返さない', async () => {
+    const schoolId = '00000000-0000-4000-8000-000000000010'
+    configureClient({
+      selects: {
+        user_school_favorites: response([{ school_id: schoolId, priority: 3, status: 'interested' }]),
+        user_school_notes: response([{ school_id: schoolId, note: '合成メモ', commute_note: '' }]),
+        user_school_deviations: response([{ school_id: schoolId, department_id: null, value: 0, note: '合成記録', visibility: 'private' }]),
+      },
+    })
+
+    mount()
+    await settle()
+    mocks.state.session = null
+    mocks.harness.rerender()
+
+    const afterSignOut = mocks.harness.getResult<ReturnType<typeof useUserData>>()
+    expect(afterSignOut.favorites).toEqual({})
+    expect(afterSignOut.notes).toEqual({})
+    expect(afterSignOut.mine).toEqual({})
+    expect(afterSignOut.loading).toBe(false)
+    expect(afterSignOut.loadError).toBe(false)
+  })
+
+  it('古いユーザーの遅延 load response は新ユーザーの state を上書きしない', async () => {
+    const userA = '00000000-0000-4000-8000-000000000001'
+    const userB = '00000000-0000-4000-8000-000000000002'
+    const schoolA = '00000000-0000-4000-8000-000000000010'
+    const schoolB = '00000000-0000-4000-8000-000000000020'
+    const pending = {
+      user_school_favorites: deferred<MockResponse>(),
+      user_school_notes: deferred<MockResponse>(),
+      user_school_deviations: deferred<MockResponse>(),
+    }
+    const bRows: Record<string, MockResponse> = {
+      user_school_favorites: response([{ school_id: schoolB, priority: 2, status: 'interested' }]),
+      user_school_notes: response([{ school_id: schoolB, note: 'B の合成メモ', commute_note: '' }]),
+      user_school_deviations: response(),
+    }
+    configureClient({
+      select: (table) => mocks.state.session?.user.id === userA
+        ? pending[table as keyof typeof pending].promise
+        : Promise.resolve(bRows[table] ?? OK),
+    })
+
+    mount()
+    mocks.state.session = { user: { id: userB } }
+    mocks.harness.rerender()
+    await settle()
+    expect(Object.keys(mocks.harness.getResult<ReturnType<typeof useUserData>>().favorites)).toEqual([schoolB])
+
+    pending.user_school_favorites.resolve(response([{ school_id: schoolA, priority: 3, status: 'interested' }]))
+    pending.user_school_notes.resolve(response([{ school_id: schoolA, note: 'A の遅延メモ', commute_note: '' }]))
+    pending.user_school_deviations.resolve(response([{ school_id: schoolA, department_id: null, value: 0, note: 'A の遅延記録', visibility: 'private' }]))
+    await settle()
+
+    const result = mocks.harness.getResult<ReturnType<typeof useUserData>>()
+    expect(Object.keys(result.favorites)).toEqual([schoolB])
+    expect(result.notes[schoolB]?.note).toBe('B の合成メモ')
+    expect(result.notes[schoolA]).toBeUndefined()
+    expect(result.mine[schoolA]).toBeUndefined()
   })
 
   it('userId が null になったロードは loading=false で終わる', async () => {
