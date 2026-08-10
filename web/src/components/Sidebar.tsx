@@ -8,8 +8,6 @@ import { useFocusTrap } from '../hooks/useFocusTrap'
 import { useEscapeKey } from '../hooks/useEscapeKey'
 
 const REPO_URL = 'https://github.com/ishizakahiroshi/manabi-map'
-const ISSUE_URL = `${REPO_URL}/issues/new?labels=data-correction&title=%E5%AD%A6%E6%A0%A1%E6%83%85%E5%A0%B1%E3%81%AE%E4%BF%AE%E6%AD%A3%E6%8F%90%E6%A1%88`
-const FEEDBACK_URL = `${REPO_URL}/issues/new?labels=feedback&title=%E3%83%95%E3%82%A3%E3%83%BC%E3%83%89%E3%83%90%E3%83%83%E3%82%AF`
 
 interface SidebarProps {
   favCount: number
@@ -107,31 +105,6 @@ export function Sidebar({ favCount, noteCount, isAdmin }: SidebarProps) {
           {isAdmin && <div className="sb-section"><button className="sb-item" onClick={() => go('/dashboard')}><span className="ic" aria-hidden="true">▦</span><span className="tx">管理ダッシュボード</span><span className="arrow" aria-hidden="true">›</span></button></div>}
 
           <div className="sb-section">
-            <div className="sb-label">{t('nav.oss')}</div>
-            <a className="sb-item" href={ISSUE_URL} target="_blank" rel="noreferrer" onClick={close}>
-              <span className="ic" aria-hidden="true">✏️</span>
-              <span className="tx">{t('nav.suggestEdit')}</span>
-              <span className="arrow" aria-hidden="true">›</span>
-            </a>
-            <a className="sb-item" href={REPO_URL} target="_blank" rel="noreferrer" onClick={close}>
-              <span className="ic" aria-hidden="true">🌐</span>
-              <span className="tx">{t('nav.editOnGithub')}</span>
-              <span className="arrow" aria-hidden="true">›</span>
-            </a>
-            <button
-              className="sb-item"
-              onClick={() => {
-                close()
-                toast(t('nav.provideDeviationHint'))
-              }}
-            >
-              <span className="ic" aria-hidden="true">📊</span>
-              <span className="tx">{t('nav.provideDeviation')}</span>
-              <span className="arrow" aria-hidden="true">›</span>
-            </button>
-          </div>
-
-          <div className="sb-section">
             <div className="sb-label">{t('nav.serviceInfo')}</div>
             <a className="sb-item" href={REPO_URL} target="_blank" rel="noreferrer" onClick={close}>
               <span className="ic" aria-hidden="true">ℹ️</span>
@@ -141,11 +114,6 @@ export function Sidebar({ favCount, noteCount, isAdmin }: SidebarProps) {
             <a className="sb-item" href={`${REPO_URL}#readme`} target="_blank" rel="noreferrer" onClick={close}>
               <span className="ic" aria-hidden="true">❓</span>
               <span className="tx">{t('nav.help')}</span>
-              <span className="arrow" aria-hidden="true">›</span>
-            </a>
-            <a className="sb-item" href={FEEDBACK_URL} target="_blank" rel="noreferrer" onClick={close}>
-              <span className="ic" aria-hidden="true">💬</span>
-              <span className="tx">{t('nav.feedback')}</span>
               <span className="arrow" aria-hidden="true">›</span>
             </a>
             <button className="sb-item" onClick={() => go('/legal/third-party')}>

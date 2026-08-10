@@ -35,4 +35,4 @@ Manabi Map の「参考偏差値」は、学校選びの会話を始めるため
 
 ## 訂正・情報提供
 
-根拠となる学校公式資料や教育委員会資料をご存じの場合は、学校詳細の「情報を提供する」からお知らせください。内容は運営が根拠を確認してから反映します。公開データの訂正は [GitHub Issue](https://github.com/ishizakahiroshi/manabi-map/issues/new?labels=data-correction) または [takedown@manabi-map.app](mailto:takedown@manabi-map.app) でも受け付けます。
+根拠となる学校公式資料や教育委員会資料をご存じの場合は、学校詳細の「情報を提供する」からお知らせください。内容は運営が根拠を確認してから反映します。公開データの訂正は学校詳細の「情報を提供する」から、掲載停止の要請は [takedown@manabi-map.app](mailto:takedown@manabi-map.app) までお知らせください。

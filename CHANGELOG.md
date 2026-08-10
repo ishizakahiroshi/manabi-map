@@ -6,6 +6,16 @@
 
 ## [Unreleased]
 
+## [v0.7.2] - 2026-08-10
+
+### Changed
+- 旧「OSS 参加」セクションと、学校情報の修正提案・GitHub でのデータ編集・偏差値情報提供の旧参加導線をサイドバーから撤去
+- サイドバーと学校詳細に残っていた GitHub Issue への直接リンクを撤去し、学校情報の修正は学校詳細の情報提供フォーム、偏差値の方法・削除依頼は方法論ページの案内へ整理
+- About / Help の repository 説明リンクと、学校詳細の既存 `DataReportForm` は維持
+
+### Removed
+- 旧 OSS 参加導線および旧 `data-correction` / `feedback` Issue 直リンク
+
 ## [v0.7.1] - 2026-08-10
 
 ### Added
