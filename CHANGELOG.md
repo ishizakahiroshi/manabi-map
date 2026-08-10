@@ -6,6 +6,11 @@
 
 ## [Unreleased]
 
+## [v0.7.3] - 2026-08-10
+
+### Changed
+- README の学校情報の提供・削除・訂正要請の案内を、学校詳細の情報提供フォームと `takedown@manabi-map.app` へ同期し、旧 GitHub Issue / `data-correction` 案内を削除
+
 ## [v0.7.2] - 2026-08-10
 
 ### Changed
