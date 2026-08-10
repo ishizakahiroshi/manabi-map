@@ -8,9 +8,13 @@ import { useAuth } from './AuthContext'
 
 const HOME_KEY = 'mm.home'
 
+export type HomeLoadState = 'loading' | 'ready' | 'error'
+
 interface AppState {
   /** 地図の原点（自宅 or 検索した中心地点）。§7.6.5: 未ログイン時は LocalStorage の仮住所 */
   home: HomeLocation | null
+  /** home が未設定なのか、まだ復元中なのかを区別する状態 */
+  homeLoadState: HomeLoadState
   setHome: (h: HomeLocation) => void
   toast: (msg: string) => void
   toastMsg: string
@@ -31,6 +35,12 @@ export function isValidHomeLocation(value: unknown): value is HomeLocation {
     Number.isFinite(candidate.lat) &&
     Number.isFinite(candidate.lng)
   )
+}
+
+/** 表示用の座標を固定小数点に整形する。無効な地点は表示へ渡さない。 */
+export function formatHomeCoordinates(value: unknown): { lat: string; lng: string } | null {
+  if (!isValidHomeLocation(value)) return null
+  return { lat: value.lat.toFixed(3), lng: value.lng.toFixed(3) }
 }
 
 /** localStorage の値を検証する純粋関数。壊れた JSON/形状は地図へ渡さない。 */
@@ -62,6 +72,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // hydration が壊れる（plan_ssr-hydration.md C2）。
   // 復元は下の [session] effect が担う（未ログイン時に loadLocalHome() を読む経路が既にある）。
   const [home, setHomeState] = useState<HomeLocation | null>(null)
+  const [homeLoadState, setHomeLoadState] = useState<HomeLoadState>('loading')
   const [toastMsg, setToastMsg] = useState('')
   const [toastShow, setToastShow] = useState(false)
   const [loginOpen, setLoginOpen] = useState(false)
@@ -117,6 +128,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const setHome = useCallback(
     (h: HomeLocation) => {
       setHomeState(h)
+      setHomeLoadState('ready')
       try {
         localStorage.setItem(HOME_KEY, JSON.stringify(h))
       } catch { /* localStorage 不可の環境では仮住所は揮発で良い */ }
@@ -128,6 +140,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // ログイン時: DB の自宅を読み込み。無ければ LocalStorage の仮住所を移送（§7.6.5）
   // migratedFor は成功時のみ立てる（失敗時に再試行できるよう、エラーで固定しない）
   useEffect(() => {
+    setHomeLoadState('loading')
     if (!session) {
       // 実ログインからのサインアウト後は、前ユーザーの地点を次のユーザーへ移送しない。
       // 初回の未ログイン状態では activeHomeUserId が null のため、匿名利用の引き継ぎは残る。
@@ -136,21 +149,26 @@ export function AppProvider({ children }: { children: ReactNode }) {
         activeHomeUserId.current = null
         migratedFor.current = null
         setHomeState(null)
+        setHomeLoadState('ready')
         return
       }
       activeHomeUserId.current = null
       migratedFor.current = null
       setHomeState(loadLocalHome())
+      setHomeLoadState('ready')
       return
     }
     const userId = session.user.id
-    if (activeHomeUserId.current !== null && activeHomeUserId.current !== userId) {
+    if (activeHomeUserId.current !== userId) {
       // DB 応答がまだ返っていない切替でも、前ユーザーの自宅地点を消す。
       setHomeState(null)
       migratedFor.current = null
     }
     activeHomeUserId.current = userId
-    if (migratedFor.current === userId) return
+    if (migratedFor.current === userId) {
+      setHomeLoadState('ready')
+      return
+    }
     let cancelled = false
     void (async () => {
       const { data, error: selErr } = await supabase
@@ -160,6 +178,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
         .maybeSingle()
       if (selErr) {
         console.error('home_locations load failed:', selErr.message)
+        if (!cancelled) {
+          setHomeState(null)
+          setHomeLoadState('error')
+        }
         return
       }
       if (cancelled) return
@@ -167,15 +189,20 @@ export function AppProvider({ children }: { children: ReactNode }) {
         const h = { label: data.address, lat: Number(data.latitude), lng: Number(data.longitude) }
         if (!isValidHomeLocation(h)) {
           console.error('home_locations load returned invalid coordinates')
+          setHomeState(null)
+          setHomeLoadState('error')
           return
         }
         if (cancelled) return
         migratedFor.current = userId
         setHomeState(h)
+        setHomeLoadState('ready')
         try { localStorage.setItem(HOME_KEY, JSON.stringify(h)) } catch { /* noop */ }
       } else {
         const local = loadLocalHome()
         if (local) {
+          if (cancelled) return
+          setHomeState(local)
           if (cancelled) return
           const { error } = await supabase.from('home_locations').insert({
             user_id: userId,
@@ -186,18 +213,38 @@ export function AppProvider({ children }: { children: ReactNode }) {
             is_primary: true,
           })
           if (error) console.error('home_locations migrate failed:', error.message)
-          if (error || cancelled) return
+          if (cancelled) return
+          setHomeLoadState('ready')
+          if (error) return
         }
         if (cancelled) return
+        if (!local) setHomeState(null)
         migratedFor.current = userId
+        setHomeLoadState('ready')
       }
     })()
     return () => { cancelled = true }
   }, [session])
 
+  // session が切り替わってから復元 effect が走るまでの render でも、前ユーザーの地点を公開しない。
+  const homeSessionReady = session
+    ? activeHomeUserId.current === session.user.id
+    : activeHomeUserId.current === null
+
   return (
     <AppContext.Provider
-      value={{ home, setHome, toast, toastMsg, toastShow, loginOpen, setLoginOpen, sidebarOpen, setSidebarOpen }}
+      value={{
+        home: homeSessionReady ? home : null,
+        homeLoadState: homeSessionReady ? homeLoadState : 'loading',
+        setHome,
+        toast,
+        toastMsg,
+        toastShow,
+        loginOpen,
+        setLoginOpen,
+        sidebarOpen,
+        setSidebarOpen,
+      }}
     >
       {children}
     </AppContext.Provider>

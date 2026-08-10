@@ -709,19 +709,51 @@ body {
 .favs-toolbar { display: flex; justify-content: space-between; align-items: center; }
 .favs-toolbar .sort { font-family: var(--display); font-weight: 700; font-size: 0.9rem; color: var(--ink-soft); }
 .fav-card {
-  background: var(--card); border: 2px solid var(--ink); border-radius: 16px; padding: 12px 14px;
-  box-shadow: 3px 3px 0 var(--line); cursor: pointer; text-align: left; font-family: var(--body); font-size: 1rem;
+  position: relative;
+  background: var(--card); border: 2px solid var(--ink); border-radius: 16px; padding: 0;
+  box-shadow: 3px 3px 0 var(--line);
 }
 .fav-card .rank {
   display: inline-block; padding: 2px 10px; font-family: var(--display); font-weight: 800;
   border: 2px solid var(--ink); border-radius: 999px; background: var(--accent); color: #fff; font-size: 0.8rem;
 }
 .fav-card .stars-inline { margin-left: 8px; color: var(--fav-yellow); font-family: var(--display); font-weight: 800; }
-.fav-card h3 { margin: 8px 0 4px; font-family: var(--display); font-size: 1.05rem; }
-.fav-card .meta { color: var(--ink-soft); font-size: 0.86rem; }
-.fav-card .memo { margin-top: 6px; font-size: 0.92rem; color: var(--ink); }
+.fav-card-main {
+  display: block;
+  width: 100%;
+  padding: 12px 48px 12px 14px;
+  border: 0;
+  border-radius: 14px;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.fav-card .fav-card-title { display: block; margin: 8px 0 4px; font-family: var(--display); font-size: 1.05rem; font-weight: 700; }
+.fav-card .meta { display: block; color: var(--ink-soft); font-size: 0.86rem; }
+.fav-card .memo { display: block; margin-top: 6px; font-size: 0.92rem; color: var(--ink); }
 .fav-card .memo::before { content: "📝 "; color: var(--ink-soft); }
 .fav-card .footer { display: flex; justify-content: space-between; align-items: center; margin-top: 8px; font-size: 0.85rem; color: var(--ink-soft); }
+.fav-card-delete {
+  position: absolute;
+  top: 8px;
+  right: 9px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--ink-soft);
+  font-size: 1rem;
+  cursor: pointer;
+}
+.fav-card-delete:hover { background: rgba(179, 38, 30, 0.09); color: var(--bad); }
+.fav-card-delete:active { transform: translate(1px, 1px); }
 .favs-empty {
   background: #fffdf8; border: 2px solid var(--ink); border-radius: 16px; padding: 20px;
   text-align: center; color: var(--ink-soft);
@@ -764,8 +796,47 @@ body {
   display: block; margin-top: 2px; color: var(--ink-soft); font-size: 0.82rem;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
+.mypage-link .mypage-home-status { color: var(--accent); font-weight: 700; }
+.mypage-link .mypage-home-error { color: var(--bad); }
+.mypage-link .mypage-home-location { color: var(--ink); font-weight: 600; }
+.mypage-link .mypage-home-coordinates { font-variant-numeric: tabular-nums; }
 .mypage-link .arrow { color: var(--ink-soft); }
 .mypage-card { padding: 10px 12px; }
+.mypage-note-card, .mypage-mine-card {
+  position: relative;
+  padding-right: 48px;
+  cursor: default;
+}
+.mypage-card-main {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.mypage-card-delete {
+  position: absolute;
+  top: 7px;
+  right: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--ink-soft);
+  font-size: 1rem;
+  cursor: pointer;
+}
+.mypage-card-delete:hover { background: rgba(179, 38, 30, 0.09); color: var(--bad); }
+.mypage-card-delete:active { transform: translate(1px, 1px); }
 .mypage-empty {
   margin: 0;
   padding: 14px;

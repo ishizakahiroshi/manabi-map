@@ -21,6 +21,8 @@ interface UserData {
   toggleFavorite: (schoolId: string) => Promise<boolean>
   setPriority: (schoolId: string, priority: number) => Promise<void>
   saveNote: (schoolId: string, note: string, commuteNote: string) => Promise<void>
+  deleteNote: (schoolId: string) => Promise<void>
+  deleteMine: (schoolId: string) => Promise<void>
   saveMineValue: (schoolId: string, departmentId: string, value: number | null) => Promise<void>
   saveMineNote: (schoolId: string, note: string) => Promise<void>
   saveMineConsent: (schoolId: string, submit: boolean) => Promise<void>
@@ -275,6 +277,32 @@ export function useUserData(): UserData {
     [userId, notes, blockedByLoadError, blockedByMaintenance],
   )
 
+  const deleteNote = useCallback(
+    async (schoolId: string) => {
+      if (!userId) throw new Error('not signed in')
+      if (blockedByLoadError()) return
+      if (blockedByMaintenance()) return
+      const prev = notes[schoolId]
+      if (!prev) return
+
+      setNotes((cur) => {
+        const next = { ...cur }
+        delete next[schoolId]
+        return next
+      })
+      const { error } = await supabase
+        .from('user_school_notes')
+        .delete()
+        .eq('user_id', userId)
+        .eq('school_id', schoolId)
+      if (error) {
+        setNotes((cur) => ({ ...cur, [schoolId]: prev }))
+        throw error
+      }
+    },
+    [userId, notes, blockedByLoadError, blockedByMaintenance],
+  )
+
   /**
    * 個人偏差値の保存。学科行と学校単位のセンチネル行を同じ一意キーで扱う。
    */
@@ -323,6 +351,32 @@ export function useUserData(): UserData {
           rollback()
           throw error
         }
+      }
+    },
+    [userId, mine, blockedByLoadError, blockedByMaintenance],
+  )
+
+  const deleteMine = useCallback(
+    async (schoolId: string) => {
+      if (!userId) throw new Error('not signed in')
+      if (blockedByLoadError()) return
+      if (blockedByMaintenance()) return
+      const prev = mine[schoolId]
+      if (!prev) return
+
+      setMine((cur) => {
+        const next = { ...cur }
+        delete next[schoolId]
+        return next
+      })
+      const { error } = await supabase
+        .from('user_school_deviations')
+        .delete()
+        .eq('user_id', userId)
+        .eq('school_id', schoolId)
+      if (error) {
+        setMine((cur) => ({ ...cur, [schoolId]: prev }))
+        throw error
       }
     },
     [userId, mine, blockedByLoadError, blockedByMaintenance],
@@ -418,7 +472,7 @@ export function useUserData(): UserData {
 
   return {
     favorites, notes, mine, loading, loadError, reload,
-    toggleFavorite, setPriority, saveNote,
-    saveMineValue, saveMineNote, saveMineConsent,
+    toggleFavorite, setPriority, saveNote, deleteNote,
+    deleteMine, saveMineValue, saveMineNote, saveMineConsent,
   }
 }

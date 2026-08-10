@@ -23,7 +23,7 @@ export function FavoritesPage({ userData }: Props) {
   const { toast } = useApp()
   const { t } = useI18n()
   const fmt = useFormat()
-  const { favorites, notes, mine, loadError, reload } = userData
+  const { favorites, notes, mine, loadError, reload, toggleFavorite } = userData
   const [detail, setDetail] = useState<School | null>(null)
   const [familyOpen, setFamilyOpen] = useState(false)
 
@@ -35,6 +35,20 @@ export function FavoritesPage({ userData }: Props) {
       toast(t('favorites.exportDone'))
     } catch {
       toast(t('favorites.exportFail'))
+    }
+  }
+
+  const handleRemoveFavorite = async (schoolId: string, schoolName: string) => {
+    if (!window.confirm(t('favorites.removeFavoriteConfirm', { school: schoolName }))) return
+    try {
+      const stillFavorite = await toggleFavorite(schoolId)
+      if (stillFavorite) {
+        toast(t('favorites.removeFavoriteFail'))
+        return
+      }
+      toast(t('favorites.removeFavoriteDone'))
+    } catch {
+      toast(t('favorites.removeFavoriteFail'))
     }
   }
 
@@ -86,23 +100,34 @@ export function FavoritesPage({ userData }: Props) {
           const pri = favorites[s.id]?.priority ?? 0
           const stars = '★'.repeat(pri) + '☆'.repeat(Math.max(0, 5 - pri))
           const memo = (notes[s.id]?.note ?? '').split('\n')[0] || t('common.noMemo')
+          const schoolName = shortSchoolName(s.name, s)
           return (
-            <button className="fav-card" key={s.id} onClick={() => setDetail(s)}>
-              <span className="rank">{t('favorites.rank', { n: i + 1 })}</span>
-              <span className="stars-inline" aria-hidden="true">{stars}</span>
-              <h3>
-                {shortSchoolName(s.name, s)}（{fmt.displayCode(s)}：{fmt.devLabel(s)}）
-              </h3>
-              <div className="meta">
-                {fmt.ownFull(s)} / {fmt.genFull(s.gender_type)} /{' '}
-                {s.departments.map((d) => d.name).join('・') || t('favorites.noDept')}
-              </div>
-              <div className="memo">{memo}</div>
-              <div className="footer">
-                <span>{s.address}</span>
-                <span>{t('favorites.detail')}</span>
-              </div>
-            </button>
+            <article className="fav-card" key={s.id}>
+              <button type="button" className="fav-card-main" onClick={() => setDetail(s)}>
+                <span className="rank">{t('favorites.rank', { n: i + 1 })}</span>
+                <span className="stars-inline" aria-hidden="true">{stars}</span>
+                <span className="fav-card-title">
+                  {schoolName}（{fmt.displayCode(s)}：{fmt.devLabel(s)}）
+                </span>
+                <span className="meta">
+                  {fmt.ownFull(s)} / {fmt.genFull(s.gender_type)} /{' '}
+                  {s.departments.map((d) => d.name).join('・') || t('favorites.noDept')}
+                </span>
+                <span className="memo">{memo}</span>
+                <span className="footer">
+                  <span>{s.address}</span>
+                  <span>{t('favorites.detail')}</span>
+                </span>
+              </button>
+              <button
+                type="button"
+                className="fav-card-delete"
+                aria-label={t('favorites.removeFavorite', { school: schoolName })}
+                onClick={() => void handleRemoveFavorite(s.id, schoolName)}
+              >
+                <span aria-hidden="true">🗑️</span>
+              </button>
+            </article>
           )
         })}
 
