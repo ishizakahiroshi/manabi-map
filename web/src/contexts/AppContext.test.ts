@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { isValidHomeLocation, parseStoredHome } from './AppContext'
+import { formatHomeCoordinates, isValidHomeLocation, parseStoredHome } from './AppContext'
 
 describe('stored home validation', () => {
   it('accepts a finite synthetic location', () => {
@@ -17,5 +17,16 @@ describe('stored home validation', () => {
       label: '合成地点', lat: 35, lng: 139, extra: true,
     })
     expect(isValidHomeLocation({ label: '合成地点', lat: Infinity, lng: 139 })).toBe(false)
+  })
+
+  it('formats valid coordinates to three decimal places', () => {
+    expect(formatHomeCoordinates({ label: '合成地点', lat: 35.68123, lng: 139.76789 })).toEqual({
+      lat: '35.681',
+      lng: '139.768',
+    })
+  })
+
+  it('does not format invalid coordinates', () => {
+    expect(formatHomeCoordinates({ label: '合成地点', lat: NaN, lng: 139 })).toBeNull()
   })
 })

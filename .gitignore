@@ -74,3 +74,6 @@ secrets.*
 
 # 公開データセットのリリース添付用出力（scripts/export-dataset.mjs）
 /dist-dataset/
+# === obsidian-link: managed ===
+/docs/obsidian/
+# === /obsidian-link: managed ===
