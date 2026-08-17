@@ -33,3 +33,7 @@ skill が使えない環境では `CLAUDE.md` の「運用ルール」節を手�
 ガイダンス間で矛盾が出たら `CLAUDE.md` を優先する。
 
 <!-- many-ai-cli の承認マーカーブロックはここに自動注入される。本ファイルでは持たない。 -->
+
+## AI 作業共通ルール
+
+- ビルド・コミット禁止、secrets-scan 責務、plan/bugfix/pending md の作成ルール等の AI 作業共通ルールは、各利用者のグローバル AI 設定に従う（作者環境の例: `~/.claude/CLAUDE.md` および `~/.claude/guides/`）
