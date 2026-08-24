@@ -131,6 +131,9 @@ export const en: MessageTree = {
     chipPublic: 'Public',
     chipPrivate: 'Private',
     chipNational: 'National',
+    chipIntegrated: 'Integrated 6-year',
+    chipsDeptNote:
+      'A school can offer several department groups, so these counts do not add up to the number of schools listed.',
     filterShowing: 'Showing {shown} of {total} schools',
     filterClear: 'Clear filters',
     jumpLabel: 'Jump to city',

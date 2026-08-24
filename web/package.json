@@ -15,7 +15,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.app.json && tsc --noEmit -p tsconfig.functions.json",
     "lint": "node scripts/lint.mjs",
     "test": "vitest run && pnpm test:static && pnpm test:functions",
-    "test:static": "node --test scripts/verify-static-output.test.mjs scripts/lib/municipalities.test.mjs",
+    "test:static": "node --test scripts/verify-static-output.test.mjs scripts/lib/municipalities.test.mjs scripts/lib/dept-groups-shared.test.mjs",
     "test:functions": "node --test ../functions/api/admin/_auth.test.ts ../functions/_middleware.test.ts ../scripts/admission/schools-candidate-check.test.mjs ../scripts/admission/pdf-extract.test.mjs ../scripts/admission/official-fetch.test.mjs ../scripts/admission/mext-schools-fetch.test.mjs ../scripts/admission/gsi-batch-geocode.test.mjs ../scripts/admission/gen-admission-v2.test.mjs ../scripts/secrets-scan.test.mjs",
     "verify:static": "node scripts/verify-static-output.mjs --dist dist --max-file-mib 25",
     "preview": "vite preview"

@@ -19,6 +19,7 @@ import {
 import { selectNeighbors } from '../src/lib/neighbors.ts'
 import { successorsByPredecessorId } from '../src/lib/successors.ts'
 import { GENERATOR_SCHOOL_SELECT } from '../src/lib/school-select.ts'
+import { encodeDeptGroups } from './lib/dept-groups-shared.mjs'
 
 const here = dirname(fileURLToPath(import.meta.url))
 const webRoot = join(here, '..')
@@ -494,19 +495,27 @@ for (const pref of prefectures) {
   )
   if (prefRows.length === 0) continue
   const cities = cityIndex.filter((entry) => entry.prefSlug === pref.slug).map((entry) => entry.city)
-  const compactSchools = prefRows.map((row) => ({
-    i: row.id,
-    n: row.name,
-    k: row.name_kana ?? null,
-    c: resolveCityGroup(row, muniByPref)?.label ?? row.city ?? UNRESOLVED_CITY_LABEL,
-    o: row.ownership,
-    ls: row.lifecycle_status_code ?? null,
-    rs: row.recruitment_status_code ?? null,
-    ct: row.course_times?.length ? row.course_times : ['fulltime'],
-    g: row.gender_type ?? null,
-    lat: row.latitude != null ? Number(row.latitude) : null,
-    lng: row.longitude != null ? Number(row.longitude) : null,
-  }))
+  const compactSchools = prefRows.map((row) => {
+    // 学科系統と中高一貫は「持っているときだけ」キーを置く。学科ゼロの学校に dg: [] を
+    // 置くと 47 県で無駄が乗るうえ、「空配列」と「キー無し」の 2 通りを表示側で
+    // 判定することになる。無いものは書かない。
+    const deptGroups = encodeDeptGroups(row.school_departments)
+    return {
+      i: row.id,
+      n: row.name,
+      k: row.name_kana ?? null,
+      c: resolveCityGroup(row, muniByPref)?.label ?? row.city ?? UNRESOLVED_CITY_LABEL,
+      o: row.ownership,
+      ls: row.lifecycle_status_code ?? null,
+      rs: row.recruitment_status_code ?? null,
+      ct: row.course_times?.length ? row.course_times : ['fulltime'],
+      g: row.gender_type ?? null,
+      ...(deptGroups.length ? { dg: deptGroups } : {}),
+      ...(row.is_integrated ? { ig: true } : {}),
+      lat: row.latitude != null ? Number(row.latitude) : null,
+      lng: row.longitude != null ? Number(row.longitude) : null,
+    }
+  })
   const prefIndexBody = {
     slug: pref.slug,
     cities,
