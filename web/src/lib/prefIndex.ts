@@ -11,6 +11,7 @@
 
 import type {
   CourseTime,
+  DeptUiGroup,
   GenderType,
   Ownership,
   SchoolLifecycleStatus,
@@ -20,6 +21,7 @@ import {
   buildCityCounts as buildSharedCityCounts,
   cityPagePath,
 } from '../../scripts/lib/city-index-shared.mjs'
+import { decodeDeptGroups } from '../../scripts/lib/dept-groups-shared.mjs'
 
 export { cityPagePath }
 
@@ -35,6 +37,13 @@ export interface CompactPrefSchool {
   rs: SchoolRecruitmentStatus | null
   ct: CourseTime[]
   g: GenderType | null
+  /**
+   * 学科系統の 1 文字コード（dept-groups-shared.mjs の DEPT_GROUP_CODES）。
+   * **学科が 1 件も無い学校ではキーごと存在しない。** 空配列は作らない。
+   */
+  dg?: string[]
+  /** 中高一貫。true のときだけ存在する。 */
+  ig?: true
   lat: number | null
   lng: number | null
 }
@@ -51,6 +60,9 @@ export interface PrefListSchool {
   recruitment_status_code: SchoolRecruitmentStatus
   course_times: CourseTime[]
   gender_type: GenderType
+  /** 学科系統。学科情報が無い学校は空配列（MapPage の 'unknown' sentinel は使わない）。 */
+  dept_groups: Exclude<DeptUiGroup, 'unknown'>[]
+  is_integrated: boolean
   latitude: number | null
   longitude: number | null
 }
@@ -127,6 +139,8 @@ export function expandPrefSchool(entry: CompactPrefSchool, prefecture: string): 
     recruitment_status_code: entry.rs ?? 'recruiting',
     course_times: entry.ct?.length ? entry.ct : ['fulltime'],
     gender_type: entry.g ?? 'coed',
+    dept_groups: decodeDeptGroups(entry.dg),
+    is_integrated: entry.ig === true,
     latitude: entry.lat,
     longitude: entry.lng,
   }
