@@ -1,3 +1,10 @@
+# Manabi Map データセット（CC BY-SA 4.0）
+#   説明:   https://manabi-map.app/data/
+#   全校:   https://manabi-map.app/api/v1/schools.json
+#   県別:   https://manabi-map.app/api/v1/schools/<prefecture>.json
+#   定義:   https://manabi-map.app/api/v1/openapi.json
+# 全データは上記 1 ファイルで配布しています。個別ページを大量にクロールする必要はありません。
+
 User-agent: *
 Allow: /
 Disallow: /auth/
@@ -5,5 +12,17 @@ Disallow: /mypage
 Disallow: /favorites
 Disallow: /compare
 Disallow: /family/
+
+# 大量クロールを行うクローラーへ: 個別ページではなく上記データセットを使ってください。
+# 検索エンジン（Googlebot / Bingbot 等）は上の * グループが適用され、従来どおり全ページを対象とします。
+User-agent: meta-externalagent
+User-agent: Amazonbot
+User-agent: GPTBot
+User-agent: ClaudeBot
+User-agent: CCBot
+User-agent: Bytespider
+Allow: /api/v1/
+Allow: /data/
+Disallow: /
 
 Sitemap: https://manabi-map.app/sitemap.xml
