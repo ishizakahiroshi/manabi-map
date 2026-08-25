@@ -231,6 +231,7 @@ export function CityPage({ userData }: Props) {
             <SchoolFilterChips
               chips={chips.chips}
               active={chips.active}
+              showsDept={chips.showsDept}
               total={sorted.length}
               shown={shown.length}
               onClear={chipsClear}

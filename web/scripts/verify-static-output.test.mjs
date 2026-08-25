@@ -7,6 +7,8 @@ import test from 'node:test'
 import { gzipSync } from 'node:zlib'
 
 import { isDetailSchool, verifyStaticOutput } from './verify-static-output.mjs'
+import { cityPageDescription } from './lib/city-breakdown.mjs'
+import { DEPT_GROUP_CODES } from './lib/dept-groups-shared.mjs'
 import {
   buildOpenApiDocument,
   DATASET_ATTRIBUTION,
@@ -62,8 +64,9 @@ async function collectTypeScriptSources(root) {
  * jsonLd は単体 object でも配列でもよい（配列は本番同様に script タグを分けて出す）。
  * mainAttrs で SSR 出力特有の <main> クラスを再現する（plan_ssr-hydration.md C5 検査用）。
  * initialData を渡すと #__MM_INITIAL__ script を #root の直後に出す。 */
-function page({ title, canonical, main, jsonLd, noindex = false, footer = '', mainAttrs = '', initialData = null }) {
+function page({ title, canonical, main, jsonLd, noindex = false, footer = '', mainAttrs = '', initialData = null, description = null }) {
   const canonicalTag = canonical ? `<link rel="canonical" href="${canonical}">` : ''
+  const descriptionTag = description ? `<meta name="description" content="${description}">` : ''
   const ogUrl = canonical ? `<meta property="og:url" content="${canonical}">` : ''
   const robots = noindex ? '<meta name="robots" content="noindex" />' : ''
   const jsonLdTag = (Array.isArray(jsonLd) ? jsonLd : jsonLd ? [jsonLd] : [])
@@ -73,7 +76,7 @@ function page({ title, canonical, main, jsonLd, noindex = false, footer = '', ma
   const initialScriptTag = initialData != null
     ? `<script type="application/json" id="__MM_INITIAL__">${JSON.stringify(initialData).replace(/</g, '\\u003c')}</script>`
     : ''
-  return `<!doctype html><html><head><title>${title}</title>${robots}${canonicalTag}${ogUrl}${jsonLdTag}</head>` +
+  return `<!doctype html><html><head><title>${title}</title>${robots}${descriptionTag}${canonicalTag}${ogUrl}${jsonLdTag}</head>` +
     `<body><div id="root">${mainOpen}${main}</main></div>${initialScriptTag}${footer}</body></html>`
 }
 
@@ -124,6 +127,27 @@ const SCHOOLS = [
   { id: 'synthetic-a', name: '合成第一高等学校', prefecture: '群馬県', city: '前橋市', latitude: 36.4, longitude: 139.1, official_url: 'https://synthetic-a.ed.jp/', is_active: true },
   { id: 'synthetic-b', name: '合成第二高等学校', prefecture: '群馬県', city: '前橋市', latitude: 36.5, longitude: 139.2, official_url: 'https://synthetic-b.ed.jp/', is_active: true },
 ]
+
+/**
+ * 前橋市の pref-index エントリ。**description の生成と pref-index ファイルで同じ配列を使う**
+ * （別々に作ると、片方だけ条件が変わったときに検査が食い違いを見逃す）。
+ * 学科ガードを通る形にし、合成第一だけ中高一貫にして「1 校以上のときだけ出す」分岐も踏む。
+ */
+const MAEBASHI_INDEX_ENTRIES = SCHOOLS.map((s) => ({
+  i: s.id,
+  n: s.name,
+  k: null,
+  c: s.city,
+  o: 'prefectural',
+  ls: 'active',
+  rs: 'recruiting',
+  ct: ['fulltime'],
+  g: 'coed',
+  dg: [DEPT_GROUP_CODES.general],
+  ...(s.id === 'synthetic-a' ? { ig: true } : {}),
+  lat: s.latitude,
+  lng: s.longitude,
+}))
 
 // dataset.json と openapi.json は同じ版を名乗る（本番は package.json の version）。
 const DATASET_VERSION = '0.0.0-synthetic'
@@ -178,19 +202,7 @@ async function syntheticDist() {
   await writeFile(join(dir, 'school-data', 'pref-index-gunma.json'), JSON.stringify({
     slug: 'gunma',
     cities: ['前橋市'],
-    schools: SCHOOLS.map((s) => ({
-      i: s.id,
-      n: s.name,
-      k: null,
-      c: s.city,
-      o: 'prefectural',
-      ls: 'active',
-      rs: 'recruiting',
-      ct: ['fulltime'],
-      g: 'coed',
-      lat: s.latitude,
-      lng: s.longitude,
-    })),
+    schools: MAEBASHI_INDEX_ENTRIES,
   }))
 
   const publicSchools = SCHOOLS.map((school) => ({
@@ -265,6 +277,8 @@ async function syntheticDist() {
   await mkdir(join(dir, 'pref', 'gunma', '前橋市'), { recursive: true })
   await writeFile(join(dir, 'pref', 'gunma', '前橋市', 'index.html'), page({
     title: '前橋市の高校一覧（2 校） | Manabi Map',
+    // fixture 側に文面を複製しない（複製すると、文面が変わったときに検査だけが古い形を通す）。
+    description: cityPageDescription('群馬県', '前橋市', MAEBASHI_INDEX_ENTRIES),
     canonical: `${ORIGIN}${MAEBASHI_PATH}`,
     main: '<h1>前橋市の高校一覧（2 校）</h1><p>群馬県前橋市にある高校は 2 校です。</p><ul>' +
       SCHOOLS.map((s) => `<li><a href="/school/${s.id}/">${s.name}</a></li>`).join('') +
@@ -1247,4 +1261,63 @@ test('公開レコードが出す全キーが DATA.md で説明されている',
       `DATA.md に ${key} の説明が無い（ネストしたキー。gen-dataset-fields.mjs へ追記する）`,
     )
   }
+})
+
+// --- 市区町村ページの description（plan_city-page-local-context.md C4） ---
+
+test('市区町村ページの description が同一テンプレートへ戻ると落とす', async () => {
+  const dir = await syntheticDist()
+  const path = join(dir, 'pref', 'gunma', '前橋市', 'index.html')
+  const html = await readFile(path, 'utf8')
+  await writeFile(
+    path,
+    html.replace(
+      /<meta name="description" content="[^"]*">/,
+      // 学科の節は残す（学科ガードではなく「地域固有の数字が消えた」ほうで落ちることを確かめる）。
+      '<meta name="description" content="高校一覧。校名・設置区分・課程を五十音順に掲載します。学科は普通科 2 校。">',
+    ),
+  )
+  await assert.rejects(
+    () => verifyStaticOutput({ distDir: dir }),
+    /lost its municipality-specific counts/,
+  )
+  await rm(dir, { recursive: true, force: true })
+})
+
+test('学科ガードが伏せたのに description へ学科が出ていたら落とす', async () => {
+  const dir = await syntheticDist()
+  // pref-index から dg を全部落とす = ガードは「出さない」と判定する。
+  const indexPath = join(dir, 'school-data', 'pref-index-gunma.json')
+  const prefIndex = JSON.parse(await readFile(indexPath, 'utf8'))
+  for (const entry of prefIndex.schools) delete entry.dg
+  await writeFile(indexPath, JSON.stringify(prefIndex))
+  // HTML 側は学科を出したままにする（生成側だけ条件を緩めた状態の再現）。
+  await assert.rejects(() => verifyStaticOutput({ distDir: dir }), /dept guard mismatch/)
+  await rm(dir, { recursive: true, force: true })
+})
+
+test('pref-index に未知の学科コードがあれば落とす', async () => {
+  const dir = await syntheticDist()
+  const indexPath = join(dir, 'school-data', 'pref-index-gunma.json')
+  const prefIndex = JSON.parse(await readFile(indexPath, 'utf8'))
+  prefIndex.schools[0].dg = ['ZZZ']
+  await writeFile(indexPath, JSON.stringify(prefIndex))
+  await assert.rejects(() => verifyStaticOutput({ distDir: dir }), /unknown department code/)
+  await rm(dir, { recursive: true, force: true })
+})
+
+test('description が上限を超えたら落とす', async () => {
+  const dir = await syntheticDist()
+  const path = join(dir, 'pref', 'gunma', '前橋市', 'index.html')
+  const html = await readFile(path, 'utf8')
+  const base = cityPageDescription('群馬県', '前橋市', MAEBASHI_INDEX_ENTRIES)
+  await writeFile(
+    path,
+    html.replace(
+      /<meta name="description" content="[^"]*">/,
+      `<meta name="description" content="${base}${'あ'.repeat(121 - base.length)}">`,
+    ),
+  )
+  await assert.rejects(() => verifyStaticOutput({ distDir: dir }), /description is too long/)
+  await rm(dir, { recursive: true, force: true })
 })

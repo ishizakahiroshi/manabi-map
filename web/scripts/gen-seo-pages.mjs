@@ -34,6 +34,7 @@ import {
   DATASET_LICENSE_URL,
   formatDatasetCoverage,
 } from './lib/public-api.mjs'
+import { cityPageDescription } from './lib/city-breakdown.mjs'
 // 近隣校の選定・距離計算と選抜実績の集計・後継校の逆引きは React 側と同一実装を共有する
 // （tsx 経由で .ts を直 import（package.json の scripts が tsx で起動する。Node の type stripping には依存しない — Cloudflare Pages のビルドイメージは pnpm 同梱の preinstall Node しか使えないため）。フォーク禁止 —
 // 静的 HTML と JS mount 後で校名・距離・倍率が食い違う事故を防ぐ。
@@ -727,13 +728,14 @@ function renderCityPage(pref, prefIndex, cityCounts, city, count) {
   const path = cityPagePath(pref.slug, city)
   const url = `${SITE_ORIGIN}${path}`
   const title = `${city}の高校一覧（${count} 校） | Manabi Map`
-  const description =
-    `${pref.name}${city}にある高校 ${count} 校の一覧。校名・設置区分・課程を五十音順に掲載し、` +
-    '地図で場所を確認できます。お気に入り保存・見学メモの家族共有ができる無料の学校選びサービスです。'
+  const cityEntries = prefIndex.schools.filter((entry) => entry.c === city)
+  const description = cityPageDescription(pref.name, city, cityEntries)
   const payload = {
     slug: pref.slug,
     city,
-    schools: prefIndex.schools.filter((entry) => entry.c === city),
+    // description の集計と同じ配列を使う。別々に絞り込むと、片方だけ条件が変わったときに
+    // 「description の数字」と「画面の数字」が静かにずれる。
+    schools: cityEntries,
     cityCounts,
   }
   if (payload.schools.length !== count) {
