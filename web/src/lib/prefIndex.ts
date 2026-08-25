@@ -2,7 +2,7 @@
  * 県ページ（/pref/:pref）用の軽量インデックス。
  *
  * 全件 schools.json（展開 28MB）や pref-<slug>.json（東京 2.8MB）は HTML に埋め込めない。
- * PrefecturePage が実際に参照する 12 フィールドだけを、searchIndex と同じ短縮キーで持つ
+ * PrefecturePage が実際に参照する 14 フィールドだけを、searchIndex と同じ短縮キーで持つ
  * （plan_ssr-hydration_c3_initial-data.md「県ページの設計」）。
  *
  * ファイル形: dist/school-data/pref-index-<slug>.json
@@ -38,6 +38,12 @@ export interface CompactPrefSchool {
   ct: CourseTime[]
   g: GenderType | null
   /**
+   * 所在地。県名から始まる 1 本の文字列（gen-schools-json.mjs の compactAddress が
+   * 県名の有無を揃えたもの）。**旧 pref-index にはこのキーが無い**ので、
+   * 読む側は null 可として扱う。
+   */
+  a?: string | null
+  /**
    * 学科系統の 1 文字コード（dept-groups-shared.mjs の DEPT_GROUP_CODES）。
    * **学科が 1 件も無い学校ではキーごと存在しない。** 空配列は作らない。
    */
@@ -60,6 +66,8 @@ export interface PrefListSchool {
   recruitment_status_code: SchoolRecruitmentStatus
   course_times: CourseTime[]
   gender_type: GenderType
+  /** 所在地。旧インデックス由来の行では null。 */
+  address: string | null
   /** 学科系統。学科情報が無い学校は空配列（MapPage の 'unknown' sentinel は使わない）。 */
   dept_groups: Exclude<DeptUiGroup, 'unknown'>[]
   is_integrated: boolean
@@ -139,6 +147,7 @@ export function expandPrefSchool(entry: CompactPrefSchool, prefecture: string): 
     recruitment_status_code: entry.rs ?? 'recruiting',
     course_times: entry.ct?.length ? entry.ct : ['fulltime'],
     gender_type: entry.g ?? 'coed',
+    address: entry.a ?? null,
     dept_groups: decodeDeptGroups(entry.dg),
     is_integrated: entry.ig === true,
     latitude: entry.lat,

@@ -482,6 +482,26 @@ for (const pref of prefectures) {
   prefDataUrls[pref.slug] = `/school-data/${prefFilename}`
 }
 
+/**
+ * pref-index に載せる所在地を作る。
+ *
+ * address は県名始まりが大半だが、市区町村から始まる行が混ざっている
+ * （神奈川県 28 校・2026-08-25 実測）。県ページと市区町村ページの一覧は
+ * この 1 本の文字列をそのまま出すので、県名の有無をここで揃えておく。
+ *
+ * **市区町村を解決できなかった行は住所を載せない。** その手の行は address が
+ * 住所として機能しておらず、拠点の列挙が入っている（「東京都池袋・新宿代々木 ほか」
+ * のような広域通信制 8 校・2026-08-25 実測）。所在地が単一に定まらない学校に
+ * 代表を 1 つ選んで載せる根拠が無いので、出さないほうを採る。
+ * 判定は resolveCityGroup の結果をそのまま使う（住所文字列を見る規則は足さない）。
+ */
+function compactAddress(row, city) {
+  if (city === UNRESOLVED_CITY_LABEL) return null
+  const address = row.address?.trim()
+  if (!address) return null
+  return address.startsWith(row.prefecture) ? address : `${row.prefecture}${address}`
+}
+
 // 県ページ用の軽量インデックス（docs/local/plan_ssr-hydration_c3_initial-data.md）。
 // PrefecturePage が実際に参照するフィールドだけを短縮キーで持つ（searchIndex と同手法）。
 // 上の pref-<slug>.json は学校詳細と同じ全項目で東京 2.8MB / 北海道 6.5MB あり、
@@ -500,16 +520,21 @@ for (const pref of prefectures) {
     // 置くと 47 県で無駄が乗るうえ、「空配列」と「キー無し」の 2 通りを表示側で
     // 判定することになる。無いものは書かない。
     const deptGroups = encodeDeptGroups(row.school_departments)
+    const city = resolveCityGroup(row, muniByPref)?.label ?? row.city ?? UNRESOLVED_CITY_LABEL
     return {
       i: row.id,
       n: row.name,
       k: row.name_kana ?? null,
-      c: resolveCityGroup(row, muniByPref)?.label ?? row.city ?? UNRESOLVED_CITY_LABEL,
+      c: city,
       o: row.ownership,
       ls: row.lifecycle_status_code ?? null,
       rs: row.recruitment_status_code ?? null,
       ct: row.course_times?.length ? row.course_times : ['fulltime'],
       g: row.gender_type ?? null,
+      // 一覧に出す所在地（県名から始まる 1 本の文字列。出せない行は null）。
+      // **正規化はこの 1 箇所だけで行う。** 表示側で県名や市区町村名を足し引き
+      // し始めると、同じ表記ゆれを画面ごとに別々の regex で吸収することになる。
+      a: compactAddress(row, city),
       ...(deptGroups.length ? { dg: deptGroups } : {}),
       ...(row.is_integrated ? { ig: true } : {}),
       lat: row.latitude != null ? Number(row.latitude) : null,
