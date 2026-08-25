@@ -21,7 +21,7 @@ const CATEGORY_JA: Record<AdSlotItem['category'], string> = {
 }
 
 /**
- * 塾アフィリ枠のカード（§7.5 / CLAUDE.md「広告ポリシー Non-negotiable」）。
+ * 塾アフィリ枠のカード（docs/reference_manabi-map-operating-rules.md 準拠）。
  *
  * - 常に「PR」バッジを目立たせて広告と明示する（景表法・プラットフォーム透明化）
  * - CTA クリックは新規タブで開き、URL に UTM を自動付与

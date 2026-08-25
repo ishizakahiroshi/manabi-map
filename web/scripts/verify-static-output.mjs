@@ -25,9 +25,16 @@ import {
   formatDatasetCoverage,
   isPublicSchoolRecord,
 } from './lib/public-api.mjs'
+import { DEPT_GROUP_BY_CODE, hasReliableDeptData } from './lib/dept-groups-shared.mjs'
 
 const DEFAULT_MAX_FILE_MIB = 25
 const SITE_ORIGIN = 'https://manabi-map.app'
+/**
+ * 市区町村ページの meta description の上限。日本語の検索結果は概ね 120 字前後で切られる。
+ * 実データ 1,265 ページの実測最大は 109 字（2026-08-25）。ここを超えたら、数字ではなく
+ * 締めの文を短くして直す（内訳のほうが切られるため）。
+ */
+const CITY_DESCRIPTION_MAX_CHARS = 120
 
 export function isDetailSchool(school) {
   return school?.latitude != null && school?.longitude != null
@@ -80,6 +87,10 @@ function extractOgUrl(html) {
 
 function extractTitle(html) {
   return html.match(/<title>([\s\S]*?)<\/title>/)?.[1] ?? null
+}
+
+function extractMetaDescription(html) {
+  return html.match(/<meta name="description" content="([^"]*)"/)?.[1] ?? null
 }
 
 function extractMain(html) {
@@ -1037,6 +1048,10 @@ export async function verifyStaticOutput({
   // --- 市区町村ページ全件検査（c5 C6） ---
   // 学校ページの BreadcrumbList 3 段目がこのページを指すので、1 枚でも欠けると
   // 構造化データがリンク切れになる。全件を検査する。
+  //
+  // description は 1,265 枚が同一テンプレートに戻る事故を止めるため、全件を集めて
+  // 最後に重複を見る（plan_city-page-local-context.md C4）。
+  const cityDescriptions = new Map()
   for (const { pref, city, count } of cityPageEntries) {
     const path = cityPagePath(pref.slug, city)
     const html = await readPage(absoluteDist, join('pref', pref.slug, city, 'index.html'), path)
@@ -1079,8 +1094,53 @@ export async function verifyStaticOutput({
         throw new Error(`${path} links to a municipality page that does not exist: ${href}`)
       }
     }
+    // description は地域固有の数字を持つこと（同一テンプレートへの逆戻りを止める）。
+    // 学科の節は「チップと同じガード」を通っている必要がある。生成側だけ条件を緩めると、
+    // 検索結果には学科があるのに画面には出ない状態になる。
+    const description = extractMetaDescription(html)
+    if (!description) {
+      throw new Error(`missing meta description on ${path}`)
+    }
+    if (!description.includes(escapeHtml(`${pref.name}${city}にある高校 ${count} 校`))) {
+      throw new Error(`city description lost its municipality-specific counts on ${path}: ${description}`)
+    }
+    if (description.length > CITY_DESCRIPTION_MAX_CHARS) {
+      throw new Error(
+        `city description is too long on ${path}: ${description.length} chars ` +
+        `(max ${CITY_DESCRIPTION_MAX_CHARS}). 数字ではなく締めの文を短くして直すこと`,
+      )
+    }
+    const expectsDept = hasReliableDeptData(cityTargets)
+    const showsDept = description.includes('学科は')
+    if (expectsDept !== showsDept) {
+      throw new Error(
+        `city description dept guard mismatch on ${path}: ` +
+        `expected=${expectsDept} actual=${showsDept}`,
+      )
+    }
+    const previous = cityDescriptions.get(description)
+    if (previous) {
+      throw new Error(`city description is duplicated: ${previous} and ${path}`)
+    }
+    cityDescriptions.set(description, path)
     assertSsrMarker(html, path, 'content hub-content')
     assertInitialDataScript(html, path)
+  }
+
+  // pref-index の学科コードが DeptUiGroup の 10 値に対応していること。
+  // 片側だけ足すと、チップが空ラベルで出るか静かに消える。
+  for (const [slug, prefIndex] of prefIndexBySlug) {
+    for (const entry of prefIndex.schools) {
+      if (entry.dg == null) continue
+      if (!Array.isArray(entry.dg) || entry.dg.length === 0) {
+        throw new Error(`pref-index-${slug}.json: dg must be a non-empty array (${entry.i})`)
+      }
+      for (const code of entry.dg) {
+        if (!(code in DEPT_GROUP_BY_CODE)) {
+          throw new Error(`pref-index-${slug}.json: unknown department code "${code}" (${entry.i})`)
+        }
+      }
+    }
   }
 
   // --- /data/・/press・/legal/* ---

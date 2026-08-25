@@ -40,6 +40,10 @@ desktop.ini
 *.local.json
 docs/local/
 scripts/local/
+# 監査レポート（脆弱性詳細を含むため public には出さない・Git管理=ignore は gate 承認済み）
+docs/ai-audit-prompts/
+# many-ai-cli が実行時に作るロックファイル（一時ファイル・追跡しない）
+*.many-ai-cli.lock
 
 # === DB ダンプ・バックアップ（本番 PII を含む可能性あり・public へ絶対に出さない） ===
 *.dump
