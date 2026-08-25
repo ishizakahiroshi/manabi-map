@@ -475,6 +475,7 @@ export function PrefecturePage({ userData }: Props) {
             <SchoolFilterChips
               chips={chips.chips}
               active={chips.active}
+              showsDept={chips.showsDept}
               total={prefSchools.length}
               shown={shownCount}
               onClear={chips.clear}

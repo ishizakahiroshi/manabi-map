@@ -1,243 +1,88 @@
-<!-- このファイルはプロジェクト固有ルールのみを書く。個人/グローバル AI ルール
-（言語・確認スタイル・出力フォーマット等）は各 AI ツールのグローバル設定へ。
-fresh public clone でも有効な内容に保つこと。 -->
+<!-- このファイルは常時ロードする入口と正典索引。詳細本文はリンク先で管理する。 -->
 
 # manabi-map 開発ガイド
 
 ## プロジェクト概要
 
-**Manabi Map（まなびマップ）は「親子で使う、学校選びの地図ノート」**。住所を入れると通える高校が地図に表示され、気になる学校をお気に入り保存し、文化祭・説明会・通学経路・親子の感想を学校ごとに家族でメモできる進路検討サービス。中学生と保護者が対象。**巨大な偏差値サイトではなく、進路選択を管理するプロダクト**を目指す（企画書 §2）。
+- Manabi Map は、親子で学校を探し、地図・お気に入り・家族メモを使う進路検討サービス。
+- Web / React / TypeScript / Vite / Supabase / Cloudflare Pages で構成する。公開の説明は [`README.md`](README.md) を読む。
+- 最新版は `git tag --sort=-v:refname | head -1` と [`web/package.json`](web/package.json) を正本とする。CLAUDE.md に版番号や校数を固定値で書かない。
+- コードは AGPL-3.0-or-later、公開データは CC BY-SA 4.0。全国版のデータ範囲と出典は [`DATA.md`](DATA.md) を読む。
 
-群馬県版として 2026-07-05 に v0.1.0 を本番公開（https://manabi-map.app）。現行の最新リリースは `git tag --sort=-v:refname | head -1` / `web/package.json` の `version` を正典とすること（この CLAUDE.md にバージョン番号を直書きすると更新漏れで stale 化する）。個人 OSS（コード AGPL-3.0 / データ CC BY-SA 4.0）。偏差値は商用サイトから転載せず、公的資料を参考にした「Manabi Map 編集推計」を、根拠を確認できた範囲で掲載する。
+## 製品境界・広告・データ
 
-## やらないこと（スコープ外）
+製品のやらないこと、教育系広告だけを許可する方針、個人情報・偏差値相当値・公開 API の境界は [`docs/reference_manabi-map-operating-rules.md`](docs/reference_manabi-map-operating-rules.md) を正本とする。
 
-AI からの機能追加打診を防ぐため、明示的に切り捨てている範囲:
+- ネイティブ化、ランキングサイト化、商用偏差値の転載、自由口コミ大量収集、有料課金の本実装は提案しない。
+- 公開 fixture は合成データだけで作る。外部 KB の表示名・実値・秘密を公開ファイルへ残さない。
+- 既存の表示・API・RLS のガードを緩める提案をしない。機械的な強制層は正本コードとテストを読む。
 
-- **ネイティブアプリ / exe 化**: Web 完結（PWA）で通す。App Store / Play Store には出さない
-- **巨大偏差値サイト化・ランキングサイト化**: 偏差値を単体で大きく見せない（§7.7 表示規約）。学校の序列づけ・合否煽りをしない
-- **自由口コミの大量収集**: 荒れやすいので当面やらない（将来やるなら構造化口コミ・承認制）
-- **塾送客メディア化**: 塾アフィリは信頼を損なわない範囲の 1〜2 枠のみ（§7.5）。広告の種類は下記「広告ポリシー」に厳格に従う
-- **商用偏差値サイトからのスクレイピング・数値転載**: 絶対にしない（`plan_data-acquisition-strategy.md`）
-- **有料課金・決済の本実装**: 本サービスは無料 OSS で通す。収益は広告＋塾アフィリのみ
-- **対外的な配布・広報活動（2026-08-07 全面保留）**: 学校・教育委員会・報道機関への持ち込みや打診、告知記事の執筆、被リンク目的の外部コンタクト。**AI はこれらの着手を提案・催促しないこと。**趣味プロジェクトであり収益動機がないため、「自分から人に届けに行く」活動を止めている。サイトの公開・検索エンジンからの自然流入・受け身の問い合わせ対応は従来どおり続ける（保留の対象外）。作者環境の正典は `docs/local/pending_outreach-and-distribution.md`（gitignored）
+## 技術スタックと配置
 
-## 広告ポリシー（Non-negotiable・絶対に守る）
-
-未成年（中高生）と保護者が使う進路サービスであり、**信頼がプロダクトの核**。広告は「進路・教育に直接関係するもの」だけを、控えめに入れる。ここは例外なく守る。
-
-**入れてよい広告（進路・教育系のみ）**:
-- 学習塾・予備校・個別指導・オンライン教室
-- 大学・専門学校・私立高校・通信制高校の学校広告
-- 通信教育・模試・問題集/参考書など受験関連
-
-**絶対に入れない広告**:
-- **無差別アドネットワークのランダム配信**（Google AdSense 等の、内容を選ばず自動表示されるディスプレイ広告）。教育カテゴリに限定配信できない限り使わない
-- 消費者金融・カードローン / ギャンブル / アダルト / 情報商材・情報教材 / 出会い系 / その他 進路と無関係な広告全般
-- モーダル・インタースティシャル・自動再生動画・追従バナー（§7.5.3 禁じ手リスト）
-
-**実装方針**: 広告枠は塾アフィリ（A8/もしも等）や教育系 ASP から**手動で選定した案件**を出す。「広告を増やしたい」「AdSense を貼れば楽」という打診はしない（この方針より収益を優先しない）。NPO/自治体連携版では広告全 OFF（§7.5.4）。
-
-## 技術スタック
-
-| 層 | 採用 | 備考 |
-|---|---|---|
-| フロント | React 19 + TypeScript(strict) + Vite | `web/` 配下 |
-| スタイル | Tailwind CSS v4（`@theme` トークン） | オレンジ #ff7a3d 基調 |
-| 地図 | Leaflet + OpenStreetMap タイル | 素の Leaflet を useRef/useEffect で制御 |
-| ジオコーディング | OSM Nominatim（400ms デバウンス） | 将来 国土地理院 API へ切替検討 |
-| バック | Supabase（PostgreSQL + Auth + RLS） | 専用 API サーバーなし・フロントから直接 |
-| 認証 | LINE（Custom OIDC）＋ Anonymous | LINE は非 OIDC 構成で HS256 問題を回避（下記注意） |
-| ホスティング | Cloudflare Pages（Git 連携・自動デプロイ） | main push = 本番反映 |
-| ドメイン | manabi-map.app（Cloudflare Registrar） | Email Routing で hello@/takedown@/sns@ 等を転送 |
-
-**LINE 認証の注意**: Supabase Custom Provider は「openid なしで作成 → 非 OIDC タイプ化 → userinfo は `/oauth2/v2.1/userinfo` + JWKS 空欄 → 後から openid 追加」の順で構成すること。素直に OIDC で作ると LINE のウェブログイン（ID トークンが HS256 署名）と Supabase の ES256 検証が衝突して必ず失敗する。再現手順の正典は `docs/local/archive/v0.1.1/plan_phase-1-app-implementation.md` の「Task B 完全完了」節。
-
-## ディレクトリ構成
-
-- `web/` — フロントエンド（Vite + React）
-  - `src/pages/` — 画面（トップ / 地図 / お気に入り / 認証コールバック / 法務）
-  - `src/components/` — サイドバー・ログインシート・学校詳細シート等
-  - `src/contexts/` — 認証状態（AuthContext）・アプリ状態（AppContext: 自宅地点・トースト）
-  - `src/hooks/` — Supabase データ取得（useSchools / useUserData）
-  - `src/lib/` — supabase client・geo（ジオコーディング/距離）・format（§7.7 表示規約）
-  - `public/legal/` — 利用規約 / プライバシーポリシー / サードパーティライセンス（Markdown）
-  - `public/` — アイコン一式・manifest・_redirects（SPA ルーティング）
-- `scripts/` — secrets-scan.mjs / install-hooks.{ps1,sh}
-- `.githooks/` — pre-commit（secrets-scan layer 2）
-- `docs/local/` — 非公開の企画・plan（gitignored）。旧版は `docs/local/archive/<version>/`
-- `LICENSE` / `THIRD_PARTY_NOTICES.md` — ライセンス（AGPL-3.0 / 依存一覧）
+| 層 | 正本 |
+|---|---|
+| React / TypeScript / Vite | `web/src/`、`web/package.json` |
+| Supabase / RLS / migrations | `web/supabase/` |
+| Cloudflare Pages | `.github/workflows/`、`README.md` |
+| scripts / secrets-scan | `scripts/`、`.githooks/` |
+| 公開データ・ライセンス | `DATA.md`、`LICENSE`、`THIRD_PARTY_NOTICES.md` |
 
 ## 主要コマンド
 
-```
-cd web && pnpm install     # 依存インストール（初回・.env.local を用意）
-cd web && pnpm dev         # 開発サーバー（http://localhost:5173）
-cd web && pnpm typecheck   # 型チェック（tsc --noEmit）
-cd web && pnpm lint        # oxlint
-cd web && pnpm build       # 本番ビルド（dist/）
-node scripts/secrets-scan.mjs --staged --block   # 手動 secrets-scan（layer 1）
+```text
+cd web && pnpm typecheck
+cd web && pnpm lint
+cd web && pnpm test
+node scripts/secrets-scan.mjs --staged --block
 ```
 
-Supabase / LINE の接続情報はリポジトリ外に保管する。既定では `web/.env.local`（gitignored）に `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY` を転記して使う。
+依存インストール、build、環境変数の置き場所は [`web/package.json`](web/package.json) と [`CLAUDE.local.md`](CLAUDE.local.md) を読む。鍵の値を出力しない。
 
-**env をリポジトリ配下に一切置かない運用（推奨）**: 環境変数 `MANABI_MAP_ENV_DIR` に `.env.local` を置いたディレクトリの絶対パスを設定すると、`vite.config.ts`（`envDir`）・`web/scripts/gen-schools-json.mjs`・`scripts/maintenance.mjs` の 3 つがそのディレクトリを参照する。未設定なら従来どおり `web/` を見るため、他環境・CI・Cloudflare Pages は無影響（Pages はファイルではなく Pages env を `process.env` として渡すので元から無関係）。**環境変数に入るのはパスだけで、鍵の値は入らない。** 特に `scripts/maintenance.mjs` は service role key を読むため、この方式だとリポジトリ配下に本物の秘密が置かれなくなる。
+## SSR・hydration の不変条件
 
-作者ローカルの保管パスなど個人環境固有の情報は `CLAUDE.local.md`（gitignored）に記載する。
+SSR、初期データ、storage 復元、静的出力の検査は [`docs/reference_manabi-map-operating-rules.md`](docs/reference_manabi-map-operating-rules.md) と `web/src/entry-server.tsx` / `web/src/contexts/` / `web/scripts/verify-static-output.mjs` を入口にする。
 
-## AI 作業共通ルール
+## ナビゲーションの不変条件
 
-ビルド・コミット禁止、secrets-scan 責務、plan/bugfix/pending md の作成ルール等の AI 作業共通ルールは、各利用者のグローバル AI 設定に従う（作者環境の例: `~/.claude/CLAUDE.md` および `~/.claude/guides/`）。
+導線変更は `web/src/components/Sidebar.tsx` と `web/src/components/SiteFooter.tsx` の両面、表示データは `web/data/site-footer-links.json` / `web/data/dataset-claims.json`、検査は `web/scripts/verify-static-output.test.mjs` を確認する。
 
-### 外部サービスの設定は推測で答えない（必ず台帳を Read する）
+## 運用・リリース
 
-Cloudflare / Supabase / Google Search Console / GitHub Secrets の設定は、**リポジトリを grep しても分からない**（設定の実体が外部サービス側にあるため）。台帳は `docs/local/reference_external-services.md`（gitignored・作者環境のみ）。
+- `main` は本番、`develop` は Preview。release plan の検証とユーザーの明示承認を経て main へマージする。main へ直接コミットしない。
+- リリース・backup・復元・maintenance の詳細は [`docs/reference_manabi-map-operating-rules.md`](docs/reference_manabi-map-operating-rules.md) と `docs/local/plan_release-vX.Y.Z*.md` / `docs/local/manual_*.md` を読む。
+- AI はユーザー指示なしに commit、build、本番 deploy、Supabase `db push` / `psql` を実行しない。
 
-**次のいずれかに該当したら、答える前・手を動かす前に必ず Read する:**
+## Supabase・外部サービス
 
-- 「〜は設定されているか」「〜は有効か」「〜入れてなかったっけ」に類する問い
-- 外部サービスの設定を変更する作業
-- 「コードに無いから未導入」と結論づけそうになったとき
+- schema / RLS / function は `web/supabase/migrations/`、適用前の構造確認は `web/supabase/baseline_schema.sql` と migration 本文を使う。学校データ大量投入は公開範囲を確認してから行う。
+- Cloudflare / Supabase / GSC / GitHub Secrets の実効設定は repo 検索で推測しない。作者環境の `docs/local/reference_external-services.md` を先に Read する。
+- maintenance の on / off / status は `node scripts/maintenance.mjs <status|on|off>`。service role key をログ・会話・公開ファイルへ出さない。
 
-**推測で答えると誤診する。**2026-08-06 に Cloudflare Web Analytics を「未導入」と誤診した実例がある（Automatic setup は edge でブラウザ UA にだけ beacon を注入するため、`curl` の既定 UA では検出できない）。**bot 判定を伴う機能を curl で検証すると偽陰性が出る。**
+## secrets-scan
 
-台帳を持たない環境（他人の clone・別 AI CLI）では、**推測で断定せずユーザーに確認する**こと。
-
-外部サービスの設定を変更したら、**同じターンで台帳を更新する**。誤診したら台帳の「AI が誤診した実例」節に、なぜ間違えたかとどう検証すべきだったかを追記する。
-
-### plan の進捗は親の表だけで判断しない
-
-親子構成の plan では、**親の `## context配分` の 1 行が子 plan 全体（内部 C1〜Cn）を指す**。親が `plan` でも子の大半が完了していることがある。**必ず子 plan の表と実行記録まで開く。**2026-08-06 に `plan_seo-growth-strategy.md` の C5 を未着手と誤診した実例がある（実際は内部 C1〜C5 が実装済み・本番反映済みで、残りは C6 のみ）。
-
-### プリレンダーは React の実出力（初期 state に localStorage / fetch 結果を使わない）
-
-2026-08-07 に、プリレンダー HTML を「`gen-seo-pages.mjs` が手書きする別物の HTML」から
-**「React コンポーネントの SSR 出力」へ切り替えた**（`docs/local/plan_ssr-hydration.md`）。
-
-- ビルド時に `web/src/entry-server.tsx` が `renderToString` で各ルートを描き、`#root` に入れる
-- ブラウザ側は `web/src/main.tsx` の `hydrateRoot` がそれを**捨てずに引き継ぐ**
-- 旧方式は `createRoot` が `#root` の中身を毎回捨てて描き直していたため、
-  クラスの付いていない手書き HTML が一瞬そのまま見えていた（＝初期表示のちらつきの原因）
-
-**新しくページ・Context・hook を足すときの不変条件:**
-
-- **`useState` の初期値で `localStorage` / `sessionStorage` を読まない。** 初回 render は既定値に固定し、
-  `useEffect` で復元する（`I18nContext.tsx` / `AppContext.tsx` が実例）。
-  破るとその値を持つ利用者だけ hydration が食い違い、React error #418 が出てツリーが描き直される
-- **fetch したデータで初期表示が変わるページは、そのデータを HTML に埋め込む。**
-  `web/src/lib/initialData.ts` の `#__MM_INITIAL__`（`type="application/json"`）に載せ、
-  初回 render から同期的に使う。埋め込みは必ず `#root` の**外**へ置く（中に入れると React の管理外の
-  要素が紛れて hydration が壊れる）
-- **静的出力の検査は「文字列の完全一致」で書かない。** `verify-static-output.mjs` が
-  `<h1>校名</h1>` の完全一致を見ていたため、React 出力に替えた瞬間に総崩れした。
-  「タグの有無 + 中身の包含」で判定する
-
-**県ページも SSR 済み**（`pref-index-<slug>.json` の短縮キーを `#__MM_INITIAL__` に埋め込む）。
-全件 JSON は県ページでは読まない。
-
-### ナビゲーション面は 2 つある（1 つ直して「対応した」にしない）
-
-導線（メニュー項目・リンク）を足す・変えるときは、**必ず次の面すべてを確認する**。
-
-| 面 | 実体 | 出る場所 |
-|---|---|---|
-| サイドバー | `web/src/components/Sidebar.tsx` | 全画面（ハンバーガーメニュー）。**アプリ利用者が最初に触る** |
-| フッター（React） | `web/src/components/SiteFooter.tsx` | トップ・県ハブ・学校ハブ・学校詳細・法務・ガイド・データ・プレス・404 等。ページ最下部 |
-
-- **`Sidebar.tsx` の中だけで 2 箇所ある**（「サービス情報」の項目群と、最下部のリンク行）
-- 表示ラベルの実体は `web/data/site-footer-links.json`。**コンポーネントに文字列を直書きしない**
-  （公開方針の文言は `web/data/dataset-claims.json`。どちらも `verify-static-output.test.mjs` が再ハードコードを検出する）
-- 地図画面にはフッターが無いので、**フッターだけ直すと地図から辿れないまま残る**
-
-2026-08-07 に `/data/`（公開データと API）の導線を追加した際、フッターだけ直して「全ページから 1 ホップ」と報告し、
-サイドバーを見落とした。指摘を受けて直した後も `Sidebar.tsx` 内の 2 箇所目を見落として再指摘された。
-**面を先に列挙してから着手し、変更後は全面で再確認する。**
-
-### メンテナンスモードの AI トリガー
-
-- ユーザーが「メンテにして」「メンテモード ON」「メンテ入れて」等と言ったら、`node scripts/maintenance.mjs on` を実行する。
-- 「メンテ解除」「メンテ OFF」「メンテ戻して」等は `node scripts/maintenance.mjs off` を実行する。
-- 状態確認は `node scripts/maintenance.mjs status` を実行する。
-- CLI は `.env.local` の service role key を読むため、キーを出力・ログ・コミットしない。参照先は `MANABI_MAP_ENV_DIR`（設定時）または `web/`（未設定時）。
-- DB 復元中など CLI が DB に到達できない非常時だけ、既存の env var + Retry deployment 経路を使う。
-
-## 利用可能な skill（作者環境）
-
-このプロジェクト向けに専用 skill を用意している。**skill を起動できる環境なら、下記の操作は直接手作業でやらず skill 経由が原則**（手順の一貫性・記録の再現性のため）。skill が無い環境（他人の clone や別 AI CLI）では手動手順として本 CLAUDE.md 下記の「運用ルール」を読み下してください。
-
-配置は 2 系統に分かれる:
-
-- **本リポ専用の 5 本**（`manabi-map-deploy` / `manabi-map-add-prefecture` / `manabi-map-info-wanted-field` / `manabi-map-field-backfill` / `manabi-map-gsc-checkup`）は **リポ内 `.claude/skills/` にある**（2026-07-23 に作者環境の横断棚から移設・以降ここへ新設）。`.gitignore` が `.claude/` を丸ごと除外しているため **clone には含まれない**（作者環境固有の絶対パスを公開しないため）
-- **横断 skill**（`supabase-migrate` / `taxonomy-refactor` / `changelog-freshness` など）は作者環境の `~/.claude/skills/` 配下
-
-| 用途 | skill | 起動語 |
-|---|---|---|
-| 本番反映全体（versioned / no-tag、backup → migration → データ投入 → 検証 → プレビュー → main マージ → 条件付きタグ） | `manabi-map-deploy` | 「manabi-map リリース」「タグなしで本番反映」「DB migration の続き」 |
-| 新県データ投入（schools SQL + deviation SQL + 校パターン再分類 + course_type_master 確認） | `manabi-map-add-prefecture` | 「◯◯県 追加」「manabi-map に◯◯県入れて」「新県 データ投入」 |
-| nullable な学校情報を「情報提供募集中」型で追加（テンプレ・i18n・CSS・実装メモ生成） | `manabi-map-info-wanted-field` | 「情報提供募集中 field 追加」「空欄可能フィールド」「manabi-map-info-wanted-field」 |
-| 欠損項目の一括補完（公式カタログから抽出 → 出典つき SQL 生成 → gap を理由つきで記録） | `manabi-map-field-backfill` | 「欠損項目 補完」「学科 埋めて」「ふりがな 補完」「一括補完」 |
-| 検索インデックス状況の実測と sitemap 再送信（GSC 4 画面 → 前回値と比較 → 台帳追記。トラフィックの正体切り分けも） | `manabi-map-gsc-checkup` | 「GSC 見て」「インデックス状況どう」「sitemap 再送信」「アクセス数どう」 |
-| Supabase 本番へ migration 適用（Docker 不要・psql 直叩き・backup + schema_migrations 記録） | `supabase-migrate` | 「Supabase migration 適用」「本番 DB に SQL 流して」「pg_dump backup 取って」 |
-| フリーテキスト分類列 → master + FK + trigger 化（表記ゆれ・分類漏れ対策） | `taxonomy-refactor` | 「分類を master 化」「course_type refactor」「表記ゆれ対策」 |
-
-学科分類の正典は `~/.claude/guides/reference_mext-highschool-classification.md`（MEXT 学校教育法施行規則 §81 + 学校基本調査 17 分類）。新県データ投入時は必ず参照。
-
-## 運用ルール（このプロジェクト固有）
-
-### ブランチ / リリースフロー（2026-08-10 更新）
-
-- **main = 本番**。Cloudflare Pages の Git 連携により main への push が即・自動で https://manabi-map.app にデプロイされる。**main へ直接コミットしない**
-- **修正・機能追加は `develop` ブランチで行う**。develop への push は Cloudflare Pages が**プレビュー環境**（`https://<hash>.manabi-map.pages.dev`）を自動生成するので、そこで動作確認する（Supabase 認証のリダイレクトは `*.manabi-map.pages.dev` 登録済みでプレビューでも動く）
-- リリース手順: 各バージョンの release plan（`docs/local/plan_release-vX.Y.Z*.md`）を正典として、develop で修正 → Preview で確認 → plan の blocker と検証結果を更新 → ユーザーの明示承認後に main へマージ（= 本番デプロイ）→ 本番成功を確認して、versioned release の場合だけ `git tag vX.Y.Z` を打つ（タグは記録用アンカー・デプロイには無影響）
-- 新しいリリースごとの `manual_release-vX.Y.Z_日付.md` は作成しない。実装ファイル、migration、テスト結果、Preview / Production URL、外部通知の確認時刻、残作業、status は release plan の申し送りへ追記する。過去の `manual_release-*.md` は履歴参照のみとする
-- バックアップ・復元・メンテナンスモードなどの運用 runbook は、リリース記録とは別に `docs/local/manual_*.md` で管理する
-
-### Supabase DB 変更の適用方針
-
-- DB 変更は **Supabase SQL Editor への手貼りを標準にしない**。原則として `web/supabase/migrations/` 配下に migration SQL を置き、`supabase db push` で適用できる形にする
-- `web/supabase/migrations/` に置くのは schema 変更・RLS・関数など、公開 repo に載せてよい DB 構造変更を基本とする。学校データの大量 `insert` / `update` は GitHub 上で丸見えになるため、公開する意思がある場合だけ migration 化する
-- 学校データ投入 SQL は原則 `docs/local/`（gitignored）に置き、適用は人間が `psql` などで実行する。作業分担用は `docs/local/seed-parts/*.sql`、適用用にまとめる場合も `docs/local/*.sql` を使う
-- migration は人間が内容確認してから適用する。AI は SQL ファイル作成・検証までは行ってよいが、ユーザー指示なしに本番 Supabase へ `db push` / `psql` 実行しない
-- ローカル/個人環境の接続情報、DB パスワード、Supabase access token、project ref は公開ファイルに書かない。必要なら `CLAUDE.local.md` や gitignored なローカルメモに置く
-- 適用前チェック: `pnpm typecheck` / `pnpm lint`、migration SQL の `begin;` / `commit;`、新規テーブル有無、商用偏差値サイト由来データが混じっていないことを確認する
-- 標準コマンド例（project link 済みの場合）:
-
-```
-cd web
-pnpm dlx supabase db push
-```
-
-### データ・PII の扱い
-
-- ユーザーの検索地点は「自宅住所」ではなく「中心地点」として扱う（企画書 §16.5）。お気に入り・メモ・個人偏差値記録は RLS で本人限定
-- 偏差値シードは公的資料のみ・`source_type='manabi_estimate'` / `estimate_method='v1_<pref>_<year>'`。商用サイト由来の値を混ぜない
-- **偏差値の掲載線（2026-08-07 確定）: 静的 HTML には載せる / 公開 API には出さない。**
-  プリレンダーが React の実出力になり、画面に出している値はそのまま HTML に載るようになった
-  （伏せると hydration が食い違い、初期表示のちらつきが戻るため原理的に隠せない）。
-  代わりに **公開 API 側で線を守る**。`web/scripts/verify-static-output.mjs` の `findDeviationLeak()` が
-  `/api/v1/` の全 JSON を走査し、`deviation` を含むキーが 1 つでもあればビルドを落とす。**このガードを緩めない。**
-  序列化の禁止語（ランキング / TOP / 狙い目 / おすすめ / 通学時間）は `FORBIDDEN_WORDS` で引き続き禁止する
-- 削除・訂正要請は takedown@manabi-map.app（24h 受信確認・7 日以内対応）
-
-## secrets-scan 配線（このリポ固有）
-
-責務・一般化ルールはグローバル正典に従う（上記「AI 作業共通ルール」参照）。本リポの配線:
-
-- layer 1（手動検証）: `node scripts/secrets-scan.mjs --staged --block`
-- layer 2（pre-commit hook）: `.githooks/pre-commit`（導入は `scripts/install-hooks.ps1` / `.sh`）
+- layer 1（手動）: `node scripts/secrets-scan.mjs --staged --block`
+- layer 2（pre-commit）: `.githooks/pre-commit`。導入は `scripts/install-hooks.ps1` / `.sh`
 - layer 3（CI）: `.github/workflows/secrets-scan.yml`
-- env: `KB_ROOT` / `FAMILY_ROOT`（未設定なら構造 regex のみで継続。詳細は `scripts/secrets-scan.mjs` の冒頭コメント）
+- env や needles の詳細は `scripts/secrets-scan.mjs` と `CLAUDE.local.md`。公開 clone でも構造 regex は動かす。
+
+## AI と project skill
+
+- 個人・グローバル AI 規約、言語・確認スタイル・plan の作成規則は各 AI ツールの global settings に置く。
+- 作者環境向けの repo skill は `.claude/skills/`。使える場合は deploy、migration、県追加、field backfill、GSC の手作業を skill 経由にする。
+- 学科分類の正典は作者環境の `reference_mext-highschool-classification.md`。新県データ投入時に参照する。
 
 ## 関連ドキュメント
 
-| 項目 | パス |
-|---|---|
-| ユーザー向け README | `README.md` |
-| Codex/他 AI 用入口 | `AGENTS.md` |
-| フロントエンド開発ガイド | `web/README.md` |
-| 進行中の plan | `docs/local/plan_*.md` |
-| **外部サービス設定の台帳（Cloudflare / Supabase / Google / GitHub）** | `docs/local/reference_external-services.md` — 上記「外部サービスの設定は推測で答えない」の参照先 |
-| 設定済み項目・調査結果などの参照資料 | `docs/local/reference_*.md`（SEO / Search Console・Supabase provider・データ収集 playbook 等） |
-| リリース計画・実行記録 | `docs/local/plan_release-vX.Y.Z*.md` |
-| 運用 runbook（バックアップ・復元・メンテナンスモード） | `docs/local/manual_*.md` |
-| 過去バージョンの企画・設計・実装記録（アーカイブ・非公開） | `docs/local/archive/<version>/`（v0.1.1 に MVP 詳細企画書 / OSS 憲章 / データ取得戦略 / モック / phase-1 実装 plan / recap 等） |
+- ユーザー向け: [`README.md`](README.md)、[`DATA.md`](DATA.md)
+- 製品・運用正本: [`docs/reference_manabi-map-operating-rules.md`](docs/reference_manabi-map-operating-rules.md)
+- 進行中の plan / runbook: `docs/local/plan_*.md` / `docs/local/manual_*.md`
+- 作者環境の外部サービス台帳: `docs/local/reference_external-services.md`
+- 過去記録: `docs/local/archive/<version>/`
+
+## 文書変更時の検査
+
+```text
+node scripts/check-claude-md.mjs
+```
+
+行数・節長・正本リンクを検査する。予算を上げる前に詳細本文を正本側へ降格する。

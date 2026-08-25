@@ -131,6 +131,10 @@ export const ja: MessageTree = {
     chipPublic: '公立',
     chipPrivate: '私立',
     chipNational: '国立',
+    chipIntegrated: '中高一貫',
+    // 1 校が複数の学科系統を持つため、学科チップの数字を足しても総校数にならない。
+    // 学科チップを出すページでだけ添える。
+    chipsDeptNote: '学科は 1 校が複数の系統を持つことがあるため、合計は掲載校数と一致しません。',
     filterShowing: '{total} 校中 {shown} 校を表示',
     filterClear: '絞り込み解除',
     jumpLabel: '市区町村へ移動',

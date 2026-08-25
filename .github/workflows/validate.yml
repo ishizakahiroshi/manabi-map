@@ -29,6 +29,10 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Check CLAUDE.md structure
+        working-directory: .
+        run: node scripts/check-claude-md.mjs
+
       - name: Setup pnpm
         uses: pnpm/action-setup@a15d269cd4658e1107c09f1fabf4cbd7bd1f308a # v4.4.0
         with:
