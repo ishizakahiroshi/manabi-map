@@ -566,6 +566,7 @@ export function PrefecturePage({ userData }: Props) {
                           <span className="city-school-meta">
                             {fmt.ownFull(s)}・{s.course_times.map((c) => fmt.courseFull(c)).join('・')}
                             {status ? `〔${status}〕` : ''}
+                            {s.address ? `・${s.address}` : ''}
                           </span>
                         </a>
                       </li>
