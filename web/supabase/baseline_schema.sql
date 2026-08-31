@@ -1226,8 +1226,8 @@ CREATE TABLE public.family_members (
 CREATE TABLE public.home_locations (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     user_id uuid NOT NULL,
-    label text DEFAULT '自宅'::text NOT NULL,
-    address text NOT NULL,
+    label text DEFAULT '設定地点'::text NOT NULL,
+    address text DEFAULT '設定地点'::text NOT NULL,
     postal_code text,
     prefecture text,
     city text,
@@ -1235,7 +1235,11 @@ CREATE TABLE public.home_locations (
     longitude numeric(10,7) NOT NULL,
     is_primary boolean DEFAULT true NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
-    updated_at timestamp with time zone DEFAULT now() NOT NULL
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT home_locations_address_minimized CHECK ((address = '設定地点'::text)),
+    CONSTRAINT home_locations_label_minimized CHECK ((label = '設定地点'::text)),
+    CONSTRAINT home_locations_latitude_minimized CHECK ((latitude = round(latitude, 3))),
+    CONSTRAINT home_locations_longitude_minimized CHECK ((longitude = round(longitude, 3)))
 );
 
 
