@@ -75,9 +75,9 @@ export interface FamilyShareState {
   loadSharedNotes: (groupId: string) => Promise<SharedNote[]>
 }
 
-/** 受諾 URL の組み立て（本番/プレビュー両対応・token はクエリで渡す） */
+/** 受諾 URL の組み立て（本番/プレビュー両対応・token は fragment で渡す） */
 export function inviteUrlFor(token: string): string {
-  return `${location.origin}/family/join?token=${token}`
+  return `${location.origin}/family/join#token=${encodeURIComponent(token)}`
 }
 
 export function useFamilyShare(): FamilyShareState {

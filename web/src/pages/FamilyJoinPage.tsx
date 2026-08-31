@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { useI18n } from '../contexts/I18nContext'
 import { useFamilyShare } from '../hooks/useFamilyShare'
@@ -14,31 +14,75 @@ interface PendingInvite {
   savedAt: number
 }
 
+type InviteUrlSource = 'fragment' | 'query'
+
+interface UrlInvite {
+  token: string
+  source: InviteUrlSource
+}
+
+let memoryPendingInvite: PendingInvite | null = null
+
+function parsePendingInviteValue(value: unknown, now: number): PendingInvite | null {
+  if (!value || typeof value !== 'object') return null
+  const candidate = value as Partial<PendingInvite>
+  if (
+    typeof candidate.token !== 'string' || !candidate.token ||
+    (typeof candidate.userId !== 'string' && candidate.userId !== null) ||
+    typeof candidate.savedAt !== 'number' || !Number.isFinite(candidate.savedAt) ||
+    now - candidate.savedAt > PENDING_TTL_MS || now < candidate.savedAt
+  ) return null
+  return { token: candidate.token, userId: candidate.userId ?? null, savedAt: candidate.savedAt }
+}
+
 /** 招待トークンを短時間だけ保持し、保存時の実ユーザーと紐付ける。 */
 export function parsePendingInvite(raw: string | null, now = Date.now()): PendingInvite | null {
   if (!raw) return null
   try {
-    const value = JSON.parse(raw) as Partial<PendingInvite>
-    if (
-      typeof value.token !== 'string' || !value.token ||
-      (typeof value.userId !== 'string' && value.userId !== null) ||
-      typeof value.savedAt !== 'number' || !Number.isFinite(value.savedAt) ||
-      now - value.savedAt > PENDING_TTL_MS || now < value.savedAt
-    ) return null
-    return { token: value.token, userId: value.userId ?? null, savedAt: value.savedAt }
+    return parsePendingInviteValue(JSON.parse(raw), now)
   } catch {
     return null
   }
 }
 
+/** fragmentの新形式を優先し、旧query形式は発行済みlinkの互換読取だけ許可する。 */
+export function readInviteFromUrl(search: string, hash: string): UrlInvite | null {
+  const fragmentToken = new URLSearchParams(hash.startsWith('#') ? hash.slice(1) : hash).get('token')
+  if (fragmentToken) return { token: fragmentToken, source: 'fragment' }
+  const queryToken = new URLSearchParams(search.startsWith('?') ? search.slice(1) : search).get('token')
+  if (queryToken) return { token: queryToken, source: 'query' }
+  return null
+}
+
+/** 招待tokenをpendingへ退避した後、URLからtokenだけを除去する。 */
+export function stripInviteTokenFromUrl(source: InviteUrlSource): void {
+  if (typeof window === 'undefined') return
+  try {
+    const current = new URL(window.location.href)
+    current.searchParams.delete('token')
+    if (source === 'fragment') current.hash = ''
+    window.history.replaceState(window.history.state, '', `${current.pathname}${current.search}${current.hash}`)
+  } catch {
+    // URL/history が利用できない環境では、pending保存だけを維持する。
+  }
+}
+
+function pendingBelongsToUser(pending: PendingInvite, currentUserId: string | null): boolean {
+  return pending.userId === null || pending.userId === currentUserId
+}
+
 function readPendingToken(currentUserId: string | null): string {
+  const memoryPending = parsePendingInviteValue(memoryPendingInvite, Date.now())
+  if (memoryPending && pendingBelongsToUser(memoryPending, currentUserId)) return memoryPending.token
+  memoryPendingInvite = null
   try {
     const raw = localStorage.getItem(PENDING_KEY)
     const pending = parsePendingInvite(raw)
-    if (!pending || (pending.userId !== null && pending.userId !== currentUserId)) {
+    if (!pending || !pendingBelongsToUser(pending, currentUserId)) {
       if (raw) localStorage.removeItem(PENDING_KEY)
       return ''
     }
+    memoryPendingInvite = pending
     return pending.token
   } catch {
     return ''
@@ -46,12 +90,15 @@ function readPendingToken(currentUserId: string | null): string {
 }
 
 function savePendingToken(token: string, userId: string | null): void {
+  const pending = { token, userId, savedAt: Date.now() }
+  memoryPendingInvite = pending
   try {
-    localStorage.setItem(PENDING_KEY, JSON.stringify({ token, userId, savedAt: Date.now() }))
+    localStorage.setItem(PENDING_KEY, JSON.stringify(pending))
   } catch { /* localStorage 不可環境では往復リカバリを諦める */ }
 }
 
 function clearPendingToken(): void {
+  memoryPendingInvite = null
   try { localStorage.removeItem(PENDING_KEY) } catch { /* noop */ }
 }
 
@@ -64,7 +111,7 @@ const acceptInFlight = new Map<string, Promise<string>>()
 type JoinStatus = 'idle' | 'accepting' | 'done' | 'error' | 'need-login' | 'no-token'
 
 /**
- * 家族グループ招待の受諾ページ（/family/join?token=...）。
+ * 家族グループ招待の受諾ページ（/family/join#token=...）。
  * - ログイン済みなら即受諾 → /favorites へ。
  * - 未ログイン（匿名含む）なら LINE / Google ログインを促す。ログインは
  *   /auth/callback → トップへ戻る仕様のため、トークンは localStorage に退避し、
@@ -72,15 +119,18 @@ type JoinStatus = 'idle' | 'accepting' | 'done' | 'error' | 'need-login' | 'no-t
  */
 export function FamilyJoinPage() {
   const navigate = useNavigate()
-  const [params] = useSearchParams()
+  const routerLocation = useLocation()
   const { session, kind, signInLINE, signInGoogle } = useAuth()
   const { acceptInvite } = useFamilyShare()
   const { t } = useI18n()
   const [status, setStatus] = useState<JoinStatus>('idle')
 
-  // URL から取得できなければ localStorage の退避分（ログイン往復後）を使う
+  // fragmentを優先し、旧queryは互換読取だけにする。URLから取得できなければ
+  // localStorage / memoryの退避分（ログイン往復後）を使う。
   const durableUserId = kind === 'anon' ? null : session?.user.id ?? null
-  const token = params.get('token') || readPendingToken(durableUserId)
+  const urlInvite = readInviteFromUrl(routerLocation.search, routerLocation.hash)
+  const urlInviteSource = urlInvite?.source ?? null
+  const token = urlInvite?.token || readPendingToken(durableUserId)
 
   useEffect(() => {
     if (!token) {
@@ -90,6 +140,7 @@ export function FamilyJoinPage() {
     // 匿名セッションの UUID はログイン往復で変わり得るため、実ログイン時だけ
     // user_id と紐付ける。実ユーザーの切替時は readPendingToken が破棄する。
     savePendingToken(token, durableUserId)
+    if (urlInviteSource) stripInviteTokenFromUrl(urlInviteSource)
 
     // 招待は実ログイン済みの家族だけが受諾できる。匿名ユーザーは認証済みでも
     // DB RPC が拒否するため、先に明示的なログイン導線へ戻す。
@@ -128,7 +179,7 @@ export function FamilyJoinPage() {
     return () => {
       cancelled = true
     }
-  }, [token, durableUserId, session, kind, acceptInvite, navigate])
+  }, [token, durableUserId, session, kind, acceptInvite, navigate, urlInviteSource])
 
   const doLogin = useCallback(
     async (provider: 'line' | 'google') => {
