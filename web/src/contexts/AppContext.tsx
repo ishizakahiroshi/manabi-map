@@ -7,6 +7,7 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from './AuthContext'
 
 const HOME_KEY = 'mm.home'
+const PERSISTED_HOME_LABEL = '設定地点'
 
 export type HomeLoadState = 'loading' | 'ready' | 'error'
 
@@ -33,8 +34,29 @@ export function isValidHomeLocation(value: unknown): value is HomeLocation {
   return (
     typeof candidate.label === 'string' &&
     Number.isFinite(candidate.lat) &&
-    Number.isFinite(candidate.lng)
+    candidate.lat! >= -90 &&
+    candidate.lat! <= 90 &&
+    Number.isFinite(candidate.lng) &&
+    candidate.lng! >= -180 &&
+    candidate.lng! <= 180
   )
+}
+
+/**
+ * 端末・DBに残す中心地点を必要最小限の形にする。
+ * geocoderの詳細labelとexact coordinateはこの関数の外へ永続化しない。
+ */
+export function normalizeHomeForPersistence(value: unknown): HomeLocation | null {
+  if (!isValidHomeLocation(value)) return null
+  const roundCoordinate = (coordinate: number) => {
+    const rounded = Number(coordinate.toFixed(3))
+    return Object.is(rounded, -0) ? 0 : rounded
+  }
+  return {
+    label: PERSISTED_HOME_LABEL,
+    lat: roundCoordinate(value.lat),
+    lng: roundCoordinate(value.lng),
+  }
 }
 
 /** 表示用の座標を固定小数点に整形する。無効な地点は表示へ渡さない。 */
@@ -48,7 +70,7 @@ export function parseStoredHome(raw: string | null): HomeLocation | null {
   try {
     if (!raw) return null
     const value: unknown = JSON.parse(raw)
-    return isValidHomeLocation(value) ? value : null
+    return normalizeHomeForPersistence(value)
   } catch {
     return null
   }
@@ -58,7 +80,12 @@ export function loadLocalHome(): HomeLocation | null {
   try {
     const raw = localStorage.getItem(HOME_KEY)
     const home = parseStoredHome(raw)
-    if (raw && !home) localStorage.removeItem(HOME_KEY)
+    if (raw && !home) {
+      localStorage.removeItem(HOME_KEY)
+    } else if (home) {
+      // 旧形式の詳細label/高精度座標も読込み時に縮約する。
+      localStorage.setItem(HOME_KEY, JSON.stringify(home))
+    }
     return home
   } catch {
     try { localStorage.removeItem(HOME_KEY) } catch { /* noop */ }
@@ -94,6 +121,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
    * upsert の onConflict が使えず、select → update / insert で分岐する。
    */
   const persistHome = useCallback(async (h: HomeLocation, userId: string) => {
+    const persisted = normalizeHomeForPersistence(h)
+    if (!persisted) return
     // fire-and-forget 設計のため UI には出さないが、静かなデータ欠落を追えるよう失敗は記録する
     // （住所値は PII のためログに出さない）
     const { data, error: selErr } = await supabase
@@ -109,16 +138,22 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (data) {
       const { error } = await supabase
         .from('home_locations')
-        .update({ address: h.label, latitude: h.lat, longitude: h.lng, updated_at: new Date().toISOString() })
+        .update({
+          label: persisted.label,
+          address: persisted.label,
+          latitude: persisted.lat,
+          longitude: persisted.lng,
+          updated_at: new Date().toISOString(),
+        })
         .eq('id', data.id)
       if (error) console.error('home_locations update failed:', error.message)
     } else {
       const { error } = await supabase.from('home_locations').insert({
         user_id: userId,
-        label: '自宅',
-        address: h.label,
-        latitude: h.lat,
-        longitude: h.lng,
+        label: persisted.label,
+        address: persisted.label,
+        latitude: persisted.lat,
+        longitude: persisted.lng,
         is_primary: true,
       })
       if (error) console.error('home_locations insert failed:', error.message)
@@ -127,12 +162,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const setHome = useCallback(
     (h: HomeLocation) => {
-      setHomeState(h)
+      const persisted = normalizeHomeForPersistence(h)
+      if (!persisted) return
+      setHomeState(persisted)
       setHomeLoadState('ready')
       try {
-        localStorage.setItem(HOME_KEY, JSON.stringify(h))
+        localStorage.setItem(HOME_KEY, JSON.stringify(persisted))
       } catch { /* localStorage 不可の環境では仮住所は揮発で良い */ }
-      if (session) void persistHome(h, session.user.id)
+      if (session) void persistHome(persisted, session.user.id)
     },
     [session, persistHome],
   )
@@ -186,8 +223,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
       }
       if (cancelled) return
       if (data) {
-        const h = { label: data.address, lat: Number(data.latitude), lng: Number(data.longitude) }
-        if (!isValidHomeLocation(h)) {
+        const h = normalizeHomeForPersistence({
+          label: data.address,
+          lat: Number(data.latitude),
+          lng: Number(data.longitude),
+        })
+        if (!h) {
           console.error('home_locations load returned invalid coordinates')
           setHomeState(null)
           setHomeLoadState('error')
@@ -206,7 +247,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           if (cancelled) return
           const { error } = await supabase.from('home_locations').insert({
             user_id: userId,
-            label: '自宅',
+            label: local.label,
             address: local.label,
             latitude: local.lat,
             longitude: local.lng,

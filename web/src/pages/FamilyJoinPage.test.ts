@@ -1,6 +1,58 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { parsePendingInvite } from './FamilyJoinPage'
+import { inviteUrlFor } from '../hooks/useFamilyShare'
+import { parsePendingInvite, readInviteFromUrl, stripInviteTokenFromUrl } from './FamilyJoinPage'
+
+afterEach(() => {
+  vi.unstubAllGlobals()
+})
+
+describe('family invite URL', () => {
+  it('generates a fragment token URL and encodes the token', () => {
+    vi.stubGlobal('location', { origin: 'https://synthetic.example.test' })
+    expect(inviteUrlFor('synthetic token')).toBe('https://synthetic.example.test/family/join#token=synthetic%20token')
+  })
+
+  it('prefers the fragment and keeps old query links read-compatible', () => {
+    expect(readInviteFromUrl('?token=old-token', '#token=new-token')).toEqual({
+      token: 'new-token',
+      source: 'fragment',
+    })
+    expect(readInviteFromUrl('?token=old-token', '')).toEqual({
+      token: 'old-token',
+      source: 'query',
+    })
+    expect(readInviteFromUrl('', '#other=value')).toBeNull()
+  })
+
+  it('removes query and fragment tokens with history replacement', () => {
+    const replaceState = vi.fn()
+    vi.stubGlobal('window', {
+      location: { href: 'https://synthetic.example.test/family/join?token=old-token&keep=1#token=new-token' },
+      history: { state: { synthetic: true }, replaceState },
+    })
+
+    stripInviteTokenFromUrl('fragment')
+
+    expect(replaceState).toHaveBeenCalledWith(
+      { synthetic: true },
+      '',
+      '/family/join?keep=1',
+    )
+  })
+
+  it('keeps unrelated query and fragment values for an old query invite', () => {
+    const replaceState = vi.fn()
+    vi.stubGlobal('window', {
+      location: { href: 'https://synthetic.example.test/family/join?token=old-token&keep=1#section' },
+      history: { state: null, replaceState },
+    })
+
+    stripInviteTokenFromUrl('query')
+
+    expect(replaceState).toHaveBeenCalledWith(null, '', '/family/join?keep=1#section')
+  })
+})
 
 describe('pending family invite storage', () => {
   const now = 1_700_000_000_000
