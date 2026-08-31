@@ -68,7 +68,7 @@ SSR、初期データ、storage 復元、静的出力の検査は [`docs/referen
 ## AI と project skill
 
 - 個人・グローバル AI 規約、言語・確認スタイル・plan の作成規則は各 AI ツールの global settings に置く。
-- 作者環境向けの repo skill は `.claude/skills/`。使える場合は deploy、migration、県追加、field backfill、GSC の手作業を skill 経由にする。
+- 作者環境向けの repo skill は `.claude/skills/`。使える場合は deploy、migration、県追加、field backfill、GSC、監査follow-upの手作業を skill 経由にする。
 - 学科分類の正典は作者環境の `reference_mext-highschool-classification.md`。新県データ投入時に参照する。
 
 ## 関連ドキュメント
