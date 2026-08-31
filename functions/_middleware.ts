@@ -9,7 +9,7 @@
 //
 // 動作:
 // - 環境変数 MAINTENANCE_MODE=1 のとき、許可リスト以外の全リクエストを
-//   /maintenance.html の内容で HTTP 200 応答する(503 は SEO 悪影響のため使わない)。
+//   /maintenance.html の内容で HTTP 503 応答する。Retry-After と no-store を付ける。
 // - MAINTENANCE_MODE が "1" 以外(0 / 未設定)なら素通し。
 // - /legal/* は SPA ルート(React が /legal/*.md を fetch して描画)のため、
 //   index.html への SPA フォールバック(_redirects)と /assets/* の JS/CSS も
@@ -39,6 +39,7 @@ const ALLOWED_PREFIXES = [
 /** メンテ中も素通しするパス(完全一致) — maintenance.html 自身と最小限の静的アセット */
 const ALLOWED_PATHS = new Set([
   "/maintenance.html",
+  "/robots.txt",
   "/favicon.ico",
   "/favicon.svg",
   "/favicon-16.png",
@@ -74,9 +75,11 @@ export const onRequest = async (context: Context): Promise<Response> => {
 
   const asset = await env.ASSETS.fetch(new URL("/maintenance.html", request.url));
   return new Response(asset.body, {
-    status: 200,
+    status: 503,
     headers: {
       "content-type": "text/html; charset=utf-8",
+      // 短時間の停止をクローラー・クライアントへ通知する
+      "retry-after": "300",
       // メンテ解除後に古い画面がキャッシュから出ないようにする
       "cache-control": "no-store",
     },
