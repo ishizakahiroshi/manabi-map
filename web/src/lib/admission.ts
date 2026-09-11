@@ -117,7 +117,9 @@ function continuityOf(annual: AnnualWithScope[]): AdmissionContinuity {
  * 公式の一次募集全体として比較可能と裁定された新モデルだけから、学校の志願状況を返す。
  * 旧 school_admission_stats は参照しない。
  */
-export function primaryAdmissionTrend(school: School): PrimaryAdmissionTrend | null {
+export function primaryAdmissionTrend(
+  school: Pick<School, 'admission_selections'>,
+): PrimaryAdmissionTrend | null {
   const byYear = new Map<number, AdmissionSelection[]>()
   for (const selection of school.admission_selections ?? []) {
     if (!isMapComparable(selection)) continue
@@ -162,11 +164,29 @@ export function primaryAdmissionTrend(school: School): PrimaryAdmissionTrend | n
 }
 
 /**
+ * 地図のピン・倍率チップが使う「最新年度の一次募集倍率」。
+ *
+ * 地図・一覧用の全国データ（`/schools-map-<hash>.json.gz`）は入試履歴の本体を持たず、
+ * ビルド時に **同じ primaryAdmissionTrend で畳んだ** `latest_primary_admission` だけを
+ * 載せている（lib/mapPayload.ts）。詳細シートや単体 JSON 経路は入試履歴を持つので、
+ * その場で計算する。**どちらの経路でも同じ値になるよう、入口はこの 1 本にする。**
+ */
+export function latestPrimaryAdmission(
+  school: Pick<School, 'admission_selections' | 'latest_primary_admission'>,
+): { year: number; ratio: number } | null {
+  if (school.latest_primary_admission != null) return school.latest_primary_admission
+  const latest = primaryAdmissionTrend(school)?.annual[0]
+  return latest == null ? null : { year: latest.year, ratio: latest.ratio }
+}
+
+/**
  * 地図カードに表示する最新年度値（小数第2位丸め）と同じ値で区分する。
  * 3年平均では分類しない。
  */
-export function applicantRatioBand(school: School): ApplicantRatioBand {
-  const latest = primaryAdmissionTrend(school)?.annual[0]
+export function applicantRatioBand(
+  school: Pick<School, 'admission_selections' | 'latest_primary_admission'>,
+): ApplicantRatioBand {
+  const latest = latestPrimaryAdmission(school)
   if (latest == null) return 'unknown'
   const shown = Number(latest.ratio.toFixed(2))
   if (shown < 1) return 'under1'

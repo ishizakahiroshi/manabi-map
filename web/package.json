@@ -18,6 +18,7 @@
     "test:static": "node --test scripts/verify-static-output.test.mjs scripts/lib/municipalities.test.mjs scripts/lib/dept-groups-shared.test.mjs",
     "test:functions": "node --test ../functions/api/admin/_auth.test.ts ../functions/api/csp-report.test.ts ../functions/_middleware.test.ts ../scripts/admission/schools-candidate-check.test.mjs ../scripts/admission/pdf-extract.test.mjs ../scripts/admission/official-fetch.test.mjs ../scripts/admission/mext-schools-fetch.test.mjs ../scripts/admission/gsi-batch-geocode.test.mjs ../scripts/admission/gen-admission-v2.test.mjs ../scripts/secrets-scan.test.mjs",
     "verify:static": "node scripts/verify-static-output.mjs --dist dist --max-file-mib 25",
+    "check:budget": "node scripts/check-payload-budget.mjs --dist dist",
     "preview": "vite preview"
   },
   "dependencies": {

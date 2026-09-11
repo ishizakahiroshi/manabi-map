@@ -96,3 +96,12 @@ jobs:
       - name: Verify static output, SEO, gzip, and 25 MiB limit
         if: env.HAS_SUPABASE_BUILD_ACCESS == 'true'
         run: pnpm verify:static
+
+      # 通信量バジェット（docs/local/plan_data-usage-audit.md C5）。
+      # 「増えたら気づく」ための網であって、画面の良し悪しは測れない。
+      # 上限を上げる前に、その増加が利用者に必要かを plan で判断すること。
+      # 注意: 上の verify:static と同じく Supabase の build access が無いと丸ごと飛ぶ。
+      # 走ったかどうかはログの "payload budget" 行で確認する。
+      - name: Check payload budget
+        if: env.HAS_SUPABASE_BUILD_ACCESS == 'true'
+        run: pnpm check:budget
