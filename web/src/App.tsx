@@ -4,16 +4,10 @@ import { useI18n } from './contexts/I18nContext'
 import { useUserData } from './hooks/useUserData'
 import { HomePage } from './pages/HomePage'
 import { SchoolDetailPage } from './pages/SchoolDetailPage'
-import { SchoolSearchPage } from './pages/SchoolSearchPage'
-import { FavoritesPage } from './pages/FavoritesPage'
-import { ComparePage } from './pages/ComparePage'
-import { AuthCallbackPage } from './pages/AuthCallbackPage'
-import { FamilyJoinPage } from './pages/FamilyJoinPage'
 import { LegalPage } from './pages/LegalPage'
 import { GuidePage } from './pages/GuidePage'
 import { PressPage } from './pages/PressPage'
 import { DataPage } from './pages/DataPage'
-import { MyPage } from './pages/MyPage'
 import { SchoolsHubPage } from './pages/SchoolsHubPage'
 import { PrefecturePage } from './pages/PrefecturePage'
 import { CityPage } from './pages/CityPage'
@@ -24,14 +18,47 @@ import { Toast } from './components/Toast'
 import { OfflineBanner } from './components/OfflineBanner'
 import { MaintenanceBanner } from './components/MaintenanceBanner'
 import { BottomTabBar } from './components/BottomTabBar'
-import { DashboardPage } from './pages/DashboardPage'
 import { useIsAdmin } from './hooks/useIsAdmin'
 
-// 地図（Leaflet + markercluster）は初期バンドルから分離し、/map を開いたときだけ
-// 動的 import する（plan_seo-growth-strategy_c7 C3。protomaps-leaflet の動的 import と
-// 同じ手法のルート単位版）。学校詳細ページ（/school/:id）は Leaflet 非依存で初期描画する。
+// --- ルート単位の動的 import（plan_data-usage-audit.md C4） ---------------------
+//
+// **ビルド時にプリレンダーするルートは、ここへ入れてはいけない。**
+// プリレンダー済みの HTML は main.tsx が hydrateRoot で引き継ぐ（lib/ssrRoute.ts の
+// isPrerenderedForRoute が真になる経路）。hydration の最中に lazy が未解決だと、React は
+// その Suspense 境界のサーバー HTML を捨ててフォールバックへ切り替えるため、
+// 「プリレンダーした内容が一瞬で消える」という plan_ssr-hydration.md が潰した事故が戻る。
+//
+// プリレンダー対象（web/scripts/gen-seo-pages.mjs が HTML を書き出すルート）:
+//   / , /school/:id , /schools , /pref/:pref , /pref/:pref/:city ,
+//   /legal/* , /guide/* , /press , /data , 404.html
+// → これらは静的 import のまま据え置く。
+//
+// 下の 7 ルートは gen-seo-pages.mjs が HTML を出さず、必ず createRoot 経路になる
+// （SPA フォールバックでトップの HTML が返り、data-mm-route が一致しない）。
+// いずれも開いた直後に useSchools() が全国データ（約 0.81MB）を取りに行くか、
+// 管理者・招待経由でしか到達しない画面なので、数十 KB のチャンク 1 本の追加往復は
+// 体験に対して小さい。
 const MapPage = lazy(() =>
   import('./pages/MapPage').then((module) => ({ default: module.MapPage })),
+)
+const SchoolSearchPage = lazy(() =>
+  import('./pages/SchoolSearchPage').then((m) => ({ default: m.SchoolSearchPage })),
+)
+const FavoritesPage = lazy(() =>
+  import('./pages/FavoritesPage').then((m) => ({ default: m.FavoritesPage })),
+)
+const ComparePage = lazy(() =>
+  import('./pages/ComparePage').then((m) => ({ default: m.ComparePage })),
+)
+const MyPage = lazy(() => import('./pages/MyPage').then((m) => ({ default: m.MyPage })))
+const AuthCallbackPage = lazy(() =>
+  import('./pages/AuthCallbackPage').then((m) => ({ default: m.AuthCallbackPage })),
+)
+const FamilyJoinPage = lazy(() =>
+  import('./pages/FamilyJoinPage').then((m) => ({ default: m.FamilyJoinPage })),
+)
+const DashboardPage = lazy(() =>
+  import('./pages/DashboardPage').then((m) => ({ default: m.DashboardPage })),
 )
 
 function DashboardRoute({ isAdmin, checking }: { isAdmin: boolean; checking: boolean }) {
