@@ -1,22 +1,41 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { onRequest } from './_middleware.ts'
+import { isSpaRoute, onRequest } from './_middleware.ts'
 
-function makeContext(pathname: string, maintenance = '1') {
-  const nextResponse = new Response('synthetic-next', { status: 200 })
-  let assetPath: string | undefined
+function makeContext(
+  pathname: string,
+  maintenance = '1',
+  options: { method?: string; nextStatus?: number; shellStatus?: number } = {},
+) {
+  const nextResponse = new Response('synthetic-next', { status: options.nextStatus ?? 200 })
+  const assetPaths: string[] = []
   return {
     nextResponse,
-    get assetPath() { return assetPath },
+    assetPaths,
+    get assetPath() {
+      return assetPaths.at(-1)
+    },
     context: {
-      request: new Request(`https://synthetic.example.test${pathname}`),
+      request: new Request(`https://synthetic.example.test${pathname}`, {
+        method: options.method ?? 'GET',
+      }),
       env: {
         MAINTENANCE_MODE: maintenance,
         ASSETS: {
           fetch: async (input: Request | string | URL) => {
-            assetPath = new URL(input.toString()).pathname
-            return new Response('synthetic maintenance page')
+            const assetPath = new URL(input.toString()).pathname
+            assetPaths.push(assetPath)
+            if (assetPath === '/maintenance.html') {
+              return new Response('synthetic maintenance page')
+            }
+            return new Response('synthetic spa shell', {
+              status: options.shellStatus ?? 200,
+              headers: {
+                'content-type': 'text/html; charset=utf-8',
+                'x-synthetic-headers-rule': 'kept',
+              },
+            })
           },
         },
       },
@@ -24,6 +43,31 @@ function makeContext(pathname: string, maintenance = '1') {
     },
   }
 }
+
+/** functions/_middleware.ts の SPA_ROUTES と対応（web/src/App.tsx の <Route> が正）*/
+const SPA_ROUTE_PATHS = [
+  '/map',
+  '/search',
+  '/favorites',
+  '/compare',
+  '/mypage',
+  '/dashboard',
+  '/auth/callback',
+  '/family/join',
+]
+
+/** build 時に静的 HTML（SSR プリレンダー）を出しているので middleware で横取りしない */
+const PRERENDERED_PATHS = [
+  '/',
+  '/school/12345/',
+  '/schools/',
+  '/pref/fukuoka/',
+  '/pref/fukuoka/fukuoka-shi/',
+  '/legal/terms/',
+  '/press/',
+  '/data/',
+  '/guide/synthetic-guide/',
+]
 
 test('maintenance mode lets legal SPA routes through', async () => {
   const fixture = makeContext('/legal/terms/')
@@ -65,9 +109,98 @@ test('maintenance mode serves maintenance HTML for app routes', async () => {
   assert.equal(fixture.assetPath, '/maintenance.html')
 })
 
+test('maintenance mode wins over the SPA fallback on every SPA route', async () => {
+  for (const pathname of SPA_ROUTE_PATHS) {
+    const fixture = makeContext(pathname)
+    const result = await onRequest(fixture.context)
+    assert.equal(result.status, 503, pathname)
+    assert.equal(await result.text(), 'synthetic maintenance page', pathname)
+    assert.equal(fixture.assetPath, '/maintenance.html', pathname)
+  }
+})
+
 test('disabled maintenance mode always calls the normal handler', async () => {
-  const fixture = makeContext('/map', '0')
+  const fixture = makeContext('/school/12345/', '0')
   const result = await onRequest(fixture.context)
   assert.strictEqual(result, fixture.nextResponse)
   assert.equal(fixture.assetPath, undefined)
+})
+
+test('SPA routes are served as 200 with the index.html body', async () => {
+  for (const pathname of SPA_ROUTE_PATHS) {
+    const fixture = makeContext(pathname, '0')
+    const result = await onRequest(fixture.context)
+    assert.equal(result.status, 200, pathname)
+    assert.equal(result.headers.get('content-type'), 'text/html; charset=utf-8', pathname)
+    assert.equal(await result.text(), 'synthetic spa shell', pathname)
+    // /index.html を直接取ると Pages のアセット正規化で 308 になるので `/` を取る
+    assert.equal(fixture.assetPath, '/', pathname)
+  }
+})
+
+test('SPA routes keep the headers of the served asset (_headers rules)', async () => {
+  const fixture = makeContext('/map', '0')
+  const result = await onRequest(fixture.context)
+  assert.equal(result.headers.get('x-synthetic-headers-rule'), 'kept')
+})
+
+test('SPA routes ignore query strings and trailing slashes', async () => {
+  for (const pathname of ['/map/', '/map?school=1', '/auth/callback?code=synthetic']) {
+    const fixture = makeContext(pathname, '0')
+    const result = await onRequest(fixture.context)
+    assert.equal(result.status, 200, pathname)
+    assert.equal(await result.text(), 'synthetic spa shell', pathname)
+  }
+})
+
+test('unknown URLs stay 404 instead of getting the SPA shell', async () => {
+  for (const pathname of [
+    '/nonexistent-xyz',
+    '/map/extra',
+    '/auth/nonexistent',
+    '/family/nonexistent',
+    '/mypage-typo',
+  ]) {
+    const fixture = makeContext(pathname, '0', { nextStatus: 404 })
+    const result = await onRequest(fixture.context)
+    assert.strictEqual(result, fixture.nextResponse, pathname)
+    assert.equal(result.status, 404, pathname)
+    assert.equal(fixture.assetPath, undefined, pathname)
+  }
+})
+
+test('prerendered static routes are not intercepted by the SPA fallback', async () => {
+  for (const pathname of [...PRERENDERED_PATHS, '/api/v1/dataset.json', '/assets/index-abc.js']) {
+    const fixture = makeContext(pathname, '0')
+    const result = await onRequest(fixture.context)
+    assert.strictEqual(result, fixture.nextResponse, pathname)
+    assert.equal(fixture.assetPath, undefined, pathname)
+  }
+})
+
+test('non-read methods on SPA routes are passed through', async () => {
+  for (const method of ['POST', 'PUT', 'DELETE']) {
+    const fixture = makeContext('/map', '0', { method })
+    const result = await onRequest(fixture.context)
+    assert.strictEqual(result, fixture.nextResponse, method)
+    assert.equal(fixture.assetPath, undefined, method)
+  }
+})
+
+test('a failing shell fetch falls back to the normal handler', async () => {
+  const fixture = makeContext('/map', '0', { nextStatus: 404, shellStatus: 500 })
+  const result = await onRequest(fixture.context)
+  assert.strictEqual(result, fixture.nextResponse)
+  assert.equal(result.status, 404)
+  assert.equal(fixture.assetPath, '/')
+})
+
+test('isSpaRoute matches the App.tsx routes and nothing else', () => {
+  for (const pathname of SPA_ROUTE_PATHS) {
+    assert.equal(isSpaRoute(pathname), true, pathname)
+    assert.equal(isSpaRoute(`${pathname}/`), true, `${pathname}/`)
+  }
+  for (const pathname of [...PRERENDERED_PATHS, '/nonexistent-xyz', '/auth', '/family']) {
+    assert.equal(isSpaRoute(pathname), false, pathname)
+  }
 })
