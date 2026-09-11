@@ -1,16 +1,16 @@
-# SPA フォールバックは「既知の SPA ルートの列挙」に限定する。
+# SPA フォールバックのルート列挙は、このファイルではなく functions/_middleware.ts が正典。
+#
 # 旧: `/* /index.html 200` は存在しない URL をすべて 200 + 空シェル + canonical=トップで
 # 返し、GSC のソフト 404 とインデックス判断のノイズ源だった
-# （docs/local/plan_seo-growth-strategy_c5_static-routes.md C4）。
+# （docs/local/archive/plan_seo-growth-strategy_c5_static-routes.md C4）。
+# その後「既知の SPA ルートの列挙」へ置き換えたが、`/map /index.html 200` のように
+# rewrite 先を `/index.html` にすると Cloudflare Pages が `/` へ 308 正規化してしまい、
+# `/map` などが全部トップへ飛んでいた（`/auth/*` `/family/*` は 404）。
+# 2026-09-11 に列挙を functions/_middleware.ts の SPA_ROUTES へ移した
+# （docs/local/bugfix_map-direct-url-and-csp_2026-09-11.md §5-1 案 A / §6）。
+#
+# ここに SPA fallback 行を書き足さないこと（二重管理になり、308 正規化の罠も再発する）。
 # 列挙外の URL は Cloudflare Pages が dist/404.html を HTTP 404 で返す。
-# /（トップ）・/school/*・/schools/・/pref/*・/legal/*・/press は静的 HTML が存在するので
-# フォールバック不要。
-# 注意: _redirects の上限は 静的 2,000 + 動的 100。ルートを増やすときは意識すること。
-/map        /index.html   200
-/search     /index.html   200
-/favorites  /index.html   200
-/compare    /index.html   200
-/mypage     /index.html   200
-/auth/*     /index.html   200
-/family/*   /index.html   200
-/dashboard  /index.html   200
+# /（トップ）・/school/*・/schools/・/pref/*・/legal/*・/press・/data・/guide/* は
+# 静的 HTML が存在するのでフォールバック不要。
+# 注意: _redirects の上限は 静的 2,000 + 動的 100。ルールを増やすときは意識すること。

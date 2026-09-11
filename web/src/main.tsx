@@ -22,7 +22,8 @@ const tree = (
 // 従来の createRoot は #root の中身を毎回捨てて描き直していたため、
 // プリレンダー内容が一瞬そのまま見えていた（plan_ssr-hydration.md）。
 //
-// _redirects の SPA fallback はトップページの HTML を返すため、対象ルートが違うときは
+// SPA フォールバック（functions/_middleware.ts の SPA_ROUTES）はトップページの HTML を
+// 200 で返すため、対象ルートが違うときは
 // createRoot に落とす。dev サーバーの index.html も #root が空なので同じ経路になる。
 // プリレンダー漏れは verify-static-output のテストで検出するので、この分岐は
 // 漏れをごまかすためのものではなく、漏れたときに白画面を出さないための保険。
