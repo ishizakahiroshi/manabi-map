@@ -19,6 +19,7 @@ import {
 import { selectNeighbors } from '../src/lib/neighbors.ts'
 import { successorsByPredecessorId } from '../src/lib/successors.ts'
 import { GENERATOR_SCHOOL_SELECT } from '../src/lib/school-select.ts'
+import { buildMapPayload } from '../src/lib/mapPayload.ts'
 import { encodeDeptGroups } from './lib/dept-groups-shared.mjs'
 
 const here = dirname(fileURLToPath(import.meta.url))
@@ -228,6 +229,20 @@ const hash = createHash('sha256').update(body).digest('hex').slice(0, 10)
 const filename = `schools-${hash}.json.gz`
 const outputPath = join(publicDir, filename)
 
+// --- 地図・一覧用の全国データ（docs/local/plan_data-usage-audit.md C2）-----------
+// 上の全件 JSON は入試履歴と出典で 3.79MB あり、`/map` へ入るたびに毎回落ちていた。
+// 実際に地図・お気に入り・比較・マイページ・統合検索が読むのはピンと一覧に出る列だけで、
+// 入試履歴の本体は詳細シートでしか使わない（シートは単体 JSON で補う）。
+// 列の選定と最新年度倍率の畳み込みは src/lib/mapPayload.ts に置く（React 側と共有）。
+//
+// **全件 JSON は残す。** ビルド時の静的生成（gen-seo-pages.mjs）が読む正典で、
+// 公開データとしても配り続ける。ブラウザが毎回読むのを止めるだけ。
+const mapPayload = buildMapPayload(rows)
+const mapBody = `${JSON.stringify(mapPayload)}\n`
+const mapHash = createHash('sha256').update(mapBody).digest('hex').slice(0, 10)
+const mapFilename = `schools-map-${mapHash}.json.gz`
+const mapOutputPath = join(publicDir, mapFilename)
+
 // --- 検索用の軽量索引 -------------------------------------------------------
 // トップの統合検索は schools.json 全体を読まない（plan_seo-growth-strategy_c5 C3）。
 // - 市区町村索引: 高校が 1 校以上ある市区町村。ふりがな付き（かな入力対応）で
@@ -362,12 +377,13 @@ const nameIndexBody = `${JSON.stringify(nameIndex)}\n`
 const nameIndexFilename = `school-name-index-${createHash('sha256').update(nameIndexBody).digest('hex').slice(0, 10)}.json`
 
 // 古い schools-*.json / 索引を掃除（本 build で出力する分だけ残す）。
-const keep = new Set([filename, cityIndexFilename, nameIndexFilename])
+const keep = new Set([filename, mapFilename, cityIndexFilename, nameIndexFilename])
 const existing = await readdir(publicDir)
 for (const name of existing) {
   if (keep.has(name)) continue
   if (
     name === 'schools.json' ||
+    /^schools-map-[0-9a-f]+\.json(?:\.gz)?$/.test(name) ||
     /^schools-[0-9a-f]+\.json(?:\.gz)?$/.test(name) ||
     /^city-index-[0-9a-f]+\.json$/.test(name) ||
     /^school-name-index-[0-9a-f]+\.json$/.test(name)
@@ -377,6 +393,7 @@ for (const name of existing) {
 }
 
 await writeFile(outputPath, gzipSync(body, { level: 9 }))
+await writeFile(mapOutputPath, gzipSync(mapBody, { level: 9 }))
 await writeFile(join(publicDir, cityIndexFilename), cityIndexBody)
 await writeFile(join(publicDir, nameIndexFilename), nameIndexBody)
 
@@ -557,6 +574,11 @@ const manifest = {
   count: rows.length,
   formatVersion: payload.formatVersion,
   compression: 'gzip',
+  // 地図・一覧用の全国データ（plan_data-usage-audit.md C2）。ブラウザはこちらを読む。
+  mapUrl: `/${mapFilename}`,
+  mapHash,
+  mapCount: mapPayload.schools.length,
+  mapFormatVersion: mapPayload.formatVersion,
   sourceCatalogCount: sourceCatalog.length,
   cityIndexUrl: `/${cityIndexFilename}`,
   cityIndexCount: cityIndex.length,
@@ -571,6 +593,10 @@ const manifest = {
 }
 await writeFile(join(publicDir, 'schools-manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`)
 
+console.log(
+  `wrote ${mapPayload.schools.length} schools to ${mapOutputPath} ` +
+  `(map url=${manifest.mapUrl})`,
+)
 console.log(
   `wrote ${rows.length} schools to ${outputPath} (manifest url=${manifest.url}, ` +
   `cityIndex=${cityIndex.length}, nameIndex=${nameIndex.length}, ` +

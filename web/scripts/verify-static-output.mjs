@@ -447,6 +447,51 @@ export async function verifyStaticOutput({
     throw new Error('manifest declares gzip but payload does not have gzip magic bytes')
   }
 
+  // 地図・一覧用の全国データ（plan_data-usage-audit.md C2）。ブラウザが毎回読むのはこちら
+  // なので、**全件 JSON より確実に軽いこと**と、地図が使う列がそろっていることを保証する。
+  if (typeof manifest.mapUrl !== 'string' || !/^\/schools-map-[0-9a-f]+\.json(?:\.gz)?$/i.test(manifest.mapUrl)) {
+    throw new Error('schools-manifest.json mapUrl is invalid')
+  }
+  const mapBuffer = await readFile(join(absoluteDist, manifest.mapUrl.slice(1)))
+  const mapPayload = decodeSchoolsPayload(mapBuffer)
+  assertNoInternalSchoolFields({ schools: mapPayload.schools }, manifest.mapUrl)
+  if (!mapPayload.isGzip) {
+    throw new Error('map payload does not have gzip magic bytes')
+  }
+  if (mapPayload.schools.length !== manifest.count) {
+    throw new Error(
+      `map payload count mismatch: manifest=${manifest.count} payload=${mapPayload.schools.length}`,
+    )
+  }
+  if (!Number.isInteger(manifest.mapCount) || manifest.mapCount !== manifest.count) {
+    throw new Error('schools-manifest.json mapCount is invalid')
+  }
+  // 入試履歴の本体・沿革は詳細シートが単体 JSON で補う。ここに残っていたら軽量化が効いていない
+  // （バイト数そのものの上限は C5 のバジェットで別に見る。ここは「何を載せないか」の検査）。
+  const mapOnlyForbidden = new Set([
+    'admission_recruitment_units',
+    'school_admission_stats',
+    'predecessor_relationships',
+    'school_name_history',
+  ])
+  const mapLeak = findForbiddenKey({ schools: mapPayload.schools }, mapOnlyForbidden)
+  if (mapLeak) {
+    throw new Error(`map payload still carries detail-only data at ${mapLeak}`)
+  }
+  // 地図のピン・フィルタ・一覧が読む列。1 つでも欠けるとピンが描けない / 絞り込みが壊れる。
+  const MAP_REQUIRED_FIELDS = [
+    'id', 'name', 'prefecture', 'address', 'latitude', 'longitude',
+    'ownership', 'gender_type', 'type', 'course_times',
+    'school_departments', 'school_deviation_values',
+  ]
+  for (const school of mapPayload.schools) {
+    for (const field of MAP_REQUIRED_FIELDS) {
+      if (school[field] === undefined) {
+        throw new Error(`map payload is missing ${field} for ${school.id ?? '(unknown school)'}`)
+      }
+    }
+  }
+
   // gen-seo-pages.mjs が og:description の収録範囲を差し替え損ねると、
   // 本番の OGP カードにプレースホルダがそのまま出る。dist 全体で 0 件であることを保証する。
   const topHtml = await readFile(join(absoluteDist, 'index.html'), 'utf8')

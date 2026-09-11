@@ -221,6 +221,15 @@ export interface School {
   admission_selections: AdmissionSelection[]
   predecessor_relationships: SchoolRelationshipSummary[]
   name_history: SchoolNameHistory[]
+  /**
+   * 最新年度の一次募集倍率（ビルド時に畳んだ値）。
+   *
+   * 地図・一覧用の全国データ（`/schools-map-<hash>.json.gz`・lib/mapPayload.ts）は
+   * 入試履歴の本体を持たないため、この 1 組だけを載せる。入試履歴を持つ経路
+   * （学校単体 JSON・Supabase 直読み）では入らない（undefined）。
+   * 読むときは lib/admission.ts の latestPrimaryAdmission() を通すこと。
+   */
+  latest_primary_admission?: { year: number; ratio: number } | null
 }
 
 export interface Favorite {
