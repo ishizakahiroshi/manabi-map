@@ -1,0 +1,10 @@
+# manabi-map のプロジェクト設定
+#
+# archive_dir: docsweep の既定はプロジェクト直下の archive/ だが、このリポジトリは
+# public のため、作業 md（plan / bugfix / 監査記録）が公開ディレクトリに出てしまう。
+# gitignore 済みの docs/local/archive/ を正典とする。
+#
+# 注意: リポジトリ直下の archive/ には 2026-07 時点の作業 md が 14 本 tracked のまま
+# 残っている（v0.4.0 の西日本展開 plan 群など）。本設定は今後の移送先を決めるだけで、
+# 既存分は移動しない。公開リポからの削除コミットになるため、統合するなら別途判断する。
+archive_dir: docs/local/archive
