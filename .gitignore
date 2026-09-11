@@ -78,6 +78,10 @@ secrets.*
 
 # 公開データセットのリリース添付用出力（scripts/export-dataset.mjs）
 /dist-dataset/
+# docsweep が状態を書く場所（ラベル履歴・postpone 回数）。実行時の作業ファイルで
+# ソースではない。promote / relabel / sweep のたびに書き換わる
+.docsweep/
+
 # === obsidian-link: managed ===
 /docs/obsidian/
 # === /obsidian-link: managed ===

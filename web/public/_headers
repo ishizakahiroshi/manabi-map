@@ -3,6 +3,10 @@
 # プレビューで主要フローの違反ゼロを確認してから enforce へ昇格する。
 # 地図インフラ移行（C2: Protomaps/R2 + 国土地理院 API）後は img-src / connect-src の
 # 許可先を差し替えること。geolocation は現在地機能で使うため制限しない。
+# 2026-09-11: Web フォント撤去にともない style-src から fonts.googleapis.com を、
+# font-src から fonts.gstatic.com を外した（font-src は 'self' に落とした）。
+# 経緯と実測は web/index.html の head のコメントを参照。フォントを再導入するなら
+# ここの style-src / font-src も同時に戻すこと（忘れると Report-Only のまま違反が積もる）。
 # Cloudflare Web Analytics の beacon は enforce 昇格時にブロックされると計測が静かに止まる
 # （plan_analytics-measurement-repair.md C1）。script-src で beacon 本体を
 # static.cloudflareinsights.com から読み込み、connect-src で cloudflareinsights.com へ
@@ -13,7 +17,13 @@
   X-Content-Type-Options: nosniff
   Referrer-Policy: strict-origin-when-cross-origin
   Permissions-Policy: camera=(), microphone=(), payment=(), usb=()
-  Content-Security-Policy-Report-Only: default-src 'self'; script-src 'self' https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: https://tile.openstreetmap.org blob:; connect-src 'self' https://*.supabase.co https://nominatim.openstreetmap.org https://msearch.gsi.go.jp https://cloudflareinsights.com; frame-ancestors 'none'; report-uri /api/csp-report
+  Content-Security-Policy-Report-Only: default-src 'self'; script-src 'self' https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data: https://tile.openstreetmap.org blob:; connect-src 'self' https://*.supabase.co https://nominatim.openstreetmap.org https://msearch.gsi.go.jp https://cloudflareinsights.com; frame-ancestors 'none'; report-uri /api/csp-report
+
+# Vite のビルド成果物。ファイル名に内容ハッシュが入るので、中身が変われば URL も変わる。
+# よって永久キャッシュ可（2026-09-11 追加・plan_edge-cache-and-security-headers.md C1）。
+# index.html はデプロイのたびに中身が変わるので、ここに巻き込まないこと。
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
 
 # schools データの build hash 付き URL 化（plan_schools-json-cache-strategy.md）:
 # - manifest は常に最新を取る (no-store)
