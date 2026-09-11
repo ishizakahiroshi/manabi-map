@@ -9,7 +9,13 @@ import {
 } from './useSchools'
 import { getInitialData, type SingleSchoolPayload } from '../lib/initialData'
 
-// 学校詳細ページ（/school/:id 直リンク着地）のデータ取得。
+// 学校詳細の単体データ取得。
+//
+// 使い手は 2 つ:
+//   1. 学校詳細ページ（/school/:id 直リンク着地・SchoolDetailPage）
+//   2. 地図・お気に入り・比較から開く詳細シート（SchoolDetailSheet の補完）
+//      — 全国データが地図用の軽い形になり、入試履歴・沿革を持たなくなったため
+//      （docs/local/plan_data-usage-audit.md C2）
 //
 // 全件 JSON（gzip 約 1.7MB / 展開約 28MB）は読まず、gen-schools-json.mjs が出力する
 // 学校単体 JSON（/school-data/<id>.json・数 KB〜数十 KB）だけで初期描画を完結させる
@@ -79,23 +85,37 @@ function initialDetail(id: string | null): FetchedDetail | null {
   }
 }
 
+/**
+ * school-data の `?v=` に付けるバージョン。**ページ内で 1 回だけ取る。**
+ *
+ * manifest は no-store なので取るたびに実通信が走る（約 5KB）。
+ * 詳細シートは地図のピンを押すたびに開くようになったため
+ * （docs/local/plan_data-usage-audit.md C2）、都度取ると 1 クリックごとに
+ * 往復が 1 本増える。全件データが 1 セッション 1 回しか取り直されないのと同じ粒度で足りる。
+ */
+let schoolDataVersionPromise: Promise<string | null> | null = null
+
+function schoolDataVersion(): Promise<string | null> {
+  schoolDataVersionPromise ??= (async () => {
+    try {
+      const manifestRes = await fetch('/schools-manifest.json', { cache: 'no-store' })
+      if (!manifestRes.ok) return null
+      const manifest = (await manifestRes.json()) as { schoolDataVersion?: string }
+      return typeof manifest.schoolDataVersion === 'string' &&
+        /^[0-9a-f]{6,64}$/i.test(manifest.schoolDataVersion)
+        ? manifest.schoolDataVersion
+        : null
+    } catch {
+      // manifest が無い環境（gen 前の dev サーバー等）はバージョン無しで取得する。
+      return null
+    }
+  })()
+  return schoolDataVersionPromise
+}
+
 async function fetchSingleSchool(id: string): Promise<FetchedDetail> {
   // manifest から school-data のバージョンを取る（取れなくても本体は取りに行く）。
-  let version: string | null = null
-  try {
-    const manifestRes = await fetch('/schools-manifest.json', { cache: 'no-store' })
-    if (manifestRes.ok) {
-      const manifest = (await manifestRes.json()) as { schoolDataVersion?: string }
-      if (
-        typeof manifest.schoolDataVersion === 'string' &&
-        /^[0-9a-f]{6,64}$/i.test(manifest.schoolDataVersion)
-      ) {
-        version = manifest.schoolDataVersion
-      }
-    }
-  } catch {
-    // manifest が無い環境（gen 前の dev サーバー等）はバージョン無しで取得する。
-  }
+  const version = await schoolDataVersion()
 
   const url = `/school-data/${id}.json${version ? `?v=${version}` : ''}`
   const response = await fetch(url)

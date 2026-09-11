@@ -64,6 +64,8 @@ export interface SchoolRow {
   admission_recruitment_units?: AdmissionRecruitmentUnitRow[]
   predecessor_relationships?: SchoolRelationshipRow[] | null
   school_name_history?: SchoolNameHistory[] | null
+  /** 地図・一覧用の全国データだけが持つ、畳んだ最新年度倍率（lib/mapPayload.ts）。 */
+  latest_primary_admission?: { year: number; ratio: number } | null
 }
 
 interface SchoolRelationshipRow {
@@ -158,6 +160,7 @@ export function mapSchoolRows(rows: SchoolRow[]): School[] {
         departments,
         admission_stats: (r.school_admission_stats ?? []) as AdmissionStat[],
         admission_selections: admissionSelections,
+        latest_primary_admission: r.latest_primary_admission ?? undefined,
         predecessor_relationships: (r.predecessor_relationships ?? [])
           .filter((relationship) => relationship.predecessor != null)
           .map((relationship) => ({
@@ -230,17 +233,28 @@ async function fetchSchoolRows(): Promise<SchoolRow[]> {
 
   // build hash 付き URL 化（docs/local/plan_schools-json-cache-strategy.md）:
   // まず `/schools-manifest.json` を no-store で fetch し、そこに書かれた
-  // hash 付き URL（例: `/schools-abc1234567.json`）を続けて fetch する。
+  // hash 付き URL を続けて fetch する。
   // manifest は常に fresh を取り、実体 JSON はブラウザ / CDN に永続キャッシュ可。
-  // dev サーバー（public/ 生成前）や旧デプロイ経路での fallback として、
-  // manifest 取得に失敗したら従来の `/schools.json` を試す。
+  //
+  // **取りに行くのは地図・一覧用の `mapUrl`（`/schools-map-<hash>.json.gz`）**
+  // （docs/local/plan_data-usage-audit.md C2）。入試履歴の本体と沿革を落としてあり、
+  // 全件 JSON（`url`・3.79MB）の 1/5 で済む。詳細シートに要る残りは、シート側が
+  // 学校単体 JSON（`/school-data/<id>.json`）で補う（components/SchoolDetailSheet.tsx）。
+  //
+  // fallback は mapUrl → url（全件）→ `/schools.json`。mapUrl を出さない古いデプロイや
+  // gen 前の dev サーバーでも、従来どおり全件で動く。
   let dataUrl = '/schools.json'
   try {
     const manifestRes = await fetch('/schools-manifest.json', { cache: 'no-store' })
     if (manifestRes.ok) {
-      const manifest = (await manifestRes.json()) as { url?: string }
+      const manifest = (await manifestRes.json()) as { url?: string; mapUrl?: string }
       // 同一オリジンの schools JSON のみ許可（絶対 URL や path traversal を拒否）
       if (
+        typeof manifest.mapUrl === 'string' &&
+        /^\/schools-map-[0-9a-f]+\.json(?:\.gz)?$/i.test(manifest.mapUrl)
+      ) {
+        dataUrl = manifest.mapUrl
+      } else if (
         typeof manifest.url === 'string' &&
         /^\/schools(?:-[0-9a-f]+)?\.json(?:\.gz)?$/i.test(manifest.url)
       ) {
@@ -318,10 +332,15 @@ export function hydrateAdmissionSourceRefs(
 // ---------------------------------------------------------------------------
 // モジュールレベル共有ストア
 //
-// useSchools() は MapPage / FavoritesPage / ComparePage から個別に呼ばれるが、
+// useSchools() は MapPage / FavoritesPage / ComparePage 等から個別に呼ばれるが、
 // 学校データは全画面で同一なので、モジュール変数に 1 度だけキャッシュして
 // 画面遷移での再フェッチをなくす。マウント中のすべての useSchools が同じ
 // ストアを購読し、reload() 明示時のみ再取得（バックグラウンド再検証）する。
+//
+// **ここに入るのは地図・一覧用の軽い行**（src/lib/mapPayload.ts が作る形）。
+// 入試履歴の本体・沿革・前身校は入っていないので、詳細シートはそれらを
+// 学校単体 JSON で補う（components/SchoolDetailSheet.tsx）。
+// 「全件キャッシュにあるはず」を前提にした読み取りを新しく足さないこと。
 //
 // 将来の分県ロード / 遅延ロード（v0.2 関東拡大）へは、この 1 キャッシュを
 // 「県キー付きの Map<pref, School[]>」へ拡張する最小差分で移行できる。

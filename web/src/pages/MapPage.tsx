@@ -7,7 +7,7 @@ import 'leaflet.markercluster/dist/MarkerCluster.css'
 import 'leaflet.markercluster/dist/MarkerCluster.Default.css'
 import type { CourseTime, DeptUiGroup, School } from '../types/school'
 import { band, topDev, shortSchoolName, escapeHtml } from '../lib/format'
-import { APPLICANT_RATIO_BANDS, applicantRatioBand, primaryAdmissionTrend, type ApplicantRatioBand } from '../lib/admission'
+import { APPLICANT_RATIO_BANDS, applicantRatioBand, latestPrimaryAdmission, type ApplicantRatioBand } from '../lib/admission'
 import { useI18n } from '../contexts/I18nContext'
 import { useFormat } from '../hooks/useFormat'
 import {
@@ -540,7 +540,9 @@ export function MapPage({ userData }: Props) {
           fmt.displayCode(s),
           fmt.devLabel(s),
           (() => {
-            const latest = primaryAdmissionTrend(s)?.annual[0]
+            // 全国データはビルド時に畳んだ 1 組だけを持つ（lib/mapPayload.ts）。
+            // 入口は latestPrimaryAdmission に揃える（詳細シートと同じ値になる）。
+            const latest = latestPrimaryAdmission(s)
             return latest
               ? t('map.primaryAdmissionLatest', { year: latest.year, ratio: latest.ratio.toFixed(2) })
               : ''
