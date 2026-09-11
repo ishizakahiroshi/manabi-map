@@ -13,8 +13,13 @@
   --color-bad: #b3261e;
   --color-home-blue: #3b7ddd;
   --color-fav-yellow: #e6a419;
-  --font-display: "Baloo 2", "Zen Maru Gothic", system-ui, cursive;
-  --font-body: "Zen Maru Gothic", system-ui, sans-serif;
+  /* 2026-09-11: Web フォント（Zen Maru Gothic / Baloo 2）を撤去し端末標準へ戻した。
+     理由と実測は web/index.html の head のコメントと
+     docs/local/bugfix_cls-chip-row_2026-09-11.md を参照。
+     --font-display と --font-body は役割（見出し / 本文）を残すために別トークンのまま置く。
+     値を変えるときは両方を揃えること。 */
+  --font-display: system-ui, -apple-system, "Segoe UI", "Hiragino Sans", "Noto Sans JP", "Yu Gothic UI", Meiryo, sans-serif;
+  --font-body: system-ui, -apple-system, "Segoe UI", "Hiragino Sans", "Noto Sans JP", "Yu Gothic UI", Meiryo, sans-serif;
 }
 
 :root {
@@ -27,8 +32,8 @@
   --ok: #2e7d4f;
   --warn: #b8860b;
   --bad: #b3261e;
-  --display: "Baloo 2", "Zen Maru Gothic", system-ui, cursive;
-  --body: "Zen Maru Gothic", system-ui, sans-serif;
+  --display: system-ui, -apple-system, "Segoe UI", "Hiragino Sans", "Noto Sans JP", "Yu Gothic UI", Meiryo, sans-serif;
+  --body: system-ui, -apple-system, "Segoe UI", "Hiragino Sans", "Noto Sans JP", "Yu Gothic UI", Meiryo, sans-serif;
   --home-blue: #3b7ddd;
   --fav-yellow: #e6a419;
   --phone-w: 390px;

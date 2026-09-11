@@ -34,9 +34,14 @@
     <link rel="icon" type="image/x-icon" sizes="48x48" href="/favicon.ico" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <link rel="manifest" href="/manifest.webmanifest" />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;700;800&family=Zen+Maru+Gothic:wght@400;500;700&display=swap" rel="stylesheet" />
+    <!-- Web フォントは 2026-09-11 に撤去した。Zen Maru Gothic（本文）と Baloo 2（見出し）を
+         Google Fonts から読んでいたが、日本語は分割ファイル数が多く、県ページ 1 枚の初回表示で
+         実測 約 2.8MB（CSS 87KB + woff2 3 ウェイト分）を落としていた。サイト本体（HTML 36KB +
+         JS 249KB + CSS 12KB ＝ 約 300KB）の 9 倍にあたる。あわせて display=swap による
+         差し替えが .chip-row の折り返し行数を変え、CLS Poor 12% の主因になっていた
+         （docs/local/bugfix_cls-chip-row_2026-09-11.md）。フォントは端末標準に戻し、
+         font-family は web/src/index.css の --font-body / --font-display に一本化する。
+         再導入を検討するときは、必ず上記の実測をやり直してから決めること。 -->
     <title>Manabi Map（まなびマップ）｜親子で使う、学校選びの地図ノート</title>
     <!-- サイト名の正典（検索結果のサイト名判定と仮名表記の紐づけ）。
          学校個別ページの JSON-LD は gen-seo-pages.mjs が head 閉じタグの直前に追記するため、
