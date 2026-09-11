@@ -3,6 +3,15 @@
 # プレビューで主要フローの違反ゼロを確認してから enforce へ昇格する。
 # 地図インフラ移行（C2: Protomaps/R2 + 国土地理院 API）後は img-src / connect-src の
 # 許可先を差し替えること。geolocation は現在地機能で使うため制限しない。
+# 2026-09-11: connect-src へ wss://*.supabase.co を追加。
+# useMaintenanceMode.tsx の supabase.channel('app_config_maintenance') が張る Realtime の
+# WebSocket が、https://*.supabase.co は許可済みなのに scheme 違いで違反していた
+# （Report-Only なので画面は壊れていないが、ページを開くたびに違反レポートが 1 件出ていた）。
+# enforce へ昇格すると、この違反はメンテナンスモードの「即時反映」を静かに止める
+# （新規タブは REST で初期値を読むので正しく判定される。既に開いている画面だけが
+# リロードするまで通常表示のまま残る）。
+# 粒度は既存の https://*.supabase.co と揃えた。詳細は
+# docs/local/bugfix_map-direct-url-and-csp_2026-09-11.md の 5-2。
 # 2026-09-11: Web フォント撤去にともない style-src から fonts.googleapis.com を、
 # font-src から fonts.gstatic.com を外した（font-src は 'self' に落とした）。
 # 経緯と実測は web/index.html の head のコメントを参照。フォントを再導入するなら
@@ -17,7 +26,7 @@
   X-Content-Type-Options: nosniff
   Referrer-Policy: strict-origin-when-cross-origin
   Permissions-Policy: camera=(), microphone=(), payment=(), usb=()
-  Content-Security-Policy-Report-Only: default-src 'self'; script-src 'self' https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data: https://tile.openstreetmap.org blob:; connect-src 'self' https://*.supabase.co https://nominatim.openstreetmap.org https://msearch.gsi.go.jp https://cloudflareinsights.com; frame-ancestors 'none'; report-uri /api/csp-report
+  Content-Security-Policy-Report-Only: default-src 'self'; script-src 'self' https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data: https://tile.openstreetmap.org blob:; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://nominatim.openstreetmap.org https://msearch.gsi.go.jp https://cloudflareinsights.com; frame-ancestors 'none'; report-uri /api/csp-report
 
 # Vite のビルド成果物。ファイル名に内容ハッシュが入るので、中身が変われば URL も変わる。
 # よって永久キャッシュ可（2026-09-11 追加・plan_edge-cache-and-security-headers.md C1）。
