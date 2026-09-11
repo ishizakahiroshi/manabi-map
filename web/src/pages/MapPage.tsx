@@ -21,9 +21,10 @@ import {
 } from '../lib/geo'
 import type { HomeLocation } from '../types/school'
 import { ACTIVE_REGION } from '../lib/region'
+import { loadStoredHomeZoom, rememberHomeZoom, resolveInitialMapView } from '../lib/mapView'
 import { departmentUiGroups } from '../lib/school-filter'
 import { OSM_ATTRIBUTION_HTML, PROTOMAPS_ATTRIBUTION_HTML } from '../lib/attribution'
-import { useApp } from '../contexts/AppContext'
+import { loadLocalHome, useApp } from '../contexts/AppContext'
 import { useSchools } from '../hooks/useSchools'
 import type { useUserData } from '../hooks/useUserData'
 import { SchoolDetailSheet } from '../components/SchoolDetailSheet'
@@ -256,7 +257,7 @@ export function MapPage({ userData }: Props) {
   const sharedSchoolId = searchParams.get('school')
   /** 最後に URL から開いた school id。?school= 切替に追随する */
   const sharedOpenedRef = useRef<string | null>(null)
-  const { home } = useApp()
+  const { home, homeLoadState } = useApp()
   const { t } = useI18n()
   const fmt = useFormat()
   const { schools, loading, error } = useSchools()
@@ -433,12 +434,31 @@ export function MapPage({ userData }: Props) {
     FILTER_CATEGORIES.reduce((n, [, , list, set]) => (set.size < list.length ? n + 1 : n), 0) +
     (filters.onlyIntegrated ? 1 : 0)
 
+  // 地図の初期表示に「自分の推測」で寄せたかどうか。推測が外れた時（設定地点が実は無い・
+  // DB 読み込み失敗・サインアウト）に、下の home effect が全国表示へ戻すために使う。
+  const restoredInitialViewRef = useRef(false)
+  // ?school= で開いた場合は最終的に該当校（z13）へ寄るので、通学圏の復元はしない。
+  // マウント時点の値だけが要るので ref で固定する（初期化の effect は 1 回しか走らない）。
+  const initialSharedSchoolIdRef = useRef(sharedSchoolId)
+
   useEffect(() => {
     if (!mapNodeRef.current) return
 
+    // 設定地点と、前回その地点で着地した通学圏のズーム段階を端末に覚えている場合は、
+    // 最初からそこへ寄せる。全国データ（0.8MB）の到着を待たずにズームが決まるので、
+    // 1 度も見られないまま捨てられる z5 の全国タイルが無くなる（C3 案 A）。
+    // 初回 render の home は必ず null（AppContext.tsx:98-101 の hydration 対策）なので、
+    // ここでは context ではなく localStorage を直接読む。useEffect はプリレンダー時に
+    // 走らないため hydration には影響しない。
+    const initialView = resolveInitialMapView(
+      initialSharedSchoolIdRef.current ? null : loadLocalHome(),
+      loadStoredHomeZoom(),
+    )
+    restoredInitialViewRef.current = initialView.restored
+
     const map = L.map(mapNodeRef.current, { zoomControl: false }).setView(
-      [ACTIVE_REGION.mapCenter.lat, ACTIVE_REGION.mapCenter.lng],
-      ACTIVE_REGION.mapZoom,
+      [initialView.lat, initialView.lng],
+      initialView.zoom,
     )
     map.attributionControl.setPrefix(false)
     // 縮尺バー（幅固定）。ズームを変えると「この長さが何 m / 何 km か」が出るので、
@@ -468,6 +488,7 @@ export function MapPage({ userData }: Props) {
 
     return () => {
       map.off('moveend', onMoveEnd)
+      restoredInitialViewRef.current = false
       cancelBaseLayer()
       markerLayerRef.current = null
       clusterLayerRef.current = null
@@ -485,9 +506,25 @@ export function MapPage({ userData }: Props) {
   useEffect(() => {
     if (!mapRef) return
     if (!home) {
+      // 復元中（homeLoadState='loading'）は「設定地点なし」と決めつけない。ここで全国中心へ
+      // 引き戻すと、上で通学圏へ復元した直後の 1 回で「全国の中心を通学圏のズームで拡大した
+      // 海の上」を映してしまう（初回 render の home は必ず null になるため必ず通る経路）。
+      if (homeLoadState === 'loading') return
+      if (restoredInitialViewRef.current) {
+        // 覚えていた通学圏が実際には使えなかった（サインアウト・DB 読み込み失敗・設定地点の
+        // 削除）。自分の推測を取り消し、現在ズームではなく全国表示そのものへ戻す。
+        restoredInitialViewRef.current = false
+        mapRef.setView(
+          [ACTIVE_REGION.mapCenter.lat, ACTIVE_REGION.mapCenter.lng],
+          ACTIVE_REGION.mapZoom,
+        )
+        return
+      }
       mapRef.setView([ACTIVE_REGION.mapCenter.lat, ACTIVE_REGION.mapCenter.lng], mapRef.getZoom())
       return
     }
+    // 設定地点が確定したので、以降のサインアウト等は従来どおりの経路で扱う
+    restoredInitialViewRef.current = false
     if (schools.length === 0) {
       // データ到着前は中心だけ自宅へ追従（到着後に下の fitBounds が走る）
       mapRef.setView([home.lat, home.lng], mapRef.getZoom())
@@ -496,8 +533,13 @@ export function MapPage({ userData }: Props) {
     const key = `${home.lat},${home.lng}`
     if (appliedHomeViewRef.current === key) return
     appliedHomeViewRef.current = key
-    mapRef.fitBounds(homeViewBounds(home, schools))
-  }, [home, schools, mapRef])
+    const bounds = homeViewBounds(home, schools)
+    mapRef.fitBounds(bounds)
+    // 次回この端末で地図を開いた時、全国表示を挟まずここへ寄せられるようにズーム段階を覚える。
+    // アニメーション中の getZoom() は当てにならないので、fitBounds が選ぶのと同じ値を
+    // 同期で返す getBoundsZoom を使う。
+    rememberHomeZoom(home, mapRef.getBoundsZoom(bounds))
+  }, [home, homeLoadState, schools, mapRef])
 
   // 「地図で見る」導線（/map?school=<id>）で開いたら、地図を該当校へ寄せて
   // 詳細シートをピークで開く（同じ id の再実行はしない）。ここで全画面にすると
