@@ -15,6 +15,7 @@ import { successorsByPredecessorId, type SuccessorRef } from '../lib/successors'
 import { cityPagePath } from '../lib/prefIndex'
 import { prefectureByName } from '../lib/prefecture'
 import { useSchoolsCache } from '../hooks/useSchools'
+import { useSchoolDetail } from '../hooks/useSchoolDetail'
 import { useApp } from '../contexts/AppContext'
 import { useAuth } from '../contexts/AuthContext'
 import { useI18n } from '../contexts/I18nContext'
@@ -75,7 +76,33 @@ interface Props {
  */
 const NEIGHBOR_PREVIEW_COUNT = 5
 
-export function SchoolDetailSheet({ school, onClose, userData, extras, standalone, initialPeek }: Props) {
+/**
+ * 全国データ（`/schools-map-<hash>.json.gz`）は入試履歴の本体・沿革・前身校を持たない
+ * （docs/local/plan_data-usage-audit.md C2・lib/mapPayload.ts）。
+ * そのため **extras を渡されない経路（地図・お気に入り・比較のシート）は、
+ * 開いた時に学校単体 JSON（`/school-data/<id>.json`・gzip 数 KB）で中身を補う。**
+ *
+ * /school/:id（SchoolDetailPage）は既に単体 JSON で描いていて extras を渡すので、
+ * ここでは何もしない（二重 fetch しない）。
+ *
+ * 補完が届くまでは全国データぶん（校名・設置者・偏差値・所在地・学科）で描き、
+ * 届いた時点で入試履歴・沿革・近隣校が入る。校名や偏差値が出るまで待たせない。
+ */
+export function SchoolDetailSheet(props: Props) {
+  const { school, extras } = props
+  const needsHydration = extras == null && school != null
+  const hydrated = useSchoolDetail(needsHydration ? school.id : null)
+  if (!needsHydration) return <SchoolDetailSheetView {...props} />
+  return (
+    <SchoolDetailSheetView
+      {...props}
+      school={hydrated.school ?? school}
+      extras={hydrated.extras}
+    />
+  )
+}
+
+function SchoolDetailSheetView({ school, onClose, userData, extras, standalone, initialPeek }: Props) {
   const navigate = useNavigate()
   const { home, toast, setLoginOpen } = useApp()
   const { session } = useAuth()

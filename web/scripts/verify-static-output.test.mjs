@@ -129,6 +129,26 @@ const SCHOOLS = [
 ]
 
 /**
+ * 地図・一覧用の全国データ（plan_data-usage-audit.md C2・src/lib/mapPayload.ts が作る形）。
+ * ピン・フィルタ・一覧が読む列だけを持ち、入試履歴の本体と沿革は持たない
+ * （詳細シートは学校単体 JSON で補う）。
+ */
+const MAP_SCHOOLS = SCHOOLS.map((s) => ({
+  ...s,
+  type: 'high_school',
+  ownership: 'prefectural',
+  gender_type: 'coed',
+  is_integrated: s.id === 'synthetic-a',
+  address: `${s.prefecture}${s.city}1-1-1`,
+  course_times: ['fulltime'],
+  school_departments: [
+    { id: `${s.id}-dept`, school_id: s.id, name: '普通科', course_type: 'general', ui_group: 'general' },
+  ],
+  school_deviation_values: [{ department_id: `${s.id}-dept`, value: 50, is_active: true }],
+  latest_primary_admission: { year: 2025, ratio: 1.1 },
+}))
+
+/**
  * 前橋市の pref-index エントリ。**description の生成と pref-index ファイルで同じ配列を使う**
  * （別々に作ると、片方だけ条件が変わったときに検査が食い違いを見逃す）。
  * 学科ガードを通る形にし、合成第一だけ中高一貫にして「1 校以上のときだけ出す」分岐も踏む。
@@ -169,6 +189,11 @@ async function syntheticDist() {
   const body = Buffer.from(JSON.stringify({ formatVersion: 2, sourceCatalog: [], schools: SCHOOLS }))
   // 拡張子ではなくmagic byteを見ることを検証するため、gzipを.json名で保存する。
   await writeFile(join(dir, 'schools-a1b2c3d4e5.json'), gzipSync(body))
+  // 地図・一覧用の全国データ（plan_data-usage-audit.md C2）。
+  await writeFile(
+    join(dir, 'schools-map-b2c3d4e5f6.json.gz'),
+    gzipSync(Buffer.from(JSON.stringify({ formatVersion: 2, sourceCatalog: [], schools: MAP_SCHOOLS }))),
+  )
   await writeFile(join(dir, 'city-index-0123456789.json'), JSON.stringify([
     { pref: '群馬県', prefSlug: 'gunma', city: '前橋市', kana: 'まえばしし', count: 2 },
   ]))
@@ -177,6 +202,7 @@ async function syntheticDist() {
   ))
   await writeFile(join(dir, 'schools-manifest.json'), JSON.stringify({
     url: '/schools-a1b2c3d4e5.json', count: SCHOOLS.length, compression: 'gzip',
+    mapUrl: '/schools-map-b2c3d4e5f6.json.gz', mapCount: SCHOOLS.length, mapFormatVersion: 2,
     cityIndexUrl: '/city-index-0123456789.json', nameIndexUrl: '/school-name-index-0123456789.json',
     schoolDataVersion: 'a1b2c3d4e5', schoolDataCount: SCHOOLS.length,
     prefDataUrls: { gunma: '/school-data/pref-gunma.json' },
