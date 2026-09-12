@@ -193,6 +193,7 @@ export const ja: MessageTree = {
     loadingSchools: '学校データを読み込み中…',
     filterOther: 'その他',
     integratedOnly: '中高一貫のみ',
+    sharedTitle: '共有された地点周辺',
     share: 'この地図を共有',
     shareCopied: '地図のリンクをコピーしました',
     shareFailed: 'コピーできませんでした',
