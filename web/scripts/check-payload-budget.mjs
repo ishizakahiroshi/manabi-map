@@ -46,7 +46,7 @@ const FILE_BUDGETS = [
     // 切り出したぶんが測定から消えて「減った」と誤読する（実際は同時に落ちている）。
     entryModuleSet: true,
     budget: 290_000,
-    measured: 233_105,
+    measured: 187_630,
     measuredAt: '2026-09-12',
     why: 'アプリ本体（entry + modulepreload されるチャンク）。全画面に乗るので 1 バイトの増加が全画面に効く',
   },
@@ -99,7 +99,7 @@ const COMPOSITE_BUDGETS = [
     key: 'pref-page-initial',
     parts: ['pref-page-html', 'app-js', 'app-css'],
     budget: 380_000,
-    measured: 299_709,
+    measured: 254_238,
     measuredAt: '2026-09-12',
     why: '県ページの初回表示。検索から来た人が最初に払う量（最大の県＝東京で測る）',
   },
@@ -107,9 +107,9 @@ const COMPOSITE_BUDGETS = [
     key: 'map-initial',
     parts: ['app-js', 'app-css', 'map-js', 'map-css', 'map-payload'],
     budget: 1_300_000,
-    measured: 1_120_813,
+    measured: 1_075_339,
     measuredAt: '2026-09-12',
-    why: 'トップから地図へ入るまでの累計（地図タイルを除く）。2026-09-11 の Preview 実測は 1,142,918 B で、C4 の分割後は 1,120,813 B',
+    why: 'トップから地図へ入るまでの累計（地図タイルを除く）。2026-09-11 の Preview 実測は 1,142,918 B で、C4 の分割後は 1,120,813 B、Markdown 描画器の分離後は 1,075,339 B',
   },
 ]
 
