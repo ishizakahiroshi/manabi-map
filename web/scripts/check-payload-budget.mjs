@@ -39,10 +39,16 @@ const WEB_ROOT = join(fileURLToPath(new URL('.', import.meta.url)), '..')
 const FILE_BUDGETS = [
   {
     key: 'app-js',
-    pattern: /^assets\/index-[^/]+\.js$/,
+    // **1 ファイルではなく「初回に必ず読む JS の集合」を測る。**
+    // dist/index.html の entry <script> と <link rel="modulepreload"> を全部足す。
+    // ルート単位の動的 import（C4）を入れると、共通依存が別チャンクへ切り出されて
+    // entry と一緒に modulepreload される。`assets/index-*.js` だけを見ていると、
+    // 切り出したぶんが測定から消えて「減った」と誤読する（実際は同時に落ちている）。
+    entryModuleSet: true,
     budget: 290_000,
-    measured: 253_290,
-    why: 'アプリ本体。全画面に乗るので 1 バイトの増加が全画面に効く',
+    measured: 233_105,
+    measuredAt: '2026-09-12',
+    why: 'アプリ本体（entry + modulepreload されるチャンク）。全画面に乗るので 1 バイトの増加が全画面に効く',
   },
   {
     key: 'app-css',
@@ -93,15 +99,17 @@ const COMPOSITE_BUDGETS = [
     key: 'pref-page-initial',
     parts: ['pref-page-html', 'app-js', 'app-css'],
     budget: 380_000,
-    measured: 317_283,
+    measured: 299_709,
+    measuredAt: '2026-09-12',
     why: '県ページの初回表示。検索から来た人が最初に払う量（最大の県＝東京で測る）',
   },
   {
     key: 'map-initial',
     parts: ['app-js', 'app-css', 'map-js', 'map-css', 'map-payload'],
     budget: 1_300_000,
-    measured: 1_143_138,
-    why: 'トップから地図へ入るまでの累計（地図タイルを除く）。2026-09-11 の Preview 実測 1,142,918 B と整合',
+    measured: 1_120_813,
+    measuredAt: '2026-09-12',
+    why: 'トップから地図へ入るまでの累計（地図タイルを除く）。2026-09-11 の Preview 実測は 1,142,918 B で、C4 の分割後は 1,120,813 B',
   },
 ]
 
@@ -133,6 +141,25 @@ function walk(dir, base = dir, out = []) {
 function transferSize(file) {
   if (file.rel.endsWith('.gz')) return file.size
   return gzipSync(readFileSync(file.full), { level: 9 }).length
+}
+
+/**
+ * dist/index.html が初回に必ず読む JS の集合を返す（entry script + modulepreload）。
+ * プリレンダーした各ページ（県・学校・legal…）は同じ index.html を雛形にするので、
+ * ここで測った集合がそのまま全ページの初期 JS になる。
+ */
+function entryModuleFiles(files, distPath) {
+  const html = readFileSync(join(distPath, 'index.html'), 'utf8')
+  const refs = new Set()
+  for (const m of html.matchAll(/<script[^>]+type="module"[^>]+src="([^"]+)"/g)) refs.add(m[1])
+  for (const m of html.matchAll(/<link[^>]+rel="modulepreload"[^>]+href="([^"]+)"/g)) refs.add(m[1])
+  const wanted = [...refs].map((r) => r.replace(/^\//, ''))
+  const matched = files.filter((f) => wanted.includes(f.rel))
+  if (matched.length !== wanted.length) {
+    const missing = wanted.filter((w) => !matched.some((f) => f.rel === w))
+    throw new Error(`[budget] index.html が参照する JS が dist にありません: ${missing.join(', ')}`)
+  }
+  return matched
 }
 
 function collectHosts() {
@@ -172,21 +199,32 @@ function main() {
   const failures = []
 
   for (const b of FILE_BUDGETS) {
-    const matched = files.filter((f) => b.pattern.test(f.rel))
+    const matched = b.entryModuleSet
+      ? entryModuleFiles(files, distPath)
+      : files.filter((f) => b.pattern.test(f.rel))
     if (matched.length === 0) {
       failures.push(`[budget] ${b.key}: 対象ファイルが見つかりません（pattern=${b.pattern}）`)
       continue
     }
     const sized = matched.map((f) => ({ ...f, t: transferSize(f) }))
-    const target = b.pickLargest
-      ? sized.reduce((a, c) => (c.t > a.t ? c : a))
-      : sized.sort((a, c) => c.t - a.t)[0]
+    // entryModuleSet は「初回に必ず読む集合」なので合計で見る。それ以外は 1 ファイル。
+    const target = b.entryModuleSet
+      ? {
+          rel: sized
+            .sort((a, c) => c.t - a.t)
+            .map((f) => f.rel)
+            .join(' + '),
+          t: sized.reduce((a, c) => a + c.t, 0),
+        }
+      : b.pickLargest
+        ? sized.reduce((a, c) => (c.t > a.t ? c : a))
+        : sized.sort((a, c) => c.t - a.t)[0]
     measuredByKey.set(b.key, target.t)
     const over = target.t > b.budget
     if (over) {
       failures.push(
         `[budget] ${b.key} が上限を超えました: ${target.t} B > ${b.budget} B（${target.rel}）\n` +
-          `         2026-09-11 の実測は ${b.measured} B。理由: ${b.why}`,
+          `         ${b.measuredAt ?? '2026-09-11'} の実測は ${b.measured} B。理由: ${b.why}`,
       )
     }
     rows.push({ key: b.key, file: target.rel, size: target.t, budget: b.budget, over })
@@ -204,7 +242,7 @@ function main() {
       failures.push(
         `[budget] ${c.key} が上限を超えました: ${total} B > ${c.budget} B\n` +
           `         内訳: ${c.parts.map((p) => `${p}=${measuredByKey.get(p)}`).join(' + ')}\n` +
-          `         2026-09-11 の実測は ${c.measured} B。理由: ${c.why}`,
+          `         ${c.measuredAt ?? '2026-09-11'} の実測は ${c.measured} B。理由: ${c.why}`,
       )
     }
     rows.push({ key: c.key, file: `(${c.parts.join(' + ')})`, size: total, budget: c.budget, over })
