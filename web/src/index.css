@@ -172,6 +172,9 @@ body {
   border: 2px solid var(--ink); border-radius: 16px;
   box-shadow: 4px 4px 0 var(--line); line-height: 0;
 }
+/* QR 本体は mount 後に動的 import するので、同じ大きさの枠を先に確保しておく
+   （差し込みでヒーローの位置がずれないようにする。HeroQrCode.tsx の HERO_QR_SIZE と対） */
+.hero-qr-slot { width: 104px; height: 104px; }
 .hero-qr-caption {
   margin: 8px 0 0; text-align: center; font-family: var(--display); font-weight: 700;
   font-size: 0.8rem; color: var(--ink-soft); line-height: 1.3;
