@@ -21,7 +21,13 @@ import {
 } from '../lib/geo'
 import type { HomeLocation } from '../types/school'
 import { ACTIVE_REGION } from '../lib/region'
-import { loadStoredHomeZoom, rememberHomeZoom, resolveInitialMapView } from '../lib/mapView'
+import {
+  buildShareQuery,
+  loadStoredHomeZoom,
+  parseSharedMapView,
+  rememberHomeZoom,
+  resolveInitialMapView,
+} from '../lib/mapView'
 import { departmentUiGroups } from '../lib/school-filter'
 import { OSM_ATTRIBUTION_HTML, PROTOMAPS_ATTRIBUTION_HTML } from '../lib/attribution'
 import { loadLocalHome, useApp } from '../contexts/AppContext'
@@ -255,9 +261,16 @@ export function MapPage({ userData }: Props) {
   // （plan_seo-growth-strategy_c7 C1 / C3）。
   const [searchParams] = useSearchParams()
   const sharedSchoolId = searchParams.get('school')
+  // ?lat= &lng= &z= 付きの共有 URL（plan_map-location-share-url.md C1）。
+  // マウント時の値だけを使うので ref で固定する。壊れた値・範囲外は null になり、
+  // 従来どおりの初期表示（設定地点 → 全国）へ落ちる。
+  const sharedViewRef = useRef(parseSharedMapView(searchParams))
+  // 共有された場所を見ている間は true。⌂（設定地点へ戻す）を押したら降ろす。
+  // 見出しの文言と、設定地点を反映する effect の両方がこの状態で決まる。
+  const [sharedViewActive, setSharedViewActive] = useState(() => sharedViewRef.current !== null)
   /** 最後に URL から開いた school id。?school= 切替に追随する */
   const sharedOpenedRef = useRef<string | null>(null)
-  const { home, homeLoadState } = useApp()
+  const { home, homeLoadState, toast } = useApp()
   const { t } = useI18n()
   const fmt = useFormat()
   const { schools, loading, error } = useSchools()
@@ -450,10 +463,14 @@ export function MapPage({ userData }: Props) {
     // 初回 render の home は必ず null（AppContext.tsx:98-101 の hydration 対策）なので、
     // ここでは context ではなく localStorage を直接読む。useEffect はプリレンダー時に
     // 走らないため hydration には影響しない。
-    const initialView = resolveInitialMapView(
-      initialSharedSchoolIdRef.current ? null : loadLocalHome(),
-      loadStoredHomeZoom(),
-    )
+    // 共有 URL で開かれた場合はそこが最優先。受け取った人の設定地点で上書きしない。
+    const sharedView = sharedViewRef.current
+    const initialView = sharedView
+      ? { lat: sharedView.lat, lng: sharedView.lng, zoom: sharedView.zoom, restored: false }
+      : resolveInitialMapView(
+          initialSharedSchoolIdRef.current ? null : loadLocalHome(),
+          loadStoredHomeZoom(),
+        )
     restoredInitialViewRef.current = initialView.restored
 
     const map = L.map(mapNodeRef.current, { zoomControl: false }).setView(
@@ -505,6 +522,11 @@ export function MapPage({ userData }: Props) {
   const appliedHomeViewRef = useRef<string | null>(null)
   useEffect(() => {
     if (!mapRef) return
+    // 共有 URL で開いた位置は、あとから設定地点が届いても動かさない。
+    // ここを通すと「共有された場所が一瞬映ってから受け取った人の設定地点へ飛ぶ」
+    // （設定地点が無い人でも、下の全国中心へ引き戻す分岐に入って同じことが起きる）。
+    // 設定地点へ戻りたい時は ⌂ ボタンがあり、押すと sharedViewActive が降りてここが動き出す。
+    if (sharedViewActive) return
     if (!home) {
       // 復元中（homeLoadState='loading'）は「設定地点なし」と決めつけない。ここで全国中心へ
       // 引き戻すと、上で通学圏へ復元した直後の 1 回で「全国の中心を通学圏のズームで拡大した
@@ -539,7 +561,7 @@ export function MapPage({ userData }: Props) {
     // アニメーション中の getZoom() は当てにならないので、fitBounds が選ぶのと同じ値を
     // 同期で返す getBoundsZoom を使う。
     rememberHomeZoom(home, mapRef.getBoundsZoom(bounds))
-  }, [home, homeLoadState, schools, mapRef])
+  }, [home, homeLoadState, schools, mapRef, sharedViewActive])
 
   // 「地図で見る」導線（/map?school=<id>）で開いたら、地図を該当校へ寄せて
   // 詳細シートをピークで開く（同じ id の再実行はしない）。ここで全画面にすると
@@ -606,7 +628,11 @@ export function MapPage({ userData }: Props) {
     <div className="screen map-screen">
       <div className="header compact">
         <div className="brand">
-          {home ? t('map.nearby', { label: shortLabel(home.label) }) : t('map.title')}
+          {sharedViewActive
+            ? t('map.sharedTitle')
+            : home
+              ? t('map.nearby', { label: shortLabel(home.label) })
+              : t('map.title')}
         </div>
       </div>
 
@@ -810,11 +836,38 @@ export function MapPage({ userData }: Props) {
         </button>
         <button
           type="button"
-          onClick={() => home && mapRef?.fitBounds(homeViewBounds(home, schools))}
+          onClick={() => {
+            // 共有された場所から自分の設定地点へ戻る操作でもある
+            setSharedViewActive(false)
+            if (home) mapRef?.fitBounds(homeViewBounds(home, schools))
+          }}
           title={t('map.recenter')}
           aria-label={t('map.recenter')}
         >
           ⌂
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            if (!mapRef) return
+            const c = mapRef.getCenter()
+            // 座標は buildShareQuery が小数第 3 位（約 100m）へ丸める。生の座標は URL へ出さない。
+            const url = `${location.origin}/map?${buildShareQuery(c.lat, c.lng, mapRef.getZoom())}`
+            // http や古い環境では navigator.clipboard が無い。undefined.then で落とさない。
+            const copying = navigator.clipboard?.writeText(url)
+            if (!copying) {
+              toast(t('map.shareFailed'))
+              return
+            }
+            copying.then(
+              () => toast(t('map.shareCopied')),
+              () => toast(t('map.shareFailed')),
+            )
+          }}
+          title={t('map.share')}
+          aria-label={t('map.share')}
+        >
+          🔗
         </button>
         <button
           type="button"
