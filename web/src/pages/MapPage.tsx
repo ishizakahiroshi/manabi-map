@@ -265,6 +265,9 @@ export function MapPage({ userData }: Props) {
   // マウント時の値だけを使うので ref で固定する。壊れた値・範囲外は null になり、
   // 従来どおりの初期表示（設定地点 → 全国）へ落ちる。
   const sharedViewRef = useRef(parseSharedMapView(searchParams))
+  // 共有された場所を見ている間は true。⌂（設定地点へ戻す）を押したら降ろす。
+  // 見出しの文言と、設定地点を反映する effect の両方がこの状態で決まる。
+  const [sharedViewActive, setSharedViewActive] = useState(() => sharedViewRef.current !== null)
   /** 最後に URL から開いた school id。?school= 切替に追随する */
   const sharedOpenedRef = useRef<string | null>(null)
   const { home, homeLoadState, toast } = useApp()
@@ -520,10 +523,10 @@ export function MapPage({ userData }: Props) {
   useEffect(() => {
     if (!mapRef) return
     // 共有 URL で開いた位置は、あとから設定地点が届いても動かさない。
-    // ここを通すと「共有された場所が一瞬映ってから受け取った人の自宅へ飛ぶ」
+    // ここを通すと「共有された場所が一瞬映ってから受け取った人の設定地点へ飛ぶ」
     // （設定地点が無い人でも、下の全国中心へ引き戻す分岐に入って同じことが起きる）。
-    // 自宅へ戻りたい時は ⌂ ボタンがある。
-    if (sharedViewRef.current) return
+    // 設定地点へ戻りたい時は ⌂ ボタンがあり、押すと sharedViewActive が降りてここが動き出す。
+    if (sharedViewActive) return
     if (!home) {
       // 復元中（homeLoadState='loading'）は「設定地点なし」と決めつけない。ここで全国中心へ
       // 引き戻すと、上で通学圏へ復元した直後の 1 回で「全国の中心を通学圏のズームで拡大した
@@ -558,7 +561,7 @@ export function MapPage({ userData }: Props) {
     // アニメーション中の getZoom() は当てにならないので、fitBounds が選ぶのと同じ値を
     // 同期で返す getBoundsZoom を使う。
     rememberHomeZoom(home, mapRef.getBoundsZoom(bounds))
-  }, [home, homeLoadState, schools, mapRef])
+  }, [home, homeLoadState, schools, mapRef, sharedViewActive])
 
   // 「地図で見る」導線（/map?school=<id>）で開いたら、地図を該当校へ寄せて
   // 詳細シートをピークで開く（同じ id の再実行はしない）。ここで全画面にすると
@@ -625,7 +628,11 @@ export function MapPage({ userData }: Props) {
     <div className="screen map-screen">
       <div className="header compact">
         <div className="brand">
-          {home ? t('map.nearby', { label: shortLabel(home.label) }) : t('map.title')}
+          {sharedViewActive
+            ? t('map.sharedTitle')
+            : home
+              ? t('map.nearby', { label: shortLabel(home.label) })
+              : t('map.title')}
         </div>
       </div>
 
@@ -829,7 +836,11 @@ export function MapPage({ userData }: Props) {
         </button>
         <button
           type="button"
-          onClick={() => home && mapRef?.fitBounds(homeViewBounds(home, schools))}
+          onClick={() => {
+            // 共有された場所から自分の設定地点へ戻る操作でもある
+            setSharedViewActive(false)
+            if (home) mapRef?.fitBounds(homeViewBounds(home, schools))
+          }}
           title={t('map.recenter')}
           aria-label={t('map.recenter')}
         >

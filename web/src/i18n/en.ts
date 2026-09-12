@@ -192,6 +192,7 @@ export const en: MessageTree = {
     loadingSchools: 'Loading school data…',
     filterOther: 'Other',
     integratedOnly: 'Integrated JHS–HS only',
+    sharedTitle: 'Shared location',
     share: 'Share this map view',
     shareCopied: 'Map link copied',
     shareFailed: 'Could not copy the link',
