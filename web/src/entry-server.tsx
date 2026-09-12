@@ -3,6 +3,13 @@ import { renderToString } from 'react-dom/server'
 import { StaticRouter } from 'react-router-dom'
 import { AppShell, AppTree } from './AppTree'
 import { serializeInitialData, setInitialData, type InitialData } from './lib/initialData'
+import { markdownRuntime } from './lib/markdownRuntimeImpl'
+import { setMarkdownRuntime } from './lib/markdownRuntime'
+
+// Markdown 描画器はクライアント側では動的 import だが、SSR は同期で描き切る必要があるので
+// ここで静的に登録する。SSR バンドル（dist-ssr）は別物なのでクライアントには乗らない
+// （plan_legal-guide-markdown-split.md）。
+setMarkdownRuntime(markdownRuntime)
 
 /**
  * ビルド時プリレンダー用のエントリ。`vite build --ssr` でバンドルし、

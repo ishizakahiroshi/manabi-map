@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import Markdown from 'react-markdown'
-import remarkGfm from 'remark-gfm'
+import { getMarkdownRuntime, loadMarkdownRuntime } from '../lib/markdownRuntime'
 import siteFooterLinks from '../../data/site-footer-links.json'
 import { GUIDE_BY_SLUG } from '../lib/guides'
 import { useI18n } from '../contexts/I18nContext'
@@ -29,6 +28,24 @@ export function GuidePage({ slug }: Props) {
   // 直前に表示していた slug。切り替わったときだけ body をクリアする
   // （初回マウントで埋め込みを setBody(null) するとちらつく）。
   const lastSlug = useRef<string | null>(body != null ? slug : null)
+  // Markdown 描画器は初期バンドルから外してある（plan_legal-guide-markdown-split.md）。
+  // プリレンダー経路では main.tsx が hydrate 前に読み終えているので、初回 render から使える。
+  const [markdown, setMarkdown] = useState(() => getMarkdownRuntime())
+
+  useEffect(() => {
+    if (markdown) return
+    let alive = true
+    loadMarkdownRuntime()
+      .then((runtime) => {
+        if (alive) setMarkdown(runtime)
+      })
+      .catch(() => {
+        if (alive) setError(true)
+      })
+    return () => {
+      alive = false
+    }
+  }, [markdown])
 
   useEffect(() => {
     if (!guide) return
@@ -69,10 +86,10 @@ export function GuidePage({ slug }: Props) {
       </div>
       <main id="main-content" className="content legal-content" tabIndex={-1}>
         {error && <div className="error-banner" role="alert">{t('guide.loadFail')}</div>}
-        {body == null && !error && <p>{t('common.loading')}</p>}
-        {body != null && (
-          <Markdown
-            remarkPlugins={[remarkGfm]}
+        {(body == null || markdown == null) && !error && <p>{t('common.loading')}</p>}
+        {body != null && markdown != null && (
+          <markdown.Markdown
+            remarkPlugins={[markdown.remarkGfm]}
             components={{
               a: ({ href, children, ...rest }) => {
                 const safe = href && /^(https?:|mailto:|\/)/i.test(href) ? href : undefined
@@ -81,7 +98,7 @@ export function GuidePage({ slug }: Props) {
             }}
           >
             {body}
-          </Markdown>
+          </markdown.Markdown>
         )}
       </main>
     </div>

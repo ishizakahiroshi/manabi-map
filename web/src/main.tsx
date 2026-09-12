@@ -4,6 +4,7 @@ import { BrowserRouter } from 'react-router-dom'
 import './index.css'
 import { AppShell, AppTree } from './AppTree'
 import { isPrerenderedForRoute } from './lib/ssrRoute'
+import { loadMarkdownRuntime } from './lib/markdownRuntime'
 
 const container = document.getElementById('root')!
 
@@ -29,13 +30,30 @@ const tree = (
 // 漏れをごまかすためのものではなく、漏れたときに白画面を出さないための保険。
 const prerenderedFor = container.dataset.mmRoute
 
+function mountFresh() {
+  container.replaceChildren()
+  createRoot(container).render(tree)
+}
+
+// /legal/* と /guide/* のプリレンダー HTML は、埋め込んだ本文を Markdown で描いた結果を含む。
+// 描画器は初期バンドルから外してあるので（plan_legal-guide-markdown-split.md）、
+// **hydrate の前に読み終えておかないとサーバー HTML と食い違う。**
+// 取得に失敗したときは hydrate せず createRoot へ落とす（食い違ったまま引き継がない）。
+const needsMarkdownBeforeHydrate = /^\/(legal|guide)\//.test(location.pathname)
+
 if (
   container.firstElementChild &&
   prerenderedFor &&
   isPrerenderedForRoute(prerenderedFor, location.pathname)
 ) {
-  hydrateRoot(container, tree)
+  if (needsMarkdownBeforeHydrate) {
+    loadMarkdownRuntime().then(
+      () => hydrateRoot(container, tree),
+      () => mountFresh(),
+    )
+  } else {
+    hydrateRoot(container, tree)
+  }
 } else {
-  container.replaceChildren()
-  createRoot(container).render(tree)
+  mountFresh()
 }
