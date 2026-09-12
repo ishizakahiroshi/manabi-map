@@ -1,5 +1,13 @@
 import { describe, it, expect } from 'vitest'
-import { parseStoredHomeZoom, matchesHome, resolveInitialMapView, nationalMapView } from './mapView'
+import {
+  parseStoredHomeZoom,
+  matchesHome,
+  resolveInitialMapView,
+  nationalMapView,
+  parseSharedMapView,
+  buildShareQuery,
+  roundShareCoordinate,
+} from './mapView'
 import { ACTIVE_REGION } from './region'
 
 const HOME = { label: '設定地点', lat: 36.631, lng: 138.957 }
@@ -68,5 +76,45 @@ describe('resolveInitialMapView', () => {
       zoom: ACTIVE_REGION.mapZoom,
       restored: false,
     })
+  })
+})
+
+describe('共有 URL（plan_map-location-share-url.md C1）', () => {
+  it('座標は保存側と同じ小数第 3 位へ丸める', () => {
+    expect(roundShareCoordinate(35.4661234)).toBe(35.466)
+    expect(roundShareCoordinate(139.6219876)).toBe(139.622)
+    // -0 を作らない（URL に "-0" が出ると見た目が悪く、比較でも紛れる）
+    expect(Object.is(roundShareCoordinate(-0.0001), 0)).toBe(true)
+  })
+
+  it('丸めた座標だけをクエリへ入れる', () => {
+    const q = buildShareQuery(35.4661234, 139.6219876, 12.4)
+    expect(q).toBe('lat=35.466&lng=139.622&z=12')
+    // 生の座標が混ざっていないこと
+    expect(q).not.toContain('35.4661')
+  })
+
+  it('ズームは 1〜18 に収める', () => {
+    expect(buildShareQuery(35, 139, 99)).toContain('z=18')
+    expect(buildShareQuery(35, 139, -5)).toContain('z=1')
+  })
+
+  it('正しいクエリを読み取る', () => {
+    expect(parseSharedMapView(new URLSearchParams('lat=35.466&lng=139.622&z=12'))).toEqual({
+      lat: 35.466,
+      lng: 139.622,
+      zoom: 12,
+    })
+  })
+
+  it('欠け・壊れ・範囲外は null（従来の初期表示へ落とす）', () => {
+    expect(parseSharedMapView(new URLSearchParams(''))).toBeNull()
+    expect(parseSharedMapView(new URLSearchParams('lat=35.466&lng=139.622'))).toBeNull()
+    expect(parseSharedMapView(new URLSearchParams('lat=abc&lng=139.622&z=12'))).toBeNull()
+    expect(parseSharedMapView(new URLSearchParams('lat=91&lng=139.622&z=12'))).toBeNull()
+    expect(parseSharedMapView(new URLSearchParams('lat=35.466&lng=181&z=12'))).toBeNull()
+    expect(parseSharedMapView(new URLSearchParams('lat=35.466&lng=139.622&z=0'))).toBeNull()
+    expect(parseSharedMapView(new URLSearchParams('lat=35.466&lng=139.622&z=19'))).toBeNull()
+    expect(parseSharedMapView(new URLSearchParams('lat=35.466&lng=139.622&z=12.5'))).toBeNull()
   })
 })
