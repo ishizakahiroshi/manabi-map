@@ -955,8 +955,35 @@ function SchoolDetailSheetView({ school, onClose, userData, extras, standalone, 
           )}
           {routeUrl && (
             <a href={routeUrl} target="_blank" rel="noreferrer">
-              🗺 {t('detail.googleMaps')}
+              🚗 {t('detail.googleMaps')}
             </a>
+          )}
+          {/*
+            地図のシートから、その学校のリンクを取れるようにする
+            （docs/local/review_school-sheet-map-links_2026-09-12.html Q1-1）。
+            渡すのは座標ではなく学校ページの URL。学校名がタイトルに入るので、
+            受け取った側にどの学校の話か伝わり、LINE ではカードになる。
+            単独ページ（/school/:id）ではアドレスバーに同じ URL が出ているので出さない。
+          */}
+          {!standalone && (
+            <button
+              type="button"
+              onClick={() => {
+                const url = `${location.origin}${schoolHref(school.id)}`
+                // http や古い環境では navigator.clipboard が無い。undefined.then で落とさない。
+                const copying = navigator.clipboard?.writeText(url)
+                if (!copying) {
+                  toast(t('detail.copyLinkFailed'))
+                  return
+                }
+                copying.then(
+                  () => toast(t('detail.copyLinkDone')),
+                  () => toast(t('detail.copyLinkFailed')),
+                )
+              }}
+            >
+              🔗 {t('detail.copyLink')}
+            </button>
           )}
         </div>
 
