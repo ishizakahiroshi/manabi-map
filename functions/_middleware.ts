@@ -98,9 +98,19 @@ const SPA_SHELL_PATH = "/";
 export const isSpaRoute = (pathname: string): boolean =>
   SPA_ROUTES.has(pathname.replace(/\/+$/, "") || "/");
 
+// --- 位置つき URL を検索インデックスから外す -----------------------------------
+//
+// /map?lat=…&lng=…&z=… は共有ボタンが作る URL（web/src/lib/mapView.ts の
+// buildShareQuery / docs/local/plan_map-location-share-url.md C1）。座標を変えれば
+// 無限に別 URL を作れるので、共有先から辿られてもインデックスされないようにする。
+// SPA シェルは全ルート同じ本文なので、meta ではなくレスポンスヘッダで外す
+// （クローラーが JS を実行しなくても効き、curl で確認できる）。
+export const hasSharedLocationQuery = (searchParams: URLSearchParams): boolean =>
+  searchParams.has("lat") && searchParams.has("lng");
+
 export const onRequest = async (context: Context): Promise<Response> => {
   const { request, env, next } = context;
-  const { pathname } = new URL(request.url);
+  const { pathname, searchParams } = new URL(request.url);
 
   if (env.MAINTENANCE_MODE === "1") {
     // API は maintenance.html（200 + HTML）で汚さず、各 Function 自身の
@@ -139,6 +149,9 @@ export const onRequest = async (context: Context): Promise<Response> => {
     // _headers 由来のヘッダ(CSP 等)を落とさないよう、本文と一緒にそのまま引き継ぐ。
     const headers = new Headers(shell.headers);
     headers.set("content-type", "text/html; charset=utf-8");
+    if (hasSharedLocationQuery(searchParams)) {
+      headers.set("x-robots-tag", "noindex");
+    }
     return new Response(shell.body, { status: 200, headers });
   }
 
