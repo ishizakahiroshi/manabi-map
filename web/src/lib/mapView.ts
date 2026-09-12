@@ -105,3 +105,44 @@ export function rememberHomeZoom(home: HomeLocation, zoom: number): void {
     /* localStorage 不可の環境では覚えない（次回また全国表示を挟むだけ） */
   }
 }
+
+// --- 共有 URL（plan_map-location-share-url.md C1・案 B） -------------------------
+//
+// **「共有」を押したときだけ** 座標を URL へ入れる。地図を動かすたびに URL を書き換える形
+// （案 C）は採らない。自宅周辺を開いている間ずっと URL に位置が入り、履歴にも残るため、
+// v0.9.0 で減らした情報（住所文字列を保存しない・座標は約 100m へ丸める）を戻すことになる。
+//
+// URL へ書く座標も**保存側と同じ小数第 3 位（約 100m）へ丸める**。生の座標は書かない。
+
+/** 保存側（AppContext の normalizeHomeForPersistence）と同じ粒度 */
+const SHARE_COORD_DIGITS = 3
+
+export function roundShareCoordinate(value: number): number {
+  const rounded = Number(value.toFixed(SHARE_COORD_DIGITS))
+  return Object.is(rounded, -0) ? 0 : rounded
+}
+
+/**
+ * 共有 URL のクエリを検証して初期表示に使える形へ。
+ * 壊れた値・範囲外は null を返し、呼び出し側は従来どおりの初期表示へ落とす。
+ */
+export function parseSharedMapView(params: URLSearchParams): StoredHomeZoom | null {
+  const lat = Number(params.get('lat'))
+  const lng = Number(params.get('lng'))
+  const zoom = Number(params.get('z'))
+  if (!params.get('lat') || !params.get('lng') || !params.get('z')) return null
+  if (!Number.isFinite(lat) || !Number.isFinite(lng) || !Number.isFinite(zoom)) return null
+  if (lat < -90 || lat > 90 || lng < -180 || lng > 180) return null
+  if (!Number.isInteger(zoom) || zoom < MIN_ZOOM || zoom > MAX_ZOOM) return null
+  return { lat, lng, zoom }
+}
+
+/** 共有用のクエリ文字列を組む。座標は丸めてから入れる。 */
+export function buildShareQuery(lat: number, lng: number, zoom: number): string {
+  const params = new URLSearchParams({
+    lat: String(roundShareCoordinate(lat)),
+    lng: String(roundShareCoordinate(lng)),
+    z: String(Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, Math.round(zoom)))),
+  })
+  return params.toString()
+}

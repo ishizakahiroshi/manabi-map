@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { isSpaRoute, onRequest } from './_middleware.ts'
+import { hasSharedLocationQuery, isSpaRoute, onRequest } from './_middleware.ts'
 
 function makeContext(
   pathname: string,
@@ -151,6 +151,31 @@ test('SPA routes ignore query strings and trailing slashes', async () => {
     assert.equal(result.status, 200, pathname)
     assert.equal(await result.text(), 'synthetic spa shell', pathname)
   }
+})
+
+test('位置つき共有 URL には noindex が付く（plan_map-location-share-url.md C1）', async () => {
+  const shared = makeContext('/map?lat=35.681&lng=139.767&z=14', '0')
+  const sharedResult = await onRequest(shared.context)
+  assert.equal(sharedResult.status, 200)
+  assert.equal(sharedResult.headers.get('x-robots-tag'), 'noindex')
+
+  // 座標を持たない /map は今まで通りインデックス可のまま（検索からの入口を塞がない）
+  for (const pathname of ['/map', '/map?school=1', '/map?z=14']) {
+    const fixture = makeContext(pathname, '0')
+    const result = await onRequest(fixture.context)
+    assert.equal(result.status, 200, pathname)
+    assert.equal(result.headers.get('x-robots-tag'), null, pathname)
+  }
+})
+
+test('hasSharedLocationQuery は lat と lng の両方を要求する', () => {
+  const has = (query: string) => hasSharedLocationQuery(new URLSearchParams(query))
+  assert.equal(has('lat=35.681&lng=139.767&z=14'), true)
+  assert.equal(has('lng=139.767&lat=35.681'), true)
+  assert.equal(has('lat=35.681'), false)
+  assert.equal(has('lng=139.767'), false)
+  assert.equal(has('z=14&school=1'), false)
+  assert.equal(has(''), false)
 })
 
 test('unknown URLs stay 404 instead of getting the SPA shell', async () => {

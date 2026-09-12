@@ -580,12 +580,14 @@ body {
   box-shadow: 2px 2px 0 var(--line);
 }
 .ext-links { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
-.ext-links a {
+.ext-links a,
+.ext-links button {
   flex: 1; text-align: center; padding: 10px; text-decoration: none; color: var(--ink);
   font-family: var(--display); font-weight: 700; font-size: 0.92rem;
   border: 2px solid var(--ink); border-radius: 12px; background: #fff;
   box-shadow: 2px 2px 0 var(--line); min-width: 110px;
 }
+.ext-links button { cursor: pointer; }
 .depts {
   margin-top: 14px; padding: 12px 14px; border: 2px solid var(--ink); border-radius: 14px; background: #fff;
 }
