@@ -4,10 +4,19 @@ name: nightly-backup
 # pg_dump → gzip → age 暗号化 → Cloudflare R2 (S3 互換 API) へ PUT する。
 # Supabase Pro の日次スナップショット(7日保持)を超える長期保険、および
 # Supabase 自体が飛んだ場合(アカウント BAN・課金トラブル等)の唯一の保険。
-# 詳細: docs/local/pending_backup-and-data-portability.md 層2 / docs/local/task_v0.1.4-c1-backup-layer2.md
+# 当時の設計記録(いずれも archive 済み):
+#   docs/local/archive/v0.2.0/pending_backup-and-data-portability.md 層2
+#   docs/local/archive/v0.1.4/task_v0.1.4-c1-backup-layer2.md
 #
 # 復号鍵(age 秘密鍵)は本 workflow のどこにも存在しない。作者ローカルの
-# secure store で保管し、復元手順は docs/local/backup-restore-runbook.md を参照。
+# secure store で保管する。復元手順の現行正本は次の 2 本:
+#   ローカル復元試験: docs/local/manual_backup-restore-runbook.md
+#   本番復元(緊急時): docs/local/manual_production-restore-runbook.md
+#
+# 重要(2026-09-18 C8): 下の pg_dump は --no-acl なので GRANT / REVOKE は dump に入らない。
+# 復元しただけでは列単位の権限層が戻らない(RLS の検査は全部通るので気づけない)。
+# 復元先では migration の再適用が必須。手順は manual_production-restore-runbook.md の
+# 「Step 5-2」「Step 5-3」を参照。
 #
 # 接続情報は URL 一本ではなく個別 Secret + PGPASSWORD 方式。理由:
 # libpq の URL parse エラー時にパスワード断片がエラー log に漏れる過去事例あり
@@ -32,7 +41,7 @@ jobs:
       - name: Verify required secrets are configured
         run: |
           missing=""
-          for name in SUPABASE_DB_HOST SUPABASE_DB_PORT SUPABASE_DB_USER SUPABASE_DB_NAME SUPABASE_DB_PASSWORD BACKUP_AGE_PUBLIC_KEY R2_ACCOUNT_ID R2_ACCESS_KEY_ID R2_SECRET_ACCESS_KEY R2_BUCKET; do
+          for name in SUPABASE_DB_HOST SUPABASE_DB_PORT SUPABASE_DB_USER SUPABASE_DB_NAME SUPABASE_DB_PASSWORD SUPABASE_CA_CERT BACKUP_AGE_PUBLIC_KEY R2_ACCOUNT_ID R2_ACCESS_KEY_ID R2_SECRET_ACCESS_KEY R2_BUCKET; do
             value="${!name}"
             if [ -z "$value" ]; then
               missing="$missing $name"
@@ -49,6 +58,7 @@ jobs:
           SUPABASE_DB_USER: ${{ secrets.SUPABASE_DB_USER }}
           SUPABASE_DB_NAME: ${{ secrets.SUPABASE_DB_NAME }}
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+          SUPABASE_CA_CERT: ${{ secrets.SUPABASE_CA_CERT }}
           BACKUP_AGE_PUBLIC_KEY: ${{ secrets.BACKUP_AGE_PUBLIC_KEY }}
           R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
           R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
@@ -71,7 +81,26 @@ jobs:
           pg_dump --version
           # aws-cli v2 は ubuntu-latest ランナーにプリインストール済み
 
-      - name: pg_dump (custom format, no owner/acl)
+      # 2026-09-18 C13: 本番側の「Enforce SSL on incoming connections」は OFF で、
+      # プーラーは平文セッションを拒否しない。libpq 既定の transport mode(prefer)は
+      # サーバーの身元も検証しないため、経路上に立てる相手がいると平文へ落とせる。
+      # dump 側を sslmode=verify-full に固定し、CA 証明書で相手を確かめる。
+      # 証明書の取得(Supabase Dashboard > Settings > Database > SSL Configuration)と
+      # Secret 登録はユーザー作業。手順は docs/local/manual_backup-restore-runbook.md の
+      # 「事前準備 > 3. Supabase CA 証明書の取得と GitHub Secret 登録」を参照。
+      - name: Write Supabase CA certificate
+        env:
+          SUPABASE_CA_CERT: ${{ secrets.SUPABASE_CA_CERT }}
+        run: |
+          umask 077
+          printf '%s\n' "$SUPABASE_CA_CERT" > supabase-ca.crt
+          # 中身は出さず、PEM の体裁だけ確認する(証明書自体は秘密ではないが値は出さない方針に揃える)。
+          if ! grep -q -- '-----BEGIN CERTIFICATE-----' supabase-ca.crt; then
+            echo "::error::SUPABASE_CA_CERT が PEM 形式ではありません。Dashboard の SSL Configuration から取得し直してください。"
+            exit 1
+          fi
+
+      - name: pg_dump (custom format, no owner/acl, verify-full TLS)
         env:
           # PGPASSWORD 経由でパスワードを渡す。URL 形式を使わないので
           # parse エラー由来の password 断片漏れが発生しない。
@@ -80,7 +109,12 @@ jobs:
           SUPABASE_DB_PORT: ${{ secrets.SUPABASE_DB_PORT }}
           SUPABASE_DB_USER: ${{ secrets.SUPABASE_DB_USER }}
           SUPABASE_DB_NAME: ${{ secrets.SUPABASE_DB_NAME }}
+          # verify-full = 暗号化を必須にし、CA 署名とホスト名の一致まで検証する。
+          # サーバー側が平文を拒否していなくても、こちら側が平文へ落ちない。
+          PGSSLMODE: verify-full
         run: |
+          PGSSLROOTCERT="$PWD/supabase-ca.crt"
+          export PGSSLROOTCERT
           pg_dump \
             -h "$SUPABASE_DB_HOST" \
             -p "$SUPABASE_DB_PORT" \
@@ -88,6 +122,10 @@ jobs:
             -d "$SUPABASE_DB_NAME" \
             --format=custom --no-owner --no-acl \
             -f backup.dump
+
+      - name: Remove CA certificate from workspace
+        if: always()
+        run: rm -f supabase-ca.crt
 
       - name: gzip
         run: gzip backup.dump

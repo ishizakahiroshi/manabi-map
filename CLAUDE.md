@@ -49,7 +49,8 @@ SSR、初期データ、storage 復元、静的出力の検査は [`docs/referen
 ## 運用・リリース
 
 - `main` は本番、`develop` は Preview。release plan の検証とユーザーの明示承認を経て main へマージする。main へ直接コミットしない。
-- リリース・backup・復元・maintenance の詳細は [`docs/reference_manabi-map-operating-rules.md`](docs/reference_manabi-map-operating-rules.md) と `docs/local/plan_release-vX.Y.Z*.md` / `docs/local/manual_*.md` を読む。
+- リリースと maintenance の詳細は [`docs/reference_manabi-map-operating-rules.md`](docs/reference_manabi-map-operating-rules.md) と `docs/local/plan_release-vX.Y.Z*.md` / `docs/local/manual_maintenance-mode-runbook.md` を読む。
+- backup と復元は `.github/workflows/nightly-backup.yml`、ローカル復元試験は `docs/local/manual_backup-restore-runbook.md`、本番復元は `docs/local/manual_production-restore-runbook.md` を正本とする。dump は `--no-acl` なので復元後に migration の再適用と権限の表明が要る。
 - AI はユーザー指示なしに commit、build、本番 deploy、Supabase `db push` / `psql` を実行しない。
 
 ## Supabase・外部サービス
