@@ -85,12 +85,20 @@ jobs:
       # サーバーの身元も検証しないため、経路上に立てる相手がいると平文へ落とせる。
       # dump 側を sslmode=verify-full に固定し、相手を確かめる。
       #
-      # CA は OS の信頼ストアを使う(PGSSLROOTCERT=system・libpq 16 以降)。
-      # Supabase の pooler は一般に信頼された証明書を出すので、これで検証が通る。
-      # 独自の CA 証明書を Secret へ登録する運用にしない理由は 2 つ。
-      #   1. 登録・更新が人の手作業になり、更新漏れでバックアップが止まる
-      #   2. 証明書が変わるたびに Secret を差し替える必要が出る
-      # 通らなかった場合は下の失敗メッセージの手順に従う。**平文へ落とす形へは戻さないこと。**
+      # 2026-09-18: verify-full + PGSSLROOTCERT=system(OS の信頼ストア)を実地で試したが
+      # `SSL error: certificate verify failed` で通らなかった(run 35351036279)。
+      # 接続先は一般に信頼された証明書ではなく Supabase 自身の CA で署名された証明書を出す。
+      #
+      # いまは require にしてある。**これは平文への降格を塞ぐ設定で、暗号化は必須。**
+      # 塞げていないのは「相手が本当に Supabase か」の確認だけ。
+      # 突くには経路乗っ取りか DNS 乗っ取りが要る狙い撃ちの攻撃になる。
+      #
+      # verify-full へ上げるには Supabase の CA 証明書が要る(公開情報・秘密ではない)。
+      # 取得して repo へ commit し、PGSSLROOTCERT をそのファイルへ向ければ
+      # Secret 管理なしで verify-full にできる。判断は docs/local/plan_security-audit-remediation.md の
+      # 「C13 の方針変更」を参照。
+      #
+      # **prefer や disable へは戻さないこと。** 既定の prefer はサーバーが拒めば平文に落ちる。
       - name: pg_dump (custom format, no owner/acl, verify-full TLS)
         env:
           # PGPASSWORD 経由でパスワードを渡す。URL 形式を使わないので
@@ -100,11 +108,9 @@ jobs:
           SUPABASE_DB_PORT: ${{ secrets.SUPABASE_DB_PORT }}
           SUPABASE_DB_USER: ${{ secrets.SUPABASE_DB_USER }}
           SUPABASE_DB_NAME: ${{ secrets.SUPABASE_DB_NAME }}
-          # verify-full = 暗号化を必須にし、CA 署名とホスト名の一致まで検証する。
-          # サーバー側が平文を拒否していなくても、こちら側が平文へ落ちない。
-          PGSSLMODE: verify-full
-          # system = OS の ca-certificates を使う。PostgreSQL 16 で入った指定。
-          PGSSLROOTCERT: system
+          # require = 暗号化を必須にする。サーバーが平文を求めても接続しない。
+          # 相手の身元(証明書の署名とホスト名)は確認しない。上のコメントを読むこと。
+          PGSSLMODE: require
         run: |
           set +e
           pg_dump \
@@ -117,14 +123,10 @@ jobs:
           status=$?
           set -e
           if [ "$status" -ne 0 ]; then
-            echo "::error::pg_dump が失敗しました。TLS 検証が原因の場合の切り分け:"
-            echo "::error::(1) 'root certificate file' や 'certificate verify failed' が出ている場合"
-            echo "::error::    = 接続先が一般に信頼された証明書を使っていない。"
-            echo "::error::    Dashboard > Settings > Database > SSL Configuration から CA 証明書を取得し、"
-            echo "::error::    Secret SUPABASE_CA_CERT へ登録したうえで PGSSLROOTCERT をそのファイルへ向ける。"
-            echo "::error::(2) 'server does not support SSL' が出ている場合 = 接続先が暗号化に対応していない。"
-            echo "::error::    接続先(直結かプーラーか)を SUPABASE_DB_HOST で確認する。"
-            echo "::error::いずれの場合も PGSSLMODE を下げて平文を許す形へは戻さないこと。"
+            echo "::error::pg_dump が失敗しました。TLS が原因の場合の切り分け:"
+            echo "::error::'server does not support SSL' = 接続先が暗号化に対応していない。"
+            echo "::error::SUPABASE_DB_HOST が直結かプーラーかを確認する。"
+            echo "::error::**PGSSLMODE を prefer / disable へ下げて平文を許す形へは戻さないこと。**"
             exit "$status"
           fi
 
