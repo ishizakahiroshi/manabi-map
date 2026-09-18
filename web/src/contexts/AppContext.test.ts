@@ -1,11 +1,14 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import {
+  SIGNED_OUT_CLEARED_KEYS,
+  clearSignedOutDeviceState,
   formatHomeCoordinates,
   isValidHomeLocation,
   normalizeHomeForPersistence,
   parseStoredHome,
 } from './AppContext'
+import { getAnalyticsSessionId } from '../lib/analytics'
 
 describe('stored home validation', () => {
   it('accepts a finite synthetic location', () => {
@@ -56,5 +59,60 @@ describe('stored home validation', () => {
       label: '設定地点', lat: 0, lng: -73.986,
     })
     expect(normalizeHomeForPersistence({ label: '合成地点', lat: Infinity, lng: 139 })).toBeNull()
+  })
+})
+
+describe('sign-out device cleanup', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('lists the home key, the map zoom key, and the analytics session key', () => {
+    expect([...SIGNED_OUT_CLEARED_KEYS]).toEqual(['mm.home', 'mm.map_home_zoom', 'mm_session_id'])
+  })
+
+  it('removes the map zoom and analytics session keys as well, and leaves unrelated keys alone', () => {
+    const store = new Map<string, string>([
+      ['mm.home', JSON.stringify({ label: '設定地点', lat: 35.681, lng: 139.767 })],
+      ['mm.map_home_zoom', JSON.stringify({ lat: 35.681, lng: 139.767, zoom: 12 })],
+      ['mm_session_id', '00000000-0000-4000-8000-000000000001'],
+      ['mm.locale', 'ja'],
+    ])
+    vi.stubGlobal('localStorage', {
+      getItem: (key: string) => store.get(key) ?? null,
+      setItem: (key: string, value: string) => { store.set(key, value) },
+      removeItem: (key: string) => { store.delete(key) },
+    })
+
+    clearSignedOutDeviceState()
+
+    expect(store.has('mm.home')).toBe(false)
+    expect(store.has('mm.map_home_zoom')).toBe(false)
+    expect(store.has('mm_session_id')).toBe(false)
+    expect(store.get('mm.locale')).toBe('ja')
+  })
+
+  it('makes the next analytics session id differ from the signed-out one', () => {
+    const store = new Map<string, string>([
+      ['mm_session_id', '00000000-0000-4000-8000-000000000001'],
+    ])
+    vi.stubGlobal('localStorage', {
+      getItem: (key: string) => store.get(key) ?? null,
+      setItem: (key: string, value: string) => { store.set(key, value) },
+      removeItem: (key: string) => { store.delete(key) },
+    })
+
+    clearSignedOutDeviceState()
+    const next = getAnalyticsSessionId()
+
+    expect(next).not.toBe('00000000-0000-4000-8000-000000000001')
+    expect(store.get('mm_session_id')).toBe(next)
+  })
+
+  it('does not throw where localStorage is unavailable', () => {
+    vi.stubGlobal('localStorage', {
+      removeItem: () => { throw new Error('storage disabled') },
+    })
+    expect(() => clearSignedOutDeviceState()).not.toThrow()
   })
 })

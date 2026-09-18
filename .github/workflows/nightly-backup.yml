@@ -4,10 +4,19 @@ name: nightly-backup
 # pg_dump → gzip → age 暗号化 → Cloudflare R2 (S3 互換 API) へ PUT する。
 # Supabase Pro の日次スナップショット(7日保持)を超える長期保険、および
 # Supabase 自体が飛んだ場合(アカウント BAN・課金トラブル等)の唯一の保険。
-# 詳細: docs/local/pending_backup-and-data-portability.md 層2 / docs/local/task_v0.1.4-c1-backup-layer2.md
+# 当時の設計記録(いずれも archive 済み):
+#   docs/local/archive/v0.2.0/pending_backup-and-data-portability.md 層2
+#   docs/local/archive/v0.1.4/task_v0.1.4-c1-backup-layer2.md
 #
 # 復号鍵(age 秘密鍵)は本 workflow のどこにも存在しない。作者ローカルの
-# secure store で保管し、復元手順は docs/local/backup-restore-runbook.md を参照。
+# secure store で保管する。復元手順の現行正本は次の 2 本:
+#   ローカル復元試験: docs/local/manual_backup-restore-runbook.md
+#   本番復元(緊急時): docs/local/manual_production-restore-runbook.md
+#
+# 重要(2026-09-18 C8): 下の pg_dump は --no-acl なので GRANT / REVOKE は dump に入らない。
+# 復元しただけでは列単位の権限層が戻らない(RLS の検査は全部通るので気づけない)。
+# 復元先では migration の再適用が必須。手順は manual_production-restore-runbook.md の
+# 「Step 5-2」「Step 5-3」を参照。
 #
 # 接続情報は URL 一本ではなく個別 Secret + PGPASSWORD 方式。理由:
 # libpq の URL parse エラー時にパスワード断片がエラー log に漏れる過去事例あり
@@ -29,6 +38,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
+      - name: Check out repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
       - name: Verify required secrets are configured
         run: |
           missing=""
@@ -71,7 +83,21 @@ jobs:
           pg_dump --version
           # aws-cli v2 は ubuntu-latest ランナーにプリインストール済み
 
-      - name: pg_dump (custom format, no owner/acl)
+      # 2026-09-18 C13: 本番側の「Enforce SSL on incoming connections」は OFF で、
+      # プーラーは平文セッションを拒否しない。libpq 既定の transport mode(prefer)は
+      # サーバーの身元も検証しないため、経路上に立てる相手がいると平文へ落とせる。
+      # dump 側を sslmode=verify-full に固定し、相手を確かめる。
+      #
+      # 2026-09-18: verify-full + PGSSLROOTCERT=system(OS の信頼ストア)を実地で試したが
+      # `SSL error: certificate verify failed` で通らなかった(run 35351036279)。
+      # 接続先は一般に信頼された証明書ではなく Supabase 自身の CA で署名された証明書を出す。
+      #
+      # Dashboard の Download certificate と同じ Supabase 公式配布物を repo に固定し、
+      # PGSSLROOTCERT で参照する。公開 CA なので GitHub Secret は不要。
+      # 更新元: https://supabase-downloads.s3-ap-southeast-1.amazonaws.com/prod/ssl/prod-ca-2021.crt
+      #
+      # **prefer や disable へは戻さないこと。** 既定の prefer はサーバーが拒めば平文に落ちる。
+      - name: pg_dump (custom format, no owner/acl, verify-full TLS)
         env:
           # PGPASSWORD 経由でパスワードを渡す。URL 形式を使わないので
           # parse エラー由来の password 断片漏れが発生しない。
@@ -80,7 +106,11 @@ jobs:
           SUPABASE_DB_PORT: ${{ secrets.SUPABASE_DB_PORT }}
           SUPABASE_DB_USER: ${{ secrets.SUPABASE_DB_USER }}
           SUPABASE_DB_NAME: ${{ secrets.SUPABASE_DB_NAME }}
+          # verify-full = 暗号化を必須にし、CA 署名とホスト名の一致まで検証する。
+          PGSSLMODE: verify-full
+          PGSSLROOTCERT: ${{ github.workspace }}/.github/certificates/supabase-prod-ca-2021.crt
         run: |
+          set +e
           pg_dump \
             -h "$SUPABASE_DB_HOST" \
             -p "$SUPABASE_DB_PORT" \
@@ -88,6 +118,17 @@ jobs:
             -d "$SUPABASE_DB_NAME" \
             --format=custom --no-owner --no-acl \
             -f backup.dump
+          status=$?
+          set -e
+          if [ "$status" -ne 0 ]; then
+            echo "::error::pg_dump が失敗しました。TLS が原因の場合の切り分け:"
+            echo "::error::'root certificate file' = repo 内 CA の checkout または参照パスを確認する。"
+            echo "::error::'certificate verify failed' = Supabase 公式 CA の更新有無を確認する。"
+            echo "::error::'server does not support SSL' = 接続先が暗号化に対応していない。"
+            echo "::error::SUPABASE_DB_HOST が直結かプーラーかを確認する。"
+            echo "::error::**PGSSLMODE を prefer / disable へ下げて平文を許す形へは戻さないこと。**"
+            exit "$status"
+          fi
 
       - name: gzip
         run: gzip backup.dump

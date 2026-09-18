@@ -11,7 +11,7 @@ import type { HomeLocation } from '../types/school'
  * これを覚えておくと、全国データ（0.8MB）が届くまでのあいだ z5 の全国表示を挟まずに済み、
  * 1 度も見られないまま捨てられるタイルが無くなる（plan_data-usage-audit.md C3 案 A）。
  */
-const HOME_ZOOM_KEY = 'mm.map_home_zoom'
+export const HOME_ZOOM_KEY = 'mm.map_home_zoom'
 
 /** localStorage に入れる形。座標は「どの設定地点に対するズームか」の照合用 */
 export interface StoredHomeZoom {

@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { useI18n } from '../contexts/I18nContext'
 import { useFamilyShare } from '../hooks/useFamilyShare'
+import { supabase } from '../lib/supabase'
 import { OAuthButton } from '../components/OAuthButton'
 
 const PENDING_KEY = 'mm.pending_family_invite'
@@ -103,16 +104,30 @@ function clearPendingToken(): void {
 }
 
 /**
- * 同一 token の accept をモジュール単位で共有する。
- * React StrictMode の二重マウントで「1 回目成功・2 回目 already used → error 表示」を防ぐ。
+ * 受諾前に「どのグループへの招待か」だけを引く（受諾はしない）。
+ * 招待トークンを持つ本人が、参加先の名前を見てから決められるようにするための読み取り。
  */
-const acceptInFlight = new Map<string, Promise<string>>()
+export async function fetchInviteGroupName(token: string): Promise<string> {
+  const { data, error } = await supabase.rpc('preview_family_invite', { p_token: token })
+  if (error) throw error
+  return typeof data === 'string' ? data : ''
+}
 
-type JoinStatus = 'idle' | 'accepting' | 'done' | 'error' | 'need-login' | 'no-token'
+type JoinStatus =
+  | 'idle'
+  | 'checking'
+  | 'confirm'
+  | 'accepting'
+  | 'done'
+  | 'error'
+  | 'invalid'
+  | 'need-login'
+  | 'no-token'
 
 /**
  * 家族グループ招待の受諾ページ（/family/join#token=...）。
- * - ログイン済みなら即受諾 → /favorites へ。
+ * - リンクを開いただけでは受諾しない。参加先のグループ名を表示し、
+ *   「参加する」を押したときだけ受諾 RPC を発行する（誤タップ・自動遷移での参加を防ぐ）。
  * - 未ログイン（匿名含む）なら LINE / Google ログインを促す。ログインは
  *   /auth/callback → トップへ戻る仕様のため、トークンは localStorage に退避し、
  *   ログイン後にこのリンクを再度開けば受諾できる旨を案内する。
@@ -124,6 +139,7 @@ export function FamilyJoinPage() {
   const { acceptInvite } = useFamilyShare()
   const { t } = useI18n()
   const [status, setStatus] = useState<JoinStatus>('idle')
+  const [groupName, setGroupName] = useState('')
 
   // fragmentを優先し、旧queryは互換読取だけにする。URLから取得できなければ
   // localStorage / memoryの退避分（ログイン往復後）を使う。
@@ -148,38 +164,50 @@ export function FamilyJoinPage() {
       setStatus('need-login')
       return
     }
-    // 匿名ログインでも受諾自体は成立するが、共有は実ログインが前提。
-    // ここでは session があれば受諾を試みる（匿名→後で連携でも引き継がれる）。
+    // ここでは参加先の名前を読むだけで、受諾はしない（受諾は confirmJoin だけが行う）。
     let cancelled = false
-    setStatus('accepting')
+    setStatus('checking')
     void (async () => {
       try {
-        let pending = acceptInFlight.get(token)
-        if (!pending) {
-          pending = acceptInvite(token).finally(() => {
-            // 成功後も短時間残して StrictMode の再マウントに耐える
-            setTimeout(() => acceptInFlight.delete(token), 5000)
-          })
-          acceptInFlight.set(token, pending)
-        }
-        await pending
+        const name = await fetchInviteGroupName(token)
         if (cancelled) return
-        setStatus('done')
-        setTimeout(() => navigate('/favorites', { replace: true }), 1200)
+        setGroupName(name)
+        setStatus('confirm')
       } catch (err) {
-        acceptInFlight.delete(token)
         if (cancelled) return
-        console.error('accept invite failed:', (err as Error)?.message)
-        setStatus('error')
-      } finally {
-        // 成功・失敗を問わず、受諾処理が終わったトークンを端末に残さない。
+        console.error('preview invite failed:', (err as Error)?.message)
+        // 受諾していないので、使えない招待トークンは端末に残さない。
         clearPendingToken()
+        setStatus('invalid')
       }
     })()
     return () => {
       cancelled = true
     }
-  }, [token, durableUserId, session, kind, acceptInvite, navigate, urlInviteSource])
+  }, [token, durableUserId, session, kind, urlInviteSource])
+
+  /** 「参加する」を押したときだけ受諾 RPC を発行する。 */
+  const confirmJoin = useCallback(async () => {
+    if (!token) return
+    setStatus('accepting')
+    try {
+      await acceptInvite(token)
+      setStatus('done')
+      setTimeout(() => navigate('/favorites', { replace: true }), 1200)
+    } catch (err) {
+      console.error('accept invite failed:', (err as Error)?.message)
+      setStatus('error')
+    } finally {
+      // 成功・失敗を問わず、受諾処理が終わったトークンを端末に残さない。
+      clearPendingToken()
+    }
+  }, [token, acceptInvite, navigate])
+
+  /** 参加しない選択。退避したトークンも捨てて、リンクを開く前の状態に戻す。 */
+  const declineJoin = useCallback(() => {
+    clearPendingToken()
+    navigate('/', { replace: true })
+  }, [navigate])
 
   const doLogin = useCallback(
     async (provider: 'line' | 'google') => {
@@ -209,6 +237,30 @@ export function FamilyJoinPage() {
           <p>{t('family.inviteBad')}</p>
           <button className="cta" onClick={() => navigate('/', { replace: true })}>
             {t('family.backTop')}
+          </button>
+        </>
+      )}
+
+      {status === 'invalid' && (
+        <>
+          <p>{t('family.inviteUnavailable')}</p>
+          <button className="cta" onClick={() => navigate('/', { replace: true })}>
+            {t('family.backTop')}
+          </button>
+        </>
+      )}
+
+      {status === 'checking' && <p>{t('family.checkingInvite')}</p>}
+
+      {status === 'confirm' && (
+        <>
+          <p>{t('family.confirmJoin', { group: groupName || t('family.unnamedGroup') })}</p>
+          <p className="login-note">{t('family.confirmNote')}</p>
+          <button className="cta" onClick={() => void confirmJoin()}>
+            {t('family.confirmAccept')}
+          </button>
+          <button className="cta secondary" onClick={declineJoin}>
+            {t('family.confirmDecline')}
           </button>
         </>
       )}

@@ -178,22 +178,60 @@ export function extractSafeCspReport(value: unknown): SafeCspReport | null {
   return result
 }
 
-function isTooLarge(request: Request, body?: string): boolean {
+type BodyRead = { tooLarge: true } | { tooLarge: false; body: string }
+
+/** 申告された長さだけで判断する。申告が無い送り方はここでは弾かない。 */
+function isDeclaredTooLarge(request: Request): boolean {
   const contentLengthHeader = request.headers.get('content-length')
-  if (contentLengthHeader !== null) {
-    const contentLength = Number(contentLengthHeader)
-    if (Number.isFinite(contentLength) && contentLength > MAX_BODY_BYTES) return true
+  if (contentLengthHeader === null) return false
+  const contentLength = Number(contentLengthHeader)
+  return Number.isFinite(contentLength) && contentLength > MAX_BODY_BYTES
+}
+
+/** 本文を読み進めながら数え、上限を超えた時点で打ち切る。超過分をメモリに載せない。 */
+async function readBodyWithinLimit(request: Request): Promise<BodyRead> {
+  const stream = request.body
+  if (stream === null) {
+    const body = await request.text()
+    if (new TextEncoder().encode(body).byteLength > MAX_BODY_BYTES) return { tooLarge: true }
+    return { tooLarge: false, body }
   }
-  return body !== undefined && new TextEncoder().encode(body).byteLength > MAX_BODY_BYTES
+
+  const reader = stream.getReader()
+  const chunks: Uint8Array[] = []
+  let total = 0
+  try {
+    for (;;) {
+      const { done, value } = await reader.read()
+      if (done) break
+      total += value.byteLength
+      if (total > MAX_BODY_BYTES) {
+        // 残りは受け取らない。送り手にも打ち切りを伝える。
+        await reader.cancel()
+        return { tooLarge: true }
+      }
+      chunks.push(value)
+    }
+  } finally {
+    reader.releaseLock()
+  }
+
+  const merged = new Uint8Array(total)
+  let offset = 0
+  for (const chunk of chunks) {
+    merged.set(chunk, offset)
+    offset += chunk.byteLength
+  }
+  return { tooLarge: false, body: new TextDecoder().decode(merged) }
 }
 
 /** CSP Report-Only の受け口。本文は上限を設け、実データを保存せず安全な最小値だけログへ出す。 */
 export const onRequestPost = async ({ request }: Context): Promise<Response> => {
-  if (isTooLarge(request)) return new Response(null, { status: 413 })
-  const body = await request.text()
-  if (isTooLarge(request, body)) return new Response(null, { status: 413 })
+  if (isDeclaredTooLarge(request)) return new Response(null, { status: 413 })
+  const read = await readBodyWithinLimit(request)
+  if (read.tooLarge) return new Response(null, { status: 413 })
   try {
-    const report = extractSafeCspReport(JSON.parse(body) as unknown)
+    const report = extractSafeCspReport(JSON.parse(read.body) as unknown)
     if (!report) {
       console.warn('csp-report: invalid schema')
       return new Response(null, { status: 204 })

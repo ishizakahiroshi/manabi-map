@@ -3,11 +3,30 @@ import {
   createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode,
 } from 'react'
 import type { HomeLocation } from '../types/school'
+import { ANALYTICS_SESSION_STORAGE_KEY } from '../lib/analytics'
+import { HOME_ZOOM_KEY } from '../lib/mapView'
 import { supabase } from '../lib/supabase'
 import { useAuth } from './AuthContext'
 
 const HOME_KEY = 'mm.home'
 const PERSISTED_HOME_LABEL = '設定地点'
+
+/**
+ * サインアウトで端末から消すキー。前の利用者の痕跡を次の利用者へ持ち越さない。
+ * 分析用のセッション ID も同じ理由で消す（1 台を家族で共有する前提の製品なので、
+ * 残すと次に使う人の記録に前の利用者と同じ ID が付く）。地図ズームと分析用のキーは
+ * それぞれの持ち主から取り込む。消すと次の記録で新しい ID が発行される。
+ */
+export const SIGNED_OUT_CLEARED_KEYS = [
+  HOME_KEY, HOME_ZOOM_KEY, ANALYTICS_SESSION_STORAGE_KEY,
+] as const
+
+/** 上記のキーを端末から消す。localStorage 不可の環境では消せないだけで、動作は変わらない。 */
+export function clearSignedOutDeviceState(): void {
+  for (const key of SIGNED_OUT_CLEARED_KEYS) {
+    try { localStorage.removeItem(key) } catch { /* noop */ }
+  }
+}
 
 export type HomeLoadState = 'loading' | 'ready' | 'error'
 
@@ -180,9 +199,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setHomeLoadState('loading')
     if (!session) {
       // 実ログインからのサインアウト後は、前ユーザーの地点を次のユーザーへ移送しない。
+      // 地図が覚えているズーム（同じ座標を持つ）と分析用のセッション ID も一緒に消す。
+      // 1 つでも残すと、次の利用者の端末に前の利用者の座標や識別子が残る。
       // 初回の未ログイン状態では activeHomeUserId が null のため、匿名利用の引き継ぎは残る。
       if (activeHomeUserId.current !== null) {
-        try { localStorage.removeItem(HOME_KEY) } catch { /* noop */ }
+        clearSignedOutDeviceState()
         activeHomeUserId.current = null
         migratedFor.current = null
         setHomeState(null)
