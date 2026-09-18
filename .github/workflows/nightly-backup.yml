@@ -41,7 +41,7 @@ jobs:
       - name: Verify required secrets are configured
         run: |
           missing=""
-          for name in SUPABASE_DB_HOST SUPABASE_DB_PORT SUPABASE_DB_USER SUPABASE_DB_NAME SUPABASE_DB_PASSWORD SUPABASE_CA_CERT BACKUP_AGE_PUBLIC_KEY R2_ACCOUNT_ID R2_ACCESS_KEY_ID R2_SECRET_ACCESS_KEY R2_BUCKET; do
+          for name in SUPABASE_DB_HOST SUPABASE_DB_PORT SUPABASE_DB_USER SUPABASE_DB_NAME SUPABASE_DB_PASSWORD BACKUP_AGE_PUBLIC_KEY R2_ACCOUNT_ID R2_ACCESS_KEY_ID R2_SECRET_ACCESS_KEY R2_BUCKET; do
             value="${!name}"
             if [ -z "$value" ]; then
               missing="$missing $name"
@@ -58,7 +58,6 @@ jobs:
           SUPABASE_DB_USER: ${{ secrets.SUPABASE_DB_USER }}
           SUPABASE_DB_NAME: ${{ secrets.SUPABASE_DB_NAME }}
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
-          SUPABASE_CA_CERT: ${{ secrets.SUPABASE_CA_CERT }}
           BACKUP_AGE_PUBLIC_KEY: ${{ secrets.BACKUP_AGE_PUBLIC_KEY }}
           R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
           R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
@@ -84,22 +83,14 @@ jobs:
       # 2026-09-18 C13: 本番側の「Enforce SSL on incoming connections」は OFF で、
       # プーラーは平文セッションを拒否しない。libpq 既定の transport mode(prefer)は
       # サーバーの身元も検証しないため、経路上に立てる相手がいると平文へ落とせる。
-      # dump 側を sslmode=verify-full に固定し、CA 証明書で相手を確かめる。
-      # 証明書の取得(Supabase Dashboard > Settings > Database > SSL Configuration)と
-      # Secret 登録はユーザー作業。手順は docs/local/manual_backup-restore-runbook.md の
-      # 「事前準備 > 3. Supabase CA 証明書の取得と GitHub Secret 登録」を参照。
-      - name: Write Supabase CA certificate
-        env:
-          SUPABASE_CA_CERT: ${{ secrets.SUPABASE_CA_CERT }}
-        run: |
-          umask 077
-          printf '%s\n' "$SUPABASE_CA_CERT" > supabase-ca.crt
-          # 中身は出さず、PEM の体裁だけ確認する(証明書自体は秘密ではないが値は出さない方針に揃える)。
-          if ! grep -q -- '-----BEGIN CERTIFICATE-----' supabase-ca.crt; then
-            echo "::error::SUPABASE_CA_CERT が PEM 形式ではありません。Dashboard の SSL Configuration から取得し直してください。"
-            exit 1
-          fi
-
+      # dump 側を sslmode=verify-full に固定し、相手を確かめる。
+      #
+      # CA は OS の信頼ストアを使う(PGSSLROOTCERT=system・libpq 16 以降)。
+      # Supabase の pooler は一般に信頼された証明書を出すので、これで検証が通る。
+      # 独自の CA 証明書を Secret へ登録する運用にしない理由は 2 つ。
+      #   1. 登録・更新が人の手作業になり、更新漏れでバックアップが止まる
+      #   2. 証明書が変わるたびに Secret を差し替える必要が出る
+      # 通らなかった場合は下の失敗メッセージの手順に従う。**平文へ落とす形へは戻さないこと。**
       - name: pg_dump (custom format, no owner/acl, verify-full TLS)
         env:
           # PGPASSWORD 経由でパスワードを渡す。URL 形式を使わないので
@@ -112,9 +103,10 @@ jobs:
           # verify-full = 暗号化を必須にし、CA 署名とホスト名の一致まで検証する。
           # サーバー側が平文を拒否していなくても、こちら側が平文へ落ちない。
           PGSSLMODE: verify-full
+          # system = OS の ca-certificates を使う。PostgreSQL 16 で入った指定。
+          PGSSLROOTCERT: system
         run: |
-          PGSSLROOTCERT="$PWD/supabase-ca.crt"
-          export PGSSLROOTCERT
+          set +e
           pg_dump \
             -h "$SUPABASE_DB_HOST" \
             -p "$SUPABASE_DB_PORT" \
@@ -122,10 +114,19 @@ jobs:
             -d "$SUPABASE_DB_NAME" \
             --format=custom --no-owner --no-acl \
             -f backup.dump
-
-      - name: Remove CA certificate from workspace
-        if: always()
-        run: rm -f supabase-ca.crt
+          status=$?
+          set -e
+          if [ "$status" -ne 0 ]; then
+            echo "::error::pg_dump が失敗しました。TLS 検証が原因の場合の切り分け:"
+            echo "::error::(1) 'root certificate file' や 'certificate verify failed' が出ている場合"
+            echo "::error::    = 接続先が一般に信頼された証明書を使っていない。"
+            echo "::error::    Dashboard > Settings > Database > SSL Configuration から CA 証明書を取得し、"
+            echo "::error::    Secret SUPABASE_CA_CERT へ登録したうえで PGSSLROOTCERT をそのファイルへ向ける。"
+            echo "::error::(2) 'server does not support SSL' が出ている場合 = 接続先が暗号化に対応していない。"
+            echo "::error::    接続先(直結かプーラーか)を SUPABASE_DB_HOST で確認する。"
+            echo "::error::いずれの場合も PGSSLMODE を下げて平文を許す形へは戻さないこと。"
+            exit "$status"
+          fi
 
       - name: gzip
         run: gzip backup.dump
