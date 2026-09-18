@@ -659,6 +659,14 @@ export const ja: MessageTree = {
     retry: '再試行',
     createAnother: '＋ 別の家族グループを作る',
     inviteBad: '招待リンクが正しくありません。',
+    inviteUnavailable: 'この招待リンクは使えません。期限切れか、すでに使われた可能性があります。',
+    checkingInvite: '招待を確認しています…',
+    confirmJoin: '「{group}」に参加しますか？',
+    confirmNote:
+      '参加すると、このグループのメンバーとお気に入り・メモを共有できるようになります。共有は最初はオフで、マイページの「家族と共有」からいつでも切り替えられます。',
+    confirmAccept: 'このグループに参加する',
+    confirmDecline: '参加しない',
+    unnamedGroup: '家族グループ',
     accepting: '参加処理中です…',
     accepted: '家族グループに参加しました。お気に入り一覧へ移動します…',
     acceptFail: '参加できませんでした。リンクが期限切れか、既に無効になっている可能性があります。',
@@ -674,6 +682,7 @@ export const ja: MessageTree = {
   maintenance: {
     banner: '現在メンテナンス中です。閲覧は可能ですが、お気に入り・メモ・私の記録の保存は一時停止しています。',
     toast: '現在メンテナンス中です',
+    stale: '最新の状態が届いていない可能性があります。再読み込みしてください。',
   },
   error: {
     title: '一時的な問題が発生しました',

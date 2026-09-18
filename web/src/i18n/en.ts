@@ -658,6 +658,14 @@ export const en: MessageTree = {
     retry: 'Retry',
     createAnother: '+ Create another family group',
     inviteBad: 'Invalid invite link.',
+    inviteUnavailable: 'This invite link cannot be used. It may have expired or already been used.',
+    checkingInvite: 'Checking the invitation…',
+    confirmJoin: 'Join "{group}"?',
+    confirmNote:
+      'Joining lets you share favorites and memos with this group. Sharing starts off; turn it on anytime from Family sharing on My page.',
+    confirmAccept: 'Join this group',
+    confirmDecline: 'Not now',
+    unnamedGroup: 'this family group',
     accepting: 'Joining…',
     accepted: 'Joined the family group. Opening favorites…',
     acceptFail: 'Could not join. The link may be expired or invalid.',
@@ -673,6 +681,7 @@ export const en: MessageTree = {
   maintenance: {
     banner: 'Maintenance in progress. You can browse, but saving favorites, memos, and personal records is paused.',
     toast: 'Maintenance in progress',
+    stale: 'This page may not have the latest status; please reload.',
   },
   error: {
     title: 'Something went wrong',

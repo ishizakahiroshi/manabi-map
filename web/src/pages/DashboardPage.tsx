@@ -210,9 +210,11 @@ function MaintenanceControl() {
   const toggle = async () => {
     if (disabled || !session) return
     const nextOn = !currentOn
+    // メンテモードはアプリ内の読み取り専用モード（web/src/lib/maintenance.ts）。
+    // サイト全体の遮断や DB / API への直接の書き込み停止ではないので、そう読める文言にしない。
     const message = nextOn
-      ? '本番のメンテモードを ON にします。ユーザーの書き込みがブロックされます。続行しますか？'
-      : '本番のメンテモードを OFF にします。ユーザーの書き込みを再開します。続行しますか？'
+      ? '本番のメンテモードを ON にします。アプリ内の保存操作（お気に入り・メモ・私の記録など）が止まり、閲覧は続けられます。DB や API への直接の書き込みは止まりません。続行しますか？'
+      : '本番のメンテモードを OFF にします。アプリ内の保存操作を再開します。続行しますか？'
     if (!window.confirm(message)) return
 
     const previousOn = currentOn
@@ -255,6 +257,9 @@ function MaintenanceControl() {
       >
         {`メンテモード: ${currentOn ? 'ON ▸ OFF にする' : 'OFF ▸ ON にする'}`}
       </button>
+      <small className="sub" style={{ display: 'block', marginTop: 4 }}>
+        アプリ内の保存操作だけを止めます（閲覧は継続。サイト全体の遮断は別レイヤー）。
+      </small>
       {envForced && <small className="sub" style={{ display: 'block', marginTop: 4 }}>env var で強制 ON 中（CF Pages 側で解除してください）</small>}
       {loadError && !envForced && <small className="sub" style={{ display: 'block', marginTop: 4 }}>メンテモードの状態を取得できませんでした。</small>}
     </div>
