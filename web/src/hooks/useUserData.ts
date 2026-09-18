@@ -550,31 +550,14 @@ export function useUserData(): UserData {
           return next
         })
       try {
-        // 同意だけの切替も note と同じセンチネル行へ upsert する。
-        const { error } = await supabase.from('user_school_deviations').upsert(
-          {
-            user_id: activeUserId,
-            school_id: schoolId,
-            department_id: null,
-            value: 0,
-            note: cur.note,
-            visibility,
-            updated_at: new Date().toISOString(),
-          },
-          { onConflict: 'user_id,school_id,department_id' },
-        )
+        // センチネル行の upsert と学科行の visibility 更新は、別々の要求で送ると
+        // 2 文目が失敗したときに半分だけ適用された状態が DB に残る（画面だけ巻き戻る）。
+        // 202609180105 の RPC が両方を 1 トランザクションで適用する。
+        const { error } = await supabase.rpc('save_mine_consent', {
+          p_school_id: schoolId,
+          p_submit: submit,
+        })
         if (error) throw error
-
-        // 同意撤回はセンチネル行だけでなく、既存の学科行にも反映する。
-        // 学科行が submit_to_manabi のままだと、集計キューと再読込時の OR 集約に残る。
-        if (!isDataReadyFor(activeUserId)) return 'blocked'
-        const { error: departmentError } = await supabase
-          .from('user_school_deviations')
-          .update({ visibility, updated_at: new Date().toISOString() })
-          .eq('user_id', activeUserId)
-          .eq('school_id', schoolId)
-          .not('department_id', 'is', null)
-        if (departmentError) throw departmentError
       } catch (err) {
         if (isDataReadyFor(activeUserId)) rollback()
         throw err

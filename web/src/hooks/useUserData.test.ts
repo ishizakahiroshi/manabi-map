@@ -93,8 +93,14 @@ const mocks = vi.hoisted(() => {
     },
   }
 
-  const client: { from: (table: string) => any } = {
+  const client: {
+    from: (table: string) => any
+    rpc: (fn: string, params?: unknown) => any
+  } = {
     from: (_table: string) => {
+      throw new Error('Supabase mock was not configured')
+    },
+    rpc: (_fn: string, _params?: unknown) => {
       throw new Error('Supabase mock was not configured')
     },
   }
@@ -150,7 +156,8 @@ vi.mock('./useMaintenanceMode', () => ({
 import { useUserData } from './useUserData'
 
 const OK: MockResponse = { data: [], error: null }
-const WRITE_OPERATIONS = new Set(['upsert', 'update', 'insert', 'delete'])
+// rpc も書込経路として数える（同意の切替は save_mine_consent RPC 1 回で DB を変える）。
+const WRITE_OPERATIONS = new Set(['upsert', 'update', 'insert', 'delete', 'rpc'])
 
 function response(data: unknown[] = []): MockResponse {
   return { data, error: null }
@@ -167,8 +174,12 @@ function configureClient(options: {
   select?: (table: string) => Promise<MockResponse>
   upsert?: (table: string, payload: unknown, options: unknown) => Promise<MockResponse>
   onDelete?: (table: string, filters: Record<string, unknown>) => Promise<MockResponse>
-  onUpdate?: (table: string, payload: unknown, filters: Record<string, unknown>) => void
+  rpc?: (fn: string, params: unknown) => Promise<MockResponse>
 }) {
+  mocks.client.rpc = (fn: string, params?: unknown) => {
+    mocks.calls.push({ table: fn, operation: 'rpc', args: [params] })
+    return options.rpc?.(fn, params) ?? Promise.resolve(OK)
+  }
   mocks.client.from = (table: string) => {
     const select = (...args: unknown[]) => {
       mocks.calls.push({ table, operation: 'select', args })
@@ -177,23 +188,6 @@ function configureClient(options: {
     const upsert = (payload: unknown, upsertOptions: unknown) => {
       mocks.calls.push({ table, operation: 'upsert', args: [payload, upsertOptions] })
       return options.upsert?.(table, payload, upsertOptions) ?? Promise.resolve(OK)
-    }
-    const update = (payload: unknown) => {
-      mocks.calls.push({ table, operation: 'update', args: [payload] })
-      const filters: Record<string, unknown> = {}
-      const builder = {
-        eq(column: string, value: unknown) {
-          filters[column] = value
-          mocks.calls.push({ table, operation: 'eq', args: [column, value] })
-          return builder
-        },
-        not(column: string, operator: string, value: unknown) {
-          mocks.calls.push({ table, operation: 'not', args: [column, operator, value] })
-          options.onUpdate?.(table, payload, { ...filters, [`not:${column}`]: [operator, value] })
-          return Promise.resolve(OK)
-        },
-      }
-      return builder
     }
     const remove = () => {
       mocks.calls.push({ table, operation: 'delete', args: [] })
@@ -210,7 +204,7 @@ function configureClient(options: {
       }
       return builder
     }
-    return { select, upsert, update, delete: remove }
+    return { select, upsert, delete: remove }
   }
 }
 
@@ -236,7 +230,7 @@ describe('useUserData audit regressions', () => {
     mocks.state.toast.mockReset()
   })
 
-  it('同意 OFF はセンチネル行と学科行の visibility を private に揃える', async () => {
+  it('同意 OFF はセンチネル行と学科行を RPC 1 回で private に揃える', async () => {
     const schoolId = '00000000-0000-4000-8000-000000000010'
     const departmentRow = {
       user_id: mocks.state.session?.user.id,
@@ -261,13 +255,10 @@ describe('useUserData audit regressions', () => {
         user_school_notes: response(),
         user_school_deviations: response(deviationRows),
       },
-      onUpdate: (_table, payload) => {
-        for (const row of deviationRows) {
-          if (row.department_id !== null) Object.assign(row, payload)
-        }
-      },
-      upsert: (_table, payload) => {
-        Object.assign(sentinelRow, payload)
+      // save_mine_consent は DB 側の 1 トランザクション。2 行を同時に書き換える。
+      rpc: (_fn, params) => {
+        const visibility = (params as { p_submit: boolean }).p_submit ? 'submit_to_manabi' : 'private'
+        for (const row of deviationRows) row.visibility = visibility
         return Promise.resolve(OK)
       },
     })
@@ -280,9 +271,43 @@ describe('useUserData audit regressions', () => {
 
     expect(departmentRow.visibility).toBe('private')
     expect(sentinelRow.visibility).toBe('private')
-    expect(writes().filter((call) => call.operation === 'upsert')).toHaveLength(1)
-    expect(writes().filter((call) => call.operation === 'update')).toHaveLength(1)
-    expect(mocks.calls.some((call) => call.operation === 'not' && call.args[0] === 'department_id')).toBe(true)
+    const rpcCalls = writes().filter((call) => call.operation === 'rpc')
+    expect(rpcCalls).toHaveLength(1)
+    expect(rpcCalls[0].table).toBe('save_mine_consent')
+    expect(rpcCalls[0].args[0]).toEqual({ p_school_id: schoolId, p_submit: false })
+    // 半分だけ適用される余地を残さないため、テーブルへの直接書込は 1 件も出さない。
+    expect(writes().filter((call) => call.operation !== 'rpc')).toEqual([])
+  })
+
+  it('同意切替の RPC が失敗したら楽観更新を巻き戻す', async () => {
+    const schoolId = '00000000-0000-4000-8000-000000000010'
+    const departmentId = '00000000-0000-4000-8000-000000000011'
+    configureClient({
+      selects: {
+        user_school_favorites: response(),
+        user_school_notes: response(),
+        user_school_deviations: response([
+          { school_id: schoolId, department_id: departmentId, value: 62, note: null, visibility: 'private' },
+          { school_id: schoolId, department_id: null, value: 0, note: '合成メモ', visibility: 'private' },
+        ]),
+      },
+      rpc: () => Promise.resolve({ data: null, error: { message: 'synthetic consent rpc failure' } }),
+    })
+
+    const data = mount()
+    await settle()
+    const before = mocks.harness.getResult<ReturnType<typeof useUserData>>().mine[schoolId]
+    expect(before.visibility).toBe('private')
+    mocks.calls.length = 0
+
+    await expect(data.saveMineConsent(schoolId, true)).rejects.toEqual({
+      message: 'synthetic consent rpc failure',
+    })
+
+    const after = mocks.harness.getResult<ReturnType<typeof useUserData>>().mine[schoolId]
+    expect(after).toEqual(before)
+    expect(after.visibility).toBe('private')
+    expect(writes().filter((call) => call.operation === 'rpc')).toHaveLength(1)
   })
 
   it('loadError 時の saveNote は Supabase を呼ばず空上書きを防ぐ', async () => {
