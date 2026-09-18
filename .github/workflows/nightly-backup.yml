@@ -38,6 +38,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
+      - name: Check out repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
       - name: Verify required secrets are configured
         run: |
           missing=""
@@ -89,14 +92,9 @@ jobs:
       # `SSL error: certificate verify failed` で通らなかった(run 35351036279)。
       # 接続先は一般に信頼された証明書ではなく Supabase 自身の CA で署名された証明書を出す。
       #
-      # いまは require にしてある。**これは平文への降格を塞ぐ設定で、暗号化は必須。**
-      # 塞げていないのは「相手が本当に Supabase か」の確認だけ。
-      # 突くには経路乗っ取りか DNS 乗っ取りが要る狙い撃ちの攻撃になる。
-      #
-      # verify-full へ上げるには Supabase の CA 証明書が要る(公開情報・秘密ではない)。
-      # 取得して repo へ commit し、PGSSLROOTCERT をそのファイルへ向ければ
-      # Secret 管理なしで verify-full にできる。判断は docs/local/plan_security-audit-remediation.md の
-      # 「C13 の方針変更」を参照。
+      # Dashboard の Download certificate と同じ Supabase 公式配布物を repo に固定し、
+      # PGSSLROOTCERT で参照する。公開 CA なので GitHub Secret は不要。
+      # 更新元: https://supabase-downloads.s3-ap-southeast-1.amazonaws.com/prod/ssl/prod-ca-2021.crt
       #
       # **prefer や disable へは戻さないこと。** 既定の prefer はサーバーが拒めば平文に落ちる。
       - name: pg_dump (custom format, no owner/acl, verify-full TLS)
@@ -108,9 +106,9 @@ jobs:
           SUPABASE_DB_PORT: ${{ secrets.SUPABASE_DB_PORT }}
           SUPABASE_DB_USER: ${{ secrets.SUPABASE_DB_USER }}
           SUPABASE_DB_NAME: ${{ secrets.SUPABASE_DB_NAME }}
-          # require = 暗号化を必須にする。サーバーが平文を求めても接続しない。
-          # 相手の身元(証明書の署名とホスト名)は確認しない。上のコメントを読むこと。
-          PGSSLMODE: require
+          # verify-full = 暗号化を必須にし、CA 署名とホスト名の一致まで検証する。
+          PGSSLMODE: verify-full
+          PGSSLROOTCERT: ${{ github.workspace }}/.github/certificates/supabase-prod-ca-2021.crt
         run: |
           set +e
           pg_dump \
@@ -124,6 +122,8 @@ jobs:
           set -e
           if [ "$status" -ne 0 ]; then
             echo "::error::pg_dump が失敗しました。TLS が原因の場合の切り分け:"
+            echo "::error::'root certificate file' = repo 内 CA の checkout または参照パスを確認する。"
+            echo "::error::'certificate verify failed' = Supabase 公式 CA の更新有無を確認する。"
             echo "::error::'server does not support SSL' = 接続先が暗号化に対応していない。"
             echo "::error::SUPABASE_DB_HOST が直結かプーラーかを確認する。"
             echo "::error::**PGSSLMODE を prefer / disable へ下げて平文を許す形へは戻さないこと。**"

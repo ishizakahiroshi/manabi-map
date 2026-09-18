@@ -438,16 +438,18 @@ export function useUserData(): UserData {
           throw error
         }
       } else {
+        // visibility は同意操作だけが変更する。画面の読み込み後に別タブで同意を変えても、
+        // 偏差値保存が古い visibility を上書きしないよう payload へ含めない。
+        // 新規行では DB の既定値 private を使う。
         const { error } = await supabase.from('user_school_deviations').upsert(
           {
             user_id: activeUserId,
             school_id: schoolId,
             department_id: departmentId,
             value,
-            visibility: cur.visibility,
             updated_at: new Date().toISOString(),
           },
-          { onConflict: 'user_id,school_id,department_id' },
+          { onConflict: 'user_id,school_id,department_id', defaultToNull: false },
         )
         if (error) {
           if (isDataReadyFor(activeUserId)) rollback()
@@ -511,6 +513,8 @@ export function useUserData(): UserData {
       try {
         // 202608040104 の UNIQUE NULLS NOT DISTINCT により、note 行も同じ
         // user/school/null department キーで競合なく upsert できる。
+        // visibility は同意操作だけが変更するため payload へ含めず、既存値を維持する。
+        // 新規行では DB の既定値 private を使う。
         const { error } = await supabase.from('user_school_deviations').upsert(
           {
             user_id: activeUserId,
@@ -518,10 +522,9 @@ export function useUserData(): UserData {
             department_id: null,
             value: 0,
             note,
-            visibility: cur.visibility,
             updated_at: new Date().toISOString(),
           },
-          { onConflict: 'user_id,school_id,department_id' },
+          { onConflict: 'user_id,school_id,department_id', defaultToNull: false },
         )
         if (error) throw error
       } catch (err) {

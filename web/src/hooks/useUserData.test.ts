@@ -310,6 +310,57 @@ describe('useUserData audit regressions', () => {
     expect(writes().filter((call) => call.operation === 'rpc')).toHaveLength(1)
   })
 
+  it('偏差値と個人メモの保存は読み込み時の visibility を再送しない', async () => {
+    const schoolId = '00000000-0000-4000-8000-000000000010'
+    const departmentId = '00000000-0000-4000-8000-000000000011'
+    configureClient({
+      selects: {
+        user_school_favorites: response(),
+        user_school_notes: response(),
+        user_school_deviations: response([
+          {
+            school_id: schoolId,
+            department_id: departmentId,
+            value: 62,
+            note: null,
+            visibility: 'submit_to_manabi',
+          },
+          {
+            school_id: schoolId,
+            department_id: null,
+            value: 0,
+            note: '合成メモ',
+            visibility: 'submit_to_manabi',
+          },
+        ]),
+      },
+    })
+
+    mount()
+    await settle()
+    mocks.calls.length = 0
+    const data = mocks.harness.getResult<ReturnType<typeof useUserData>>()
+
+    await expect(data.saveMineValue(schoolId, departmentId, 63)).resolves.toBe('success')
+    await expect(data.saveMineNote(schoolId, '変更後の合成メモ')).resolves.toBe('success')
+
+    const payloads = writes()
+      .filter((call) => call.operation === 'upsert')
+      .map((call) => call.args[0] as Record<string, unknown>)
+    expect(payloads).toHaveLength(2)
+    expect(payloads[0]).not.toHaveProperty('visibility')
+    expect(payloads[1]).not.toHaveProperty('visibility')
+    const options = writes()
+      .filter((call) => call.operation === 'upsert')
+      .map((call) => call.args[1])
+    expect(options).toEqual([
+      { onConflict: 'user_id,school_id,department_id', defaultToNull: false },
+      { onConflict: 'user_id,school_id,department_id', defaultToNull: false },
+    ])
+    expect(mocks.harness.getResult<ReturnType<typeof useUserData>>().mine[schoolId].visibility)
+      .toBe('submit_to_manabi')
+  })
+
   it('loadError 時の saveNote は Supabase を呼ばず空上書きを防ぐ', async () => {
     configureClient({
       selects: {

@@ -1,29 +1,22 @@
--- ============================================================================
--- baseline_schema.sql
---
--- 本番 Supabase（public スキーマ）の完全スナップショット。2026-08-05 に
--- pg_dump --schema-only --no-owner -n public で取得（データ・接続情報は含まない）。
---
--- 目的（監査 SEC-RLS-01 / MNT-RPLY-08 の是正）:
---   - RLS・SECURITY DEFINER 関数・制約・テーブル定義を repo でレビューできるようにする
---     （従来は本番 DB 内にしか無く、コードからは確認できなかった）。
---   - 災害復旧 / 検証環境を新規構築するときの土台にする。
---
--- 運用:
---   - これは参照・DR 用の宣言的スナップショットであり、`supabase db push` の対象外
---     （migrations/ の外に置く）。既存本番には適用しない（既に全て存在する）。
---   - fresh な Supabase を作るときは、これを最初に psql で適用してから、
---     以後の差分 migration（web/supabase/migrations/）を順に流す。既存 migration との
---     完全統合（squash）は別途 pending（docs/local）。
---   - DB を変更するときは従来どおり migrations/ に新規 SQL を足し、節目でこの
---     スナップショットを取り直す。
--- ============================================================================
-
-
 --
 -- PostgreSQL database dump
 --
 
+-- ============================================================================
+-- baseline_schema.sql
+--
+-- 本番 Supabase の public スキーマを、migration 202609180105 適用済みの状態で
+-- pg_dump --schema-only --no-owner --schema=public により取得した参照・DR 用
+-- スナップショット（データ・接続情報は含まない）。
+--
+-- このファイルは migrations/ の外にあり、既存本番へ直接適用しない。
+-- public スキーマに属さない event trigger、publication の table membership、
+-- migration 台帳、app_config を含む行データは schema 限定 dump には入らない。
+-- 復元時の補完手順は docs/local/pending_migration-baseline-squash_2026-08-05.md と
+-- docs/local/manual_production-restore-runbook.md を参照すること。
+-- ============================================================================
+
+\restrict ija7Ify61EWLSbVCRETgYEMKDsufzdBgSK42xTbKaAq0VPjTgzAdaCkhKuR4fUi
 
 -- Dumped from database version 17.6
 -- Dumped by pg_dump version 18.4
@@ -89,38 +82,45 @@ declare
   v_uid uuid := auth.uid();
   v_group_id uuid;
   v_status text;
+  v_expires_at timestamptz;
 begin
   if v_uid is null then
     raise exception 'authentication required';
   end if;
+  if coalesce((select u.is_anonymous from auth.users u where u.id = v_uid), true) then
+    raise exception 'anonymous users cannot use family sharing';
+  end if;
 
-  select group_id, status into v_group_id, v_status
-  from family_members
+  select group_id, status, expires_at
+    into v_group_id, v_status, v_expires_at
+  from public.family_members
   where invite_token = p_token
   for update;
 
   if v_group_id is null then
     raise exception 'invalid invitation';
   end if;
+  if v_status <> 'invited' then
+    raise exception 'invitation already used';
+  end if;
+  if v_expires_at is null or v_expires_at <= now() then
+    raise exception 'invitation expired';
+  end if;
 
-  -- 既に同じグループのメンバーなら、余分な招待行は消して既存メンバーシップを返す
   if exists (
-    select 1 from family_members
+    select 1 from public.family_members
     where group_id = v_group_id and user_id = v_uid
   ) then
-    delete from family_members
+    delete from public.family_members
     where invite_token = p_token and status = 'invited' and user_id is null;
     return v_group_id;
   end if;
 
-  if v_status <> 'invited' then
-    raise exception 'invitation already used';
-  end if;
-
-  update family_members
+  update public.family_members
   set user_id = v_uid,
       status = 'active',
-      accepted_at = now()
+      accepted_at = now(),
+      expires_at = null
   where invite_token = p_token;
 
   return v_group_id;
@@ -144,9 +144,25 @@ declare
   v_value_id uuid;
   v_log_id uuid;
   v_reason text := btrim(coalesce(p_reason, ''));
+  v_locked_until timestamptz;
+  v_failed_attempts integer;
 begin
   if v_uid is null then
     raise exception 'authentication required';
+  end if;
+
+  if not exists (select 1 from public.admin_users a where a.user_id = v_uid) then
+    raise exception 'not authorized';
+  end if;
+
+  select failed_attempts, locked_until
+    into v_failed_attempts, v_locked_until
+  from public.admin_pin_attempts
+  where user_id = v_uid
+  for update;
+
+  if v_locked_until is not null and v_locked_until > now() then
+    return;
   end if;
 
   select a.pin_hash into v_pin_hash
@@ -154,13 +170,23 @@ begin
   where a.user_id = v_uid;
 
   if v_pin_hash is null or crypt(coalesce(p_pin, ''), v_pin_hash) <> v_pin_hash then
-    raise exception 'admin pin verification failed';
+    insert into public.admin_pin_attempts (user_id, failed_attempts, locked_until, updated_at)
+    values (v_uid, 1, null, now())
+    on conflict (user_id) do update
+    set failed_attempts = public.admin_pin_attempts.failed_attempts + 1,
+        locked_until = case
+          when public.admin_pin_attempts.failed_attempts + 1 >= 5 then now() + interval '15 minutes'
+          else null
+        end,
+        updated_at = now();
+    return;
   end if;
+
+  delete from public.admin_pin_attempts where user_id = v_uid;
 
   if p_new_value is null or p_new_value < 20 or p_new_value > 80 then
     raise exception 'new deviation value must be between 20 and 80';
   end if;
-
   if char_length(v_reason) < 4 or char_length(v_reason) > 500 then
     raise exception 'reason must be between 4 and 500 characters';
   end if;
@@ -168,7 +194,6 @@ begin
   select d.school_id into v_school_id
   from public.school_departments d
   where d.id = p_department_id;
-
   if v_school_id is null then
     raise exception 'department not found';
   end if;
@@ -182,24 +207,32 @@ begin
 
   if v_value_id is null then
     insert into public.school_deviation_values (
-      school_id, department_id, value, year, source_type, estimate_method, note, is_active
-    )
-    values (
-      v_school_id, p_department_id, p_new_value, extract(year from now())::integer,
-      'manabi_estimate', 'admin_override_v1', v_reason, true
+      school_id, department_id, value, year, source_type,
+      estimate_method, estimate_basis, note, is_active
+    ) values (
+      v_school_id,
+      p_department_id,
+      p_new_value,
+      extract(year from (now() at time zone 'Asia/Tokyo'))::integer,
+      'manabi_estimate',
+      'admin_override_v1',
+      'admin_override',
+      v_reason,
+      true
     );
   else
     update public.school_deviation_values
     set value = p_new_value,
         note = v_reason,
+        estimate_method = 'admin_override_v1',
+        estimate_basis = 'admin_override',
         updated_at = now()
     where id = v_value_id;
   end if;
 
   insert into public.deviation_correction_logs (
     school_id, department_id, changed_by, old_value, new_value, reason
-  )
-  values (v_school_id, p_department_id, v_uid, v_old_value, p_new_value, v_reason)
+  ) values (v_school_id, p_department_id, v_uid, v_old_value, p_new_value, v_reason)
   returning id into v_log_id;
 
   return query select v_school_id, p_department_id, v_old_value, p_new_value, v_log_id;
@@ -222,12 +255,15 @@ begin
   if v_uid is null then
     raise exception 'authentication required';
   end if;
+  if coalesce((select u.is_anonymous from auth.users u where u.id = v_uid), true) then
+    raise exception 'anonymous users cannot use family sharing';
+  end if;
 
-  insert into family_groups (owner_id, name)
+  insert into public.family_groups (owner_id, name)
   values (v_uid, coalesce(nullif(btrim(p_name), ''), '家族'))
   returning id into v_group_id;
 
-  insert into family_members (group_id, user_id, role, status, accepted_at)
+  insert into public.family_members (group_id, user_id, role, status, accepted_at)
   values (v_group_id, v_uid, 'owner', 'active', now());
 
   return v_group_id;
@@ -250,14 +286,22 @@ begin
   if v_uid is null then
     raise exception 'authentication required';
   end if;
+  if coalesce((select u.is_anonymous from auth.users u where u.id = v_uid), true) then
+    raise exception 'anonymous users cannot use family sharing';
+  end if;
   if not exists (
-    select 1 from family_groups g where g.id = p_group_id and g.owner_id = v_uid
+    select 1 from public.family_groups g where g.id = p_group_id and g.owner_id = v_uid
   ) then
     raise exception 'only the group owner can invite';
   end if;
 
-  insert into family_members (group_id, role, status)
-  values (p_group_id, 'member', 'invited')
+  delete from public.family_members
+  where group_id = p_group_id
+    and status = 'invited'
+    and expires_at <= now();
+
+  insert into public.family_members (group_id, role, status, expires_at)
+  values (p_group_id, 'member', 'invited', now() + interval '7 days')
   returning invite_token into v_token;
 
   return v_token;
@@ -301,13 +345,16 @@ begin
   if v_uid is null then
     raise exception 'authentication required';
   end if;
+  if coalesce((select u.is_anonymous from auth.users u where u.id = v_uid), true) then
+    raise exception 'anonymous users cannot use family sharing';
+  end if;
   if not exists (
-    select 1 from family_groups g where g.id = p_group_id and g.owner_id = v_uid
+    select 1 from public.family_groups g where g.id = p_group_id and g.owner_id = v_uid
   ) then
     raise exception 'only the group owner can delete the group';
   end if;
 
-  delete from family_groups where id = p_group_id;
+  delete from public.family_groups where id = p_group_id;
 end;
 $$;
 
@@ -322,9 +369,9 @@ CREATE FUNCTION public.enforce_data_reports_rate_limit() RETURNS trigger
     AS $$
 declare
   v_uid uuid := auth.uid();
+  v_is_anonymous boolean;
   v_recent_count integer;
 begin
-  -- service_role 等が送信者なしで投入する将来の保守用途は許可する。
   if new.reporter_user_id is null then
     return new;
   end if;
@@ -333,17 +380,168 @@ begin
     raise exception 'reporter user mismatch';
   end if;
 
-  perform pg_advisory_xact_lock(hashtextextended(v_uid::text, 0));
+  v_is_anonymous := coalesce(
+    (select u.is_anonymous from auth.users u where u.id = v_uid),
+    true
+  );
+
+  perform pg_advisory_xact_lock(hashtextextended('data-reports:' || v_uid::text, 0));
 
   select count(*)::integer into v_recent_count
-  from public.data_reports
-  where reporter_user_id = v_uid
-    and created_at > now() - interval '10 minutes';
+  from public.data_reports r
+  where r.reporter_user_id = v_uid
+    and r.created_at > now() - interval '10 minutes';
 
-  if v_recent_count >= 5 then
+  if v_recent_count >= (case when v_is_anonymous then 2 else 5 end) then
     raise exception using
       errcode = 'P0001',
       message = 'data report rate limit exceeded';
+  end if;
+
+  if v_is_anonymous then
+    perform pg_advisory_xact_lock(hashtextextended('data-reports:anon-global', 0));
+
+    select count(*)::integer into v_recent_count
+    from public.data_reports r
+    where r.created_at > now() - interval '10 minutes'
+      and exists (
+        select 1 from auth.users u
+        where u.id = r.reporter_user_id and u.is_anonymous = true
+      );
+
+    if v_recent_count >= 300 then
+      raise exception using
+        errcode = 'P0001',
+        message = 'anonymous data report global rate limit exceeded';
+    end if;
+  end if;
+
+  return new;
+end;
+$$;
+
+
+--
+-- Name: enforce_events_rate_limit(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.enforce_events_rate_limit() RETURNS trigger
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public', 'pg_temp'
+    AS $$
+declare
+  v_uid uuid := auth.uid();
+  v_is_anonymous boolean;
+  v_recent_count integer;
+begin
+  -- auth.users を引けない場合は匿名扱いに倒し、全体上限を迂回させない。
+  v_is_anonymous := coalesce(
+    (select u.is_anonymous from auth.users u where u.id = v_uid),
+    true
+  );
+  if v_uid is not null then
+    new.user_id := v_uid;
+  end if;
+
+  -- 列権限だけでなく、保守経路や将来の権限変更があっても時刻をサーバー確定する。
+  new.created_at := now();
+
+  -- 1 人あたりの制限は、サーバーが確定した uid がある経路にだけ適用する。
+  -- 未ログインの申告値（セッション識別子・行の利用者 ID）は数え方に使わない。
+  -- 他人の uid を名乗った記録は events_insert の WITH CHECK
+  -- （user_id is null or user_id = auth.uid()）が拒否するので、この数え方は成りすましで膨らまない。
+  if v_uid is not null then
+    perform pg_advisory_xact_lock(hashtextextended('events:' || v_uid::text, 0));
+
+    select count(*)::integer into v_recent_count
+    from public.events e
+    where e.user_id = v_uid
+      and e.created_at > now() - interval '1 minute';
+
+    if v_recent_count >= 30 then
+      raise exception using
+        errcode = 'P0001',
+        message = 'events rate limit exceeded';
+    end if;
+  end if;
+
+  if v_is_anonymous then
+    perform pg_advisory_xact_lock(hashtextextended('events:anon-global', 0));
+
+    select count(*)::integer into v_recent_count
+    from public.events e
+    where e.created_at > now() - interval '1 minute'
+      and (
+        e.user_id is null
+        or exists (
+          select 1 from auth.users u
+          where u.id = e.user_id and u.is_anonymous = true
+        )
+      );
+
+    if v_recent_count >= 2000 then
+      raise exception using
+        errcode = 'P0001',
+        message = 'anonymous events global rate limit exceeded';
+    end if;
+  end if;
+
+  return new;
+end;
+$$;
+
+
+--
+-- Name: enforce_home_locations_rate_limit(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.enforce_home_locations_rate_limit() RETURNS trigger
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public', 'pg_temp'
+    AS $$
+declare
+  v_uid uuid := auth.uid();
+  v_is_anonymous boolean;
+  v_recent_count integer;
+begin
+  if v_uid is null or new.user_id <> v_uid then
+    raise exception 'home location user mismatch';
+  end if;
+
+  v_is_anonymous := coalesce(
+    (select u.is_anonymous from auth.users u where u.id = v_uid),
+    true
+  );
+
+  perform pg_advisory_xact_lock(hashtextextended('home-locations:' || v_uid::text, 0));
+
+  select count(*)::integer into v_recent_count
+  from public.home_locations h
+  where h.user_id = v_uid
+    and h.created_at > now() - interval '10 minutes';
+
+  if v_recent_count >= (case when v_is_anonymous then 2 else 5 end) then
+    raise exception using
+      errcode = 'P0001',
+      message = 'home location rate limit exceeded';
+  end if;
+
+  if v_is_anonymous then
+    perform pg_advisory_xact_lock(hashtextextended('home-locations:anon-global', 0));
+
+    select count(*)::integer into v_recent_count
+    from public.home_locations h
+    where h.created_at > now() - interval '10 minutes'
+      and exists (
+        select 1 from auth.users u
+        where u.id = h.user_id and u.is_anonymous = true
+      );
+
+    if v_recent_count >= 300 then
+      raise exception using
+        errcode = 'P0001',
+        message = 'anonymous home location global rate limit exceeded';
+    end if;
   end if;
 
   return new;
@@ -418,8 +616,11 @@ begin
   if v_uid is null then
     raise exception 'authentication required';
   end if;
+  if coalesce((select u.is_anonymous from auth.users u where u.id = v_uid), true) then
+    raise exception 'anonymous users cannot use family sharing';
+  end if;
   if not exists (
-    select 1 from family_members
+    select 1 from public.family_members
     where group_id = p_group_id and user_id = v_uid and status = 'active'
   ) then
     raise exception 'not a member of this group';
@@ -427,8 +628,8 @@ begin
 
   return query
     select f.user_id, f.school_id, f.priority::int, f.status::text
-    from user_school_favorites f
-    join family_members m
+    from public.user_school_favorites f
+    join public.family_members m
       on m.user_id = f.user_id
      and m.group_id = p_group_id
      and m.status = 'active'
@@ -452,8 +653,11 @@ begin
   if v_uid is null then
     raise exception 'authentication required';
   end if;
+  if coalesce((select u.is_anonymous from auth.users u where u.id = v_uid), true) then
+    raise exception 'anonymous users cannot use family sharing';
+  end if;
   if not exists (
-    select 1 from family_members
+    select 1 from public.family_members
     where group_id = p_group_id and user_id = v_uid and status = 'active'
   ) then
     raise exception 'not a member of this group';
@@ -461,8 +665,8 @@ begin
 
   return query
     select n.user_id, n.school_id, n.note::text, n.commute_note::text
-    from user_school_notes n
-    join family_members m
+    from public.user_school_notes n
+    join public.family_members m
       on m.user_id = n.user_id
      and m.group_id = p_group_id
      and m.status = 'active'
@@ -489,6 +693,21 @@ $$;
 
 
 --
+-- Name: is_human_user(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.is_human_user() RETURNS boolean
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public', 'pg_temp'
+    AS $$
+  select coalesce(
+    not (select u.is_anonymous from auth.users u where u.id = auth.uid()),
+    false
+  );
+$$;
+
+
+--
 -- Name: leave_family_group(uuid); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -503,9 +722,12 @@ begin
   if v_uid is null then
     raise exception 'authentication required';
   end if;
+  if coalesce((select u.is_anonymous from auth.users u where u.id = v_uid), true) then
+    raise exception 'anonymous users cannot use family sharing';
+  end if;
 
   select role into v_role
-  from family_members
+  from public.family_members
   where group_id = p_group_id and user_id = v_uid;
 
   if v_role is null then
@@ -515,8 +737,58 @@ begin
     raise exception 'owner cannot leave; delete the group instead';
   end if;
 
-  delete from family_members
+  delete from public.family_members
   where group_id = p_group_id and user_id = v_uid;
+end;
+$$;
+
+
+--
+-- Name: preview_family_invite(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.preview_family_invite(p_token uuid) RETURNS text
+    LANGUAGE plpgsql STABLE SECURITY DEFINER
+    SET search_path TO 'public', 'pg_temp'
+    AS $$
+declare
+  v_uid uuid := auth.uid();
+  v_group_id uuid;
+  v_name text;
+  v_status text;
+  v_expires_at timestamptz;
+begin
+  if v_uid is null then
+    raise exception 'authentication required';
+  end if;
+  if coalesce(auth.jwt() ->> 'is_anonymous', 'false') = 'true' then
+    raise exception 'anonymous users cannot accept family invitations';
+  end if;
+
+  select m.group_id, g.name, m.status, m.expires_at
+    into v_group_id, v_name, v_status, v_expires_at
+  from public.family_members m
+  join public.family_groups g on g.id = m.group_id
+  where m.invite_token = p_token;
+
+  if v_group_id is null then
+    raise exception 'invalid invitation';
+  end if;
+
+  if v_status = 'invited' then
+    if v_expires_at is null or v_expires_at <= now() then
+      raise exception 'invitation expired';
+    end if;
+  elsif not exists (
+    -- 受諾済みの行でも、既にそのグループのメンバーなら accept は冪等に成功する。
+    -- 確認画面もその場合だけは出せるようにする（それ以外は使用済み扱い）。
+    select 1 from public.family_members
+    where group_id = v_group_id and user_id = v_uid and status = 'active'
+  ) then
+    raise exception 'invitation already used';
+  end if;
+
+  return v_name;
 end;
 $$;
 
@@ -537,16 +809,19 @@ begin
   if v_uid is null then
     raise exception 'authentication required';
   end if;
+  if coalesce((select u.is_anonymous from auth.users u where u.id = v_uid), true) then
+    raise exception 'anonymous users cannot use family sharing';
+  end if;
 
   select group_id, role into v_group_id, v_role
-  from family_members
+  from public.family_members
   where id = p_member_id;
 
   if v_group_id is null then
     raise exception 'member not found';
   end if;
   if not exists (
-    select 1 from family_groups g where g.id = v_group_id and g.owner_id = v_uid
+    select 1 from public.family_groups g where g.id = v_group_id and g.owner_id = v_uid
   ) then
     raise exception 'only the group owner can remove members';
   end if;
@@ -554,7 +829,45 @@ begin
     raise exception 'cannot remove the group owner';
   end if;
 
-  delete from family_members where id = p_member_id;
+  delete from public.family_members where id = p_member_id;
+end;
+$$;
+
+
+--
+-- Name: revoke_family_invite(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.revoke_family_invite(p_token uuid) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public', 'pg_temp'
+    AS $$
+declare
+  v_uid uuid := auth.uid();
+  v_group_id uuid;
+begin
+  if v_uid is null then
+    raise exception 'authentication required';
+  end if;
+  if coalesce((select u.is_anonymous from auth.users u where u.id = v_uid), true) then
+    raise exception 'anonymous users cannot use family sharing';
+  end if;
+
+  select group_id into v_group_id
+  from public.family_members
+  where invite_token = p_token and status = 'invited';
+
+  if v_group_id is null then
+    raise exception 'invitation not found';
+  end if;
+  if not exists (
+    select 1 from public.family_groups g where g.id = v_group_id and g.owner_id = v_uid
+  ) then
+    raise exception 'only the group owner can revoke invitations';
+  end if;
+
+  delete from public.family_members
+  where invite_token = p_token and status = 'invited';
 end;
 $$;
 
@@ -593,6 +906,46 @@ $$;
 
 
 --
+-- Name: save_mine_consent(uuid, boolean); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.save_mine_consent(p_school_id uuid, p_submit boolean) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public', 'pg_temp'
+    AS $$
+declare
+  v_uid uuid := auth.uid();
+  v_visibility text := case when coalesce(p_submit, false) then 'submit_to_manabi' else 'private' end;
+begin
+  if v_uid is null then
+    raise exception 'authentication required';
+  end if;
+  if p_school_id is null then
+    raise exception 'school is required';
+  end if;
+
+  -- 学校単位のセンチネル行。学科の記録が 1 件も無い学校でも同意の状態を保持する。
+  -- note は既存の値を残す（同意の切替はメモを書き換えない）。
+  -- 一意キーは 202608040104 の unique nulls not distinct なので、department_id が null でも競合する。
+  insert into public.user_school_deviations (user_id, school_id, department_id, value, visibility)
+  values (v_uid, p_school_id, null, 0, v_visibility)
+  on conflict on constraint user_school_deviations_user_school_dept_key
+  do update set visibility = excluded.visibility,
+                updated_at = now();
+
+  -- 学科行にも同じ visibility を反映する。センチネル行と同じトランザクションなので、
+  -- どちらかだけが適用された状態は残らない（updated_at は set_updated_at トリガでも維持される）。
+  update public.user_school_deviations
+  set visibility = v_visibility,
+      updated_at = now()
+  where user_id = v_uid
+    and school_id = p_school_id
+    and department_id is not null;
+end;
+$$;
+
+
+--
 -- Name: set_family_share(uuid, boolean, boolean); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -606,8 +959,11 @@ begin
   if v_uid is null then
     raise exception 'authentication required';
   end if;
+  if coalesce((select u.is_anonymous from auth.users u where u.id = v_uid), true) then
+    raise exception 'anonymous users cannot use family sharing';
+  end if;
 
-  update family_members
+  update public.family_members
   set share_favorites = coalesce(p_share_favorites, share_favorites),
       share_notes = coalesce(p_share_notes, share_notes)
   where group_id = p_group_id
@@ -669,12 +1025,12 @@ declare
 begin
   select is_map_active, forces_not_recruiting
     into strict lifecycle_active, lifecycle_forces_not_recruiting
-    from school_lifecycle_status_master
+    from public.school_lifecycle_status_master
    where code = new.lifecycle_status_code;
 
   select is_recruiting_compat
     into strict recruitment_active
-    from school_recruitment_status_master
+    from public.school_recruitment_status_master
    where code = new.recruitment_status_code;
 
   if lifecycle_forces_not_recruiting and recruitment_active then
@@ -682,6 +1038,17 @@ begin
   end if;
   if new.lifecycle_status_code = 'closing' and recruitment_active then
     raise exception 'closing school cannot have recruitment_status_code=recruiting';
+  end if;
+
+  if tg_op = 'INSERT'
+     and (
+       new.is_active is distinct from lifecycle_active
+       or new.is_recruiting is distinct from recruitment_active
+     )
+     and (new.is_active is not null or new.is_recruiting is not null) then
+    raise exception
+      'is_active/is_recruiting が lifecycle/recruitment コードと矛盾 (school=%)',
+      new.name;
   end if;
 
   new.is_active := lifecycle_active;
@@ -700,9 +1067,10 @@ CREATE FUNCTION public.user_group_ids() RETURNS SETOF uuid
     SET search_path TO 'public', 'pg_temp'
     AS $$
   select group_id
-  from family_members
+  from public.family_members
   where user_id = auth.uid()
-    and status = 'active';
+    and status = 'active'
+    and public.is_human_user();
 $$;
 
 
@@ -762,6 +1130,19 @@ $$;
 SET default_tablespace = '';
 
 SET default_table_access_method = heap;
+
+--
+-- Name: admin_pin_attempts; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.admin_pin_attempts (
+    user_id uuid NOT NULL,
+    failed_attempts integer DEFAULT 0 NOT NULL,
+    locked_until timestamp with time zone,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT admin_pin_attempts_failed_attempts_check CHECK ((failed_attempts >= 0))
+);
+
 
 --
 -- Name: admin_users; Type: TABLE; Schema: public; Owner: -
@@ -1162,6 +1543,7 @@ CREATE TABLE public.events (
     props jsonb DEFAULT '{}'::jsonb NOT NULL,
     session_id text,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT events_event_type_allowlist_check CHECK ((event_type = ANY (ARRAY['search'::text, 'favorite_add'::text, 'memo_save'::text, 'detail_open'::text, 'compare_view'::text, 'ad_click'::text]))),
     CONSTRAINT events_event_type_len CHECK (((char_length(event_type) >= 1) AND (char_length(event_type) <= 64))),
     CONSTRAINT events_props_size CHECK ((pg_column_size(props) <= 2048)),
     CONSTRAINT events_session_id_len CHECK (((session_id IS NULL) OR (char_length(session_id) <= 64)))
@@ -1209,11 +1591,12 @@ CREATE TABLE public.family_members (
     role text DEFAULT 'member'::text NOT NULL,
     status text DEFAULT 'invited'::text NOT NULL,
     invite_token uuid DEFAULT gen_random_uuid() NOT NULL,
-    share_favorites boolean DEFAULT true NOT NULL,
-    share_notes boolean DEFAULT true NOT NULL,
+    share_favorites boolean DEFAULT false NOT NULL,
+    share_notes boolean DEFAULT false NOT NULL,
     invited_at timestamp with time zone DEFAULT now() NOT NULL,
     accepted_at timestamp with time zone,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
+    expires_at timestamp with time zone,
     CONSTRAINT family_members_role_check CHECK ((role = ANY (ARRAY['owner'::text, 'member'::text]))),
     CONSTRAINT family_members_status_check CHECK ((status = ANY (ARRAY['invited'::text, 'active'::text])))
 );
@@ -1267,7 +1650,7 @@ CREATE TABLE public.school_admission_selection_stats (
     exam_scope_raw text,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
-    CONSTRAINT school_admission_selection_stats_comparable_requires_counts CHECK (((NOT is_ratio_comparable) OR ((capacity > 0) AND (applicants IS NOT NULL)))),
+    CONSTRAINT school_admission_selection_stats_comparable_requires_counts CHECK (((NOT is_ratio_comparable) OR ((capacity IS NOT NULL) AND (capacity > 0) AND (applicants IS NOT NULL)))),
     CONSTRAINT school_admission_selection_stats_counts_nonnegative CHECK ((((capacity IS NULL) OR (capacity >= 0)) AND ((applicants IS NULL) OR (applicants >= 0)) AND ((examinees IS NULL) OR (examinees >= 0)) AND ((admitted IS NULL) OR (admitted >= 0)))),
     CONSTRAINT school_admission_selection_stats_primary_total_valid CHECK (((map_role_code <> 'primary_total'::text) OR ((selection_stage_code = 'primary'::text) AND is_ratio_comparable))),
     CONSTRAINT school_admission_selection_stats_raw_labels_nonempty CHECK (((btrim(stage_label_raw) <> ''::text) AND (btrim(track_label_raw) <> ''::text) AND (btrim(selection_scope_raw) <> ''::text))),
@@ -1481,6 +1864,93 @@ COMMENT ON COLUMN public.school_deviation_values.estimate_basis IS '偏差値値
 
 
 --
+-- Name: school_field_source_field_master; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.school_field_source_field_master (
+    code text NOT NULL,
+    table_name text NOT NULL,
+    column_name text NOT NULL,
+    label_ja text NOT NULL,
+    sort_order integer DEFAULT 100 NOT NULL,
+    is_active boolean DEFAULT true NOT NULL,
+    notes text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT school_field_source_master_code_format CHECK ((code ~ '^[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*$'::text)),
+    CONSTRAINT school_field_source_master_code_matches_columns CHECK ((code = ((table_name || '.'::text) || column_name))),
+    CONSTRAINT school_field_source_master_label_nonempty CHECK ((btrim(label_ja) <> ''::text)),
+    CONSTRAINT school_field_source_master_names_format CHECK (((table_name ~ '^[a-z][a-z0-9_]*$'::text) AND (column_name ~ '^[a-z][a-z0-9_]*$'::text)))
+);
+
+
+--
+-- Name: TABLE school_field_source_field_master; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON TABLE public.school_field_source_field_master IS '学校基本情報の出典を保持できる項目の正規辞書。未登録の table.column は FK で拒否する';
+
+
+--
+-- Name: COLUMN school_field_source_field_master.code; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.school_field_source_field_master.code IS '対象を table.column 形式で表す安定 code';
+
+
+--
+-- Name: school_field_sources; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.school_field_sources (
+    school_id uuid NOT NULL,
+    field_name text NOT NULL,
+    official_url text NOT NULL,
+    doc_title text NOT NULL,
+    published_at date,
+    source_page_or_table text,
+    last_verified_at timestamp with time zone,
+    last_http_status integer,
+    is_official_source boolean NOT NULL,
+    note text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT school_field_sources_doc_title_nonempty CHECK ((btrim(doc_title) <> ''::text)),
+    CONSTRAINT school_field_sources_http_status_range CHECK (((last_http_status IS NULL) OR ((last_http_status >= 100) AND (last_http_status <= 599)))),
+    CONSTRAINT school_field_sources_note_nonempty CHECK (((note IS NULL) OR (btrim(note) <> ''::text))),
+    CONSTRAINT school_field_sources_official_url_http CHECK ((official_url ~* '^https?://[^[:space:]]+$'::text)),
+    CONSTRAINT school_field_sources_page_nonempty CHECK (((source_page_or_table IS NULL) OR (btrim(source_page_or_table) <> ''::text))),
+    CONSTRAINT school_field_sources_verification_pair CHECK ((((last_http_status IS NULL) AND (last_verified_at IS NULL)) OR ((last_http_status IS NOT NULL) AND (last_verified_at IS NOT NULL))))
+);
+
+
+--
+-- Name: TABLE school_field_sources; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON TABLE public.school_field_sources IS '学校基本情報の項目ごとの出典。404も削除せず到達状態を保持する';
+
+
+--
+-- Name: COLUMN school_field_sources.field_name; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.school_field_sources.field_name IS 'school_field_source_field_master.code。対象は table.column 単位';
+
+
+--
+-- Name: COLUMN school_field_sources.is_official_source; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.school_field_sources.is_official_source IS '学校・教育委員会・官公庁が発行した資料か。三次資料（Wikipedia 等）は false。公開 API は true のみを出す';
+
+
+--
+-- Name: COLUMN school_field_sources.note; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.school_field_sources.note IS 'archive SQL からの復元経緯や同版の複数出典を残す。出典本文の推測には使わない';
+
+
+--
 -- Name: school_lifecycle_status_master; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1646,11 +2116,13 @@ CREATE TABLE public.schools (
     status_official_url text,
     status_note text,
     recruitment_ended_year integer,
+    status_description text,
     CONSTRAINT schools_course_times_nonempty CHECK ((cardinality(course_times) > 0)),
     CONSTRAINT schools_enrollment_year_reasonable CHECK (((enrollment_year IS NULL) OR ((enrollment_year >= 2000) AND (enrollment_year <= 2100)))),
     CONSTRAINT schools_gender_type_check CHECK ((gender_type = ANY (ARRAY['coed'::text, 'boys'::text, 'girls'::text]))),
     CONSTRAINT schools_lifecycle_date_order CHECK ((((legally_established_on IS NULL) OR (opened_on IS NULL) OR (opened_on >= legally_established_on)) AND ((opened_on IS NULL) OR (closed_on IS NULL) OR (closed_on >= opened_on)) AND ((recruitment_ended_on IS NULL) OR (closed_on IS NULL) OR (closed_on >= recruitment_ended_on)))),
     CONSTRAINT schools_male_ratio_percent CHECK (((male_ratio IS NULL) OR ((male_ratio >= 0) AND (male_ratio <= 100)))),
+    CONSTRAINT schools_official_url_scheme CHECK (((official_url IS NULL) OR (official_url ~* '^https?://[^[:space:]]+$'::text))),
     CONSTRAINT schools_ownership_check CHECK ((ownership = ANY (ARRAY['prefectural'::text, 'municipal'::text, 'national'::text, 'private'::text, 'union'::text]))),
     CONSTRAINT schools_recruitment_ended_year_range CHECK (((recruitment_ended_year IS NULL) OR ((recruitment_ended_year >= 1900) AND (recruitment_ended_year <= 2100)))),
     CONSTRAINT schools_total_students_nonnegative CHECK (((total_students IS NULL) OR (total_students >= 0))),
@@ -1684,6 +2156,13 @@ COMMENT ON COLUMN public.schools.recruitment_status_code IS 'Upper-secondary rec
 --
 
 COMMENT ON COLUMN public.schools.recruitment_ended_year IS 'Admission year in which recruitment ended when an exact date is not official.';
+
+
+--
+-- Name: COLUMN schools.status_description; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.schools.status_description IS '一次資料で確認した学校状態の公開用説明。収集作業の内部記録は status_note に残す';
 
 
 --
@@ -1735,6 +2214,14 @@ CREATE TABLE public.user_school_notes (
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     CONSTRAINT user_school_notes_interest_level_check CHECK (((interest_level >= 1) AND (interest_level <= 5)))
 );
+
+
+--
+-- Name: admin_pin_attempts admin_pin_attempts_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.admin_pin_attempts
+    ADD CONSTRAINT admin_pin_attempts_pkey PRIMARY KEY (user_id);
 
 
 --
@@ -2018,6 +2505,30 @@ ALTER TABLE ONLY public.school_deviation_values
 
 
 --
+-- Name: school_field_source_field_master school_field_source_field_master_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.school_field_source_field_master
+    ADD CONSTRAINT school_field_source_field_master_pkey PRIMARY KEY (code);
+
+
+--
+-- Name: school_field_source_field_master school_field_source_field_master_table_name_column_name_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.school_field_source_field_master
+    ADD CONSTRAINT school_field_source_field_master_table_name_column_name_key UNIQUE (table_name, column_name);
+
+
+--
+-- Name: school_field_sources school_field_sources_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.school_field_sources
+    ADD CONSTRAINT school_field_sources_pkey PRIMARY KEY (school_id, field_name, official_url);
+
+
+--
 -- Name: school_lifecycle_status_master school_lifecycle_status_master_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2184,6 +2695,13 @@ CREATE INDEX family_members_group_idx ON public.family_members USING btree (grou
 
 
 --
+-- Name: family_members_open_invite_expiry_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX family_members_open_invite_expiry_idx ON public.family_members USING btree (expires_at) WHERE (status = 'invited'::text);
+
+
+--
 -- Name: family_members_user_idx; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -2244,6 +2762,20 @@ CREATE UNIQUE INDEX school_departments_record_key_key ON public.school_departmen
 --
 
 CREATE INDEX school_departments_school_id_idx ON public.school_departments USING btree (school_id);
+
+
+--
+-- Name: school_deviation_values_one_active_per_dept; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX school_deviation_values_one_active_per_dept ON public.school_deviation_values USING btree (department_id) WHERE is_active;
+
+
+--
+-- Name: school_field_sources_official_field_school_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX school_field_sources_official_field_school_idx ON public.school_field_sources USING btree (field_name, school_id) WHERE is_official_source;
 
 
 --
@@ -2331,6 +2863,20 @@ CREATE TRIGGER dept_ui_group_sync BEFORE INSERT OR UPDATE OF course_type ON publ
 
 
 --
+-- Name: events events_rate_limit; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER events_rate_limit BEFORE INSERT ON public.events FOR EACH ROW EXECUTE FUNCTION public.enforce_events_rate_limit();
+
+
+--
+-- Name: home_locations home_locations_rate_limit; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER home_locations_rate_limit BEFORE INSERT ON public.home_locations FOR EACH ROW EXECUTE FUNCTION public.enforce_home_locations_rate_limit();
+
+
+--
 -- Name: course_type_master master_ui_group_propagate; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -2377,6 +2923,14 @@ CREATE TRIGGER set_updated_at BEFORE UPDATE ON public.user_school_deviations FOR
 --
 
 CREATE TRIGGER set_updated_at BEFORE UPDATE ON public.user_school_notes FOR EACH ROW EXECUTE FUNCTION extensions.moddatetime('updated_at');
+
+
+--
+-- Name: admin_pin_attempts admin_pin_attempts_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.admin_pin_attempts
+    ADD CONSTRAINT admin_pin_attempts_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
 
 
 --
@@ -2660,6 +3214,22 @@ ALTER TABLE ONLY public.school_deviation_values
 
 
 --
+-- Name: school_field_sources school_field_sources_field_name_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.school_field_sources
+    ADD CONSTRAINT school_field_sources_field_name_fkey FOREIGN KEY (field_name) REFERENCES public.school_field_source_field_master(code) ON UPDATE CASCADE ON DELETE RESTRICT;
+
+
+--
+-- Name: school_field_sources school_field_sources_school_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.school_field_sources
+    ADD CONSTRAINT school_field_sources_school_id_fkey FOREIGN KEY (school_id) REFERENCES public.schools(id) ON DELETE CASCADE;
+
+
+--
 -- Name: school_name_history school_name_history_school_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2918,6 +3488,20 @@ CREATE POLICY "Public read school_deviation_values" ON public.school_deviation_v
 
 
 --
+-- Name: school_field_source_field_master Public read school_field_source_field_master; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY "Public read school_field_source_field_master" ON public.school_field_source_field_master FOR SELECT USING (true);
+
+
+--
+-- Name: school_field_sources Public read school_field_sources; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY "Public read school_field_sources" ON public.school_field_sources FOR SELECT USING (true);
+
+
+--
 -- Name: schools Public read schools; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -3037,6 +3621,12 @@ CREATE POLICY "Users can update own notes" ON public.user_school_notes FOR UPDAT
 
 
 --
+-- Name: admin_pin_attempts; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.admin_pin_attempts ENABLE ROW LEVEL SECURITY;
+
+--
 -- Name: admin_users; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -3107,7 +3697,7 @@ ALTER TABLE public.app_config ENABLE ROW LEVEL SECURITY;
 -- Name: app_config app_config_public_select; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY app_config_public_select ON public.app_config FOR SELECT USING (true);
+CREATE POLICY app_config_public_select ON public.app_config FOR SELECT TO authenticated, anon USING ((key = ANY (ARRAY['maintenance_mode'::text])));
 
 
 --
@@ -3217,7 +3807,7 @@ ALTER TABLE public.family_groups ENABLE ROW LEVEL SECURITY;
 -- Name: family_groups family_groups_select; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY family_groups_select ON public.family_groups FOR SELECT TO authenticated USING ((id IN ( SELECT public.user_group_ids() AS user_group_ids)));
+CREATE POLICY family_groups_select ON public.family_groups FOR SELECT TO authenticated USING ((public.is_human_user() AND (id IN ( SELECT public.user_group_ids() AS user_group_ids))));
 
 
 --
@@ -3230,7 +3820,7 @@ ALTER TABLE public.family_members ENABLE ROW LEVEL SECURITY;
 -- Name: family_members family_members_select; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY family_members_select ON public.family_members FOR SELECT TO authenticated USING (((user_id = auth.uid()) OR (group_id IN ( SELECT public.user_group_ids() AS user_group_ids))));
+CREATE POLICY family_members_select ON public.family_members FOR SELECT TO authenticated USING ((public.is_human_user() AND ((user_id = auth.uid()) OR (group_id IN ( SELECT public.user_group_ids() AS user_group_ids)))));
 
 
 --
@@ -3286,6 +3876,18 @@ ALTER TABLE public.school_departments ENABLE ROW LEVEL SECURITY;
 --
 
 ALTER TABLE public.school_deviation_values ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: school_field_source_field_master; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.school_field_source_field_master ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: school_field_sources; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.school_field_sources ENABLE ROW LEVEL SECURITY;
 
 --
 -- Name: school_lifecycle_status_master; Type: ROW SECURITY; Schema: public; Owner: -
@@ -3417,6 +4019,22 @@ GRANT ALL ON FUNCTION public.enforce_data_reports_rate_limit() TO service_role;
 
 
 --
+-- Name: FUNCTION enforce_events_rate_limit(); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.enforce_events_rate_limit() FROM PUBLIC;
+GRANT ALL ON FUNCTION public.enforce_events_rate_limit() TO service_role;
+
+
+--
+-- Name: FUNCTION enforce_home_locations_rate_limit(); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.enforce_home_locations_rate_limit() FROM PUBLIC;
+GRANT ALL ON FUNCTION public.enforce_home_locations_rate_limit() TO service_role;
+
+
+--
 -- Name: FUNCTION get_deviation_review_queue(p_school_id uuid, p_threshold integer); Type: ACL; Schema: public; Owner: -
 --
 
@@ -3455,6 +4073,15 @@ GRANT ALL ON FUNCTION public.is_admin() TO authenticated;
 
 
 --
+-- Name: FUNCTION is_human_user(); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.is_human_user() FROM PUBLIC;
+GRANT ALL ON FUNCTION public.is_human_user() TO service_role;
+GRANT ALL ON FUNCTION public.is_human_user() TO authenticated;
+
+
+--
 -- Name: FUNCTION leave_family_group(p_group_id uuid); Type: ACL; Schema: public; Owner: -
 --
 
@@ -3462,6 +4089,15 @@ REVOKE ALL ON FUNCTION public.leave_family_group(p_group_id uuid) FROM PUBLIC;
 GRANT ALL ON FUNCTION public.leave_family_group(p_group_id uuid) TO anon;
 GRANT ALL ON FUNCTION public.leave_family_group(p_group_id uuid) TO authenticated;
 GRANT ALL ON FUNCTION public.leave_family_group(p_group_id uuid) TO service_role;
+
+
+--
+-- Name: FUNCTION preview_family_invite(p_token uuid); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.preview_family_invite(p_token uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.preview_family_invite(p_token uuid) TO service_role;
+GRANT ALL ON FUNCTION public.preview_family_invite(p_token uuid) TO authenticated;
 
 
 --
@@ -3475,12 +4111,31 @@ GRANT ALL ON FUNCTION public.remove_family_member(p_member_id uuid) TO service_r
 
 
 --
+-- Name: FUNCTION revoke_family_invite(p_token uuid); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.revoke_family_invite(p_token uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.revoke_family_invite(p_token uuid) TO anon;
+GRANT ALL ON FUNCTION public.revoke_family_invite(p_token uuid) TO authenticated;
+GRANT ALL ON FUNCTION public.revoke_family_invite(p_token uuid) TO service_role;
+
+
+--
 -- Name: FUNCTION rls_auto_enable(); Type: ACL; Schema: public; Owner: -
 --
 
 GRANT ALL ON FUNCTION public.rls_auto_enable() TO anon;
 GRANT ALL ON FUNCTION public.rls_auto_enable() TO authenticated;
 GRANT ALL ON FUNCTION public.rls_auto_enable() TO service_role;
+
+
+--
+-- Name: FUNCTION save_mine_consent(p_school_id uuid, p_submit boolean); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.save_mine_consent(p_school_id uuid, p_submit boolean) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.save_mine_consent(p_school_id uuid, p_submit boolean) TO service_role;
+GRANT ALL ON FUNCTION public.save_mine_consent(p_school_id uuid, p_submit boolean) TO authenticated;
 
 
 --
@@ -3546,6 +4201,13 @@ GRANT ALL ON FUNCTION public.validate_admission_recruitment_unit_department() TO
 GRANT ALL ON FUNCTION public.validate_admission_recruitment_unit_school() TO anon;
 GRANT ALL ON FUNCTION public.validate_admission_recruitment_unit_school() TO authenticated;
 GRANT ALL ON FUNCTION public.validate_admission_recruitment_unit_school() TO service_role;
+
+
+--
+-- Name: TABLE admin_pin_attempts; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT ALL ON TABLE public.admin_pin_attempts TO service_role;
 
 
 --
@@ -3652,9 +4314,23 @@ GRANT ALL ON TABLE public.admission_selection_track_master TO service_role;
 -- Name: TABLE app_config; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT SELECT,REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.app_config TO anon;
-GRANT SELECT,REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.app_config TO authenticated;
 GRANT ALL ON TABLE public.app_config TO service_role;
+
+
+--
+-- Name: COLUMN app_config.key; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT SELECT(key) ON TABLE public.app_config TO anon;
+GRANT SELECT(key) ON TABLE public.app_config TO authenticated;
+
+
+--
+-- Name: COLUMN app_config.value; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT SELECT(value) ON TABLE public.app_config TO anon;
+GRANT SELECT(value) ON TABLE public.app_config TO authenticated;
 
 
 --
@@ -3802,9 +4478,49 @@ GRANT ALL ON TABLE public.deviation_correction_logs TO service_role;
 -- Name: TABLE events; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT INSERT,REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.events TO anon;
-GRANT INSERT,REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.events TO authenticated;
+GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.events TO anon;
+GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.events TO authenticated;
 GRANT ALL ON TABLE public.events TO service_role;
+
+
+--
+-- Name: COLUMN events.event_type; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT INSERT(event_type) ON TABLE public.events TO anon;
+GRANT INSERT(event_type) ON TABLE public.events TO authenticated;
+
+
+--
+-- Name: COLUMN events.user_id; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT INSERT(user_id) ON TABLE public.events TO anon;
+GRANT INSERT(user_id) ON TABLE public.events TO authenticated;
+
+
+--
+-- Name: COLUMN events.school_id; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT INSERT(school_id) ON TABLE public.events TO anon;
+GRANT INSERT(school_id) ON TABLE public.events TO authenticated;
+
+
+--
+-- Name: COLUMN events.props; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT INSERT(props) ON TABLE public.events TO anon;
+GRANT INSERT(props) ON TABLE public.events TO authenticated;
+
+
+--
+-- Name: COLUMN events.session_id; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT INSERT(session_id) ON TABLE public.events TO anon;
+GRANT INSERT(session_id) ON TABLE public.events TO authenticated;
 
 
 --
@@ -3907,9 +4623,57 @@ GRANT SELECT(created_at) ON TABLE public.family_members TO authenticated;
 -- Name: TABLE home_locations; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT ALL ON TABLE public.home_locations TO anon;
-GRANT ALL ON TABLE public.home_locations TO authenticated;
+GRANT SELECT,REFERENCES,DELETE,TRIGGER,TRUNCATE,MAINTAIN,UPDATE ON TABLE public.home_locations TO anon;
+GRANT SELECT,REFERENCES,DELETE,TRIGGER,TRUNCATE,MAINTAIN,UPDATE ON TABLE public.home_locations TO authenticated;
 GRANT ALL ON TABLE public.home_locations TO service_role;
+
+
+--
+-- Name: COLUMN home_locations.user_id; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT INSERT(user_id) ON TABLE public.home_locations TO anon;
+GRANT INSERT(user_id) ON TABLE public.home_locations TO authenticated;
+
+
+--
+-- Name: COLUMN home_locations.label; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT INSERT(label) ON TABLE public.home_locations TO anon;
+GRANT INSERT(label) ON TABLE public.home_locations TO authenticated;
+
+
+--
+-- Name: COLUMN home_locations.address; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT INSERT(address) ON TABLE public.home_locations TO anon;
+GRANT INSERT(address) ON TABLE public.home_locations TO authenticated;
+
+
+--
+-- Name: COLUMN home_locations.latitude; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT INSERT(latitude) ON TABLE public.home_locations TO anon;
+GRANT INSERT(latitude) ON TABLE public.home_locations TO authenticated;
+
+
+--
+-- Name: COLUMN home_locations.longitude; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT INSERT(longitude) ON TABLE public.home_locations TO anon;
+GRANT INSERT(longitude) ON TABLE public.home_locations TO authenticated;
+
+
+--
+-- Name: COLUMN home_locations.is_primary; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT INSERT(is_primary) ON TABLE public.home_locations TO anon;
+GRANT INSERT(is_primary) ON TABLE public.home_locations TO authenticated;
 
 
 --
@@ -3985,6 +4749,24 @@ GRANT ALL ON TABLE public.school_deviation_values TO service_role;
 
 
 --
+-- Name: TABLE school_field_source_field_master; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT SELECT,REFERENCES,TRIGGER,MAINTAIN ON TABLE public.school_field_source_field_master TO anon;
+GRANT SELECT,REFERENCES,TRIGGER,MAINTAIN ON TABLE public.school_field_source_field_master TO authenticated;
+GRANT ALL ON TABLE public.school_field_source_field_master TO service_role;
+
+
+--
+-- Name: TABLE school_field_sources; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT SELECT,REFERENCES,TRIGGER,MAINTAIN ON TABLE public.school_field_sources TO anon;
+GRANT SELECT,REFERENCES,TRIGGER,MAINTAIN ON TABLE public.school_field_sources TO authenticated;
+GRANT ALL ON TABLE public.school_field_sources TO service_role;
+
+
+--
 -- Name: TABLE school_lifecycle_status_master; Type: ACL; Schema: public; Owner: -
 --
 
@@ -4033,9 +4815,271 @@ GRANT ALL ON TABLE public.school_relationships TO service_role;
 -- Name: TABLE schools; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT ALL ON TABLE public.schools TO anon;
-GRANT ALL ON TABLE public.schools TO authenticated;
 GRANT ALL ON TABLE public.schools TO service_role;
+
+
+--
+-- Name: COLUMN schools.id; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT SELECT(id) ON TABLE public.schools TO anon;
+GRANT SELECT(id) ON TABLE public.schools TO authenticated;
+
+
+--
+-- Name: COLUMN schools.name; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT SELECT(name) ON TABLE public.schools TO anon;
+GRANT SELECT(name) ON TABLE public.schools TO authenticated;
+
+
+--
+-- Name: COLUMN schools.name_kana; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT SELECT(name_kana) ON TABLE public.schools TO anon;
+GRANT SELECT(name_kana) ON TABLE public.schools TO authenticated;
+
+
+--
+-- Name: COLUMN schools.type; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT SELECT(type) ON TABLE public.schools TO anon;
+GRANT SELECT(type) ON TABLE public.schools TO authenticated;
+
+
+--
+-- Name: COLUMN schools.ownership; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT SELECT(ownership) ON TABLE public.schools TO anon;
+GRANT SELECT(ownership) ON TABLE public.schools TO authenticated;
+
+
+--
+-- Name: COLUMN schools.gender_type; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT SELECT(gender_type) ON TABLE public.schools TO anon;
+GRANT SELECT(gender_type) ON TABLE public.schools TO authenticated;
+
+
+--
+-- Name: COLUMN schools.is_integrated; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT SELECT(is_integrated) ON TABLE public.schools TO anon;
+GRANT SELECT(is_integrated) ON TABLE public.schools TO authenticated;
+
+
+--
+-- Name: COLUMN schools.postal_code; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT SELECT(postal_code) ON TABLE public.schools TO anon;
+GRANT SELECT(postal_code) ON TABLE public.schools TO authenticated;
+
+
+--
+-- Name: COLUMN schools.prefecture; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT SELECT(prefecture) ON TABLE public.schools TO anon;
+GRANT SELECT(prefecture) ON TABLE public.schools TO authenticated;
+
+
+--
+-- Name: COLUMN schools.city; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT SELECT(city) ON TABLE public.schools TO anon;
+GRANT SELECT(city) ON TABLE public.schools TO authenticated;
+
+
+--
+-- Name: COLUMN schools.address; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT SELECT(address) ON TABLE public.schools TO anon;
+GRANT SELECT(address) ON TABLE public.schools TO authenticated;
+
+
+--
+-- Name: COLUMN schools.latitude; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT SELECT(latitude) ON TABLE public.schools TO anon;
+GRANT SELECT(latitude) ON TABLE public.schools TO authenticated;
+
+
+--
+-- Name: COLUMN schools.longitude; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT SELECT(longitude) ON TABLE public.schools TO anon;
+GRANT SELECT(longitude) ON TABLE public.schools TO authenticated;
+
+
+--
+-- Name: COLUMN schools.official_url; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT SELECT(official_url) ON TABLE public.schools TO anon;
+GRANT SELECT(official_url) ON TABLE public.schools TO authenticated;
+
+
+--
+-- Name: COLUMN schools.is_active; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT SELECT(is_active) ON TABLE public.schools TO anon;
+GRANT SELECT(is_active) ON TABLE public.schools TO authenticated;
+
+
+--
+-- Name: COLUMN schools.is_recruiting; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT SELECT(is_recruiting) ON TABLE public.schools TO anon;
+GRANT SELECT(is_recruiting) ON TABLE public.schools TO authenticated;
+
+
+--
+-- Name: COLUMN schools.updated_at; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT SELECT(updated_at) ON TABLE public.schools TO anon;
+GRANT SELECT(updated_at) ON TABLE public.schools TO authenticated;
+
+
+--
+-- Name: COLUMN schools.course_times; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT SELECT(course_times) ON TABLE public.schools TO anon;
+GRANT SELECT(course_times) ON TABLE public.schools TO authenticated;
+
+
+--
+-- Name: COLUMN schools.main_school_name; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT SELECT(main_school_name) ON TABLE public.schools TO anon;
+GRANT SELECT(main_school_name) ON TABLE public.schools TO authenticated;
+
+
+--
+-- Name: COLUMN schools.campus_type; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT SELECT(campus_type) ON TABLE public.schools TO anon;
+GRANT SELECT(campus_type) ON TABLE public.schools TO authenticated;
+
+
+--
+-- Name: COLUMN schools.total_students; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT SELECT(total_students) ON TABLE public.schools TO anon;
+GRANT SELECT(total_students) ON TABLE public.schools TO authenticated;
+
+
+--
+-- Name: COLUMN schools.enrollment_year; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT SELECT(enrollment_year) ON TABLE public.schools TO anon;
+GRANT SELECT(enrollment_year) ON TABLE public.schools TO authenticated;
+
+
+--
+-- Name: COLUMN schools.male_ratio; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT SELECT(male_ratio) ON TABLE public.schools TO anon;
+GRANT SELECT(male_ratio) ON TABLE public.schools TO authenticated;
+
+
+--
+-- Name: COLUMN schools.record_key; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT SELECT(record_key) ON TABLE public.schools TO anon;
+GRANT SELECT(record_key) ON TABLE public.schools TO authenticated;
+
+
+--
+-- Name: COLUMN schools.lifecycle_status_code; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT SELECT(lifecycle_status_code) ON TABLE public.schools TO anon;
+GRANT SELECT(lifecycle_status_code) ON TABLE public.schools TO authenticated;
+
+
+--
+-- Name: COLUMN schools.recruitment_status_code; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT SELECT(recruitment_status_code) ON TABLE public.schools TO anon;
+GRANT SELECT(recruitment_status_code) ON TABLE public.schools TO authenticated;
+
+
+--
+-- Name: COLUMN schools.legally_established_on; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT SELECT(legally_established_on) ON TABLE public.schools TO anon;
+GRANT SELECT(legally_established_on) ON TABLE public.schools TO authenticated;
+
+
+--
+-- Name: COLUMN schools.opened_on; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT SELECT(opened_on) ON TABLE public.schools TO anon;
+GRANT SELECT(opened_on) ON TABLE public.schools TO authenticated;
+
+
+--
+-- Name: COLUMN schools.recruitment_ended_on; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT SELECT(recruitment_ended_on) ON TABLE public.schools TO anon;
+GRANT SELECT(recruitment_ended_on) ON TABLE public.schools TO authenticated;
+
+
+--
+-- Name: COLUMN schools.closed_on; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT SELECT(closed_on) ON TABLE public.schools TO anon;
+GRANT SELECT(closed_on) ON TABLE public.schools TO authenticated;
+
+
+--
+-- Name: COLUMN schools.status_official_url; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT SELECT(status_official_url) ON TABLE public.schools TO anon;
+GRANT SELECT(status_official_url) ON TABLE public.schools TO authenticated;
+
+
+--
+-- Name: COLUMN schools.recruitment_ended_year; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT SELECT(recruitment_ended_year) ON TABLE public.schools TO anon;
+GRANT SELECT(recruitment_ended_year) ON TABLE public.schools TO authenticated;
+
+
+--
+-- Name: COLUMN schools.status_description; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT SELECT(status_description) ON TABLE public.schools TO anon;
+GRANT SELECT(status_description) ON TABLE public.schools TO authenticated;
 
 
 --
@@ -4129,4 +5173,4 @@ ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin IN SCHEMA public GRANT ALL ON T
 -- PostgreSQL database dump complete
 --
 
-
+\unrestrict ija7Ify61EWLSbVCRETgYEMKDsufzdBgSK42xTbKaAq0VPjTgzAdaCkhKuR4fUi

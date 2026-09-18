@@ -64,7 +64,9 @@ begin
 end;
 $$;
 
-revoke all on function public.preview_family_invite(uuid) from public;
+-- Supabase の function 作成 hook は PUBLIC だけでなく anon / authenticated にも
+-- EXECUTE を直接付与するため、3 者を明示 revoke してから必要なロールだけ戻す。
+revoke all on function public.preview_family_invite(uuid) from public, anon, authenticated;
 grant execute on function public.preview_family_invite(uuid) to authenticated;
 
 do $$

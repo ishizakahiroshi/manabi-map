@@ -4,26 +4,21 @@ import {
 } from 'react'
 import type { HomeLocation } from '../types/school'
 import { ANALYTICS_SESSION_STORAGE_KEY } from '../lib/analytics'
+import { HOME_ZOOM_KEY } from '../lib/mapView'
 import { supabase } from '../lib/supabase'
 import { useAuth } from './AuthContext'
 
 const HOME_KEY = 'mm.home'
-/**
- * 地図が覚えている通学圏ズームのキー（書き手は lib/mapView.ts の rememberHomeZoom）。
- * 値には mm.home と同じ座標（小数 3 桁）が入っているので、mm.home だけ消しても地点は端末に残る。
- * lib/mapView.ts はキーを export していないため、ここで同じ文字列を持つ。
- */
-const MAP_HOME_ZOOM_KEY = 'mm.map_home_zoom'
 const PERSISTED_HOME_LABEL = '設定地点'
 
 /**
  * サインアウトで端末から消すキー。前の利用者の痕跡を次の利用者へ持ち越さない。
  * 分析用のセッション ID も同じ理由で消す（1 台を家族で共有する前提の製品なので、
- * 残すと次に使う人の記録に前の利用者と同じ ID が付く）。キーの文字列は持ち主の
- * lib/analytics.ts から取り込む。消すと次の記録で新しい ID が発行される。
+ * 残すと次に使う人の記録に前の利用者と同じ ID が付く）。地図ズームと分析用のキーは
+ * それぞれの持ち主から取り込む。消すと次の記録で新しい ID が発行される。
  */
 export const SIGNED_OUT_CLEARED_KEYS = [
-  HOME_KEY, MAP_HOME_ZOOM_KEY, ANALYTICS_SESSION_STORAGE_KEY,
+  HOME_KEY, HOME_ZOOM_KEY, ANALYTICS_SESSION_STORAGE_KEY,
 ] as const
 
 /** 上記のキーを端末から消す。localStorage 不可の環境では消せないだけで、動作は変わらない。 */

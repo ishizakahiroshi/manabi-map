@@ -68,7 +68,9 @@ begin
 end;
 $$;
 
-revoke all on function public.save_mine_consent(uuid, boolean) from public;
+-- Supabase の function 作成 hook は PUBLIC だけでなく anon / authenticated にも
+-- EXECUTE を直接付与するため、3 者を明示 revoke してから必要なロールだけ戻す。
+revoke all on function public.save_mine_consent(uuid, boolean) from public, anon, authenticated;
 grant execute on function public.save_mine_consent(uuid, boolean) to authenticated;
 
 do $$
