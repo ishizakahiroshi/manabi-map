@@ -10,7 +10,13 @@ import { supabase } from './supabase'
  *   下の EventPropsMap で固定 union にしており、住所文字列・氏名・LINE 表示名・
  *   自宅座標のような PII キーは *そもそも型に存在しない* ため代入できない
  *   （リテラル呼び出しでは余剰プロパティチェックでコンパイルエラーになる）。
- * - session_id は localStorage 発行の UUID（cookie 不使用・クッキーレス）。
+ * - session_id は localStorage 発行の UUID（cookie 不使用・クッキーレス）。端末に永続する
+ *   匿名の識別子で、個人と結び付ける経路は持たない。**サインアウトでは破棄する**
+ *   （contexts/AppContext.tsx の SIGNED_OUT_CLEARED_KEYS）。1 台を家族で共有する前提の
+ *   製品なので、破棄しないと次に使う人の記録へ前の利用者と同じ ID が付く。
+ *   集計は events_summary_daily の日次 `count(distinct session_id)` だけで、日をまたいで
+ *   同一人物を追う経路は無い。流量制限も session_id を数え方に使わない
+ *   （202609180103_v0.9_events_rate_limit_namespace.sql）。よって発行し直しても集計は壊れない。
  * - INSERT は fire-and-forget。失敗（オフライン / RLS 拒否 / migration 未適用中の
  *   404・403）はすべて握りつぶし、UX には一切影響させない。
  * - user_id は現在のセッションから取得して載せる（uuid のみ・PII ではない）。
@@ -19,8 +25,12 @@ import { supabase } from './supabase'
  * - school_id は events テーブルのトップレベル列へ、その他は props(jsonb) へ入れる。
  */
 
-/** localStorage の session_id キー（cookie は使わない） */
-const SESSION_STORAGE_KEY = 'mm_session_id'
+/**
+ * localStorage の session_id キー（cookie は使わない）。
+ * サインアウトで消す対象なので、キーの持ち主であるこのモジュールから export し、
+ * contexts/AppContext.tsx の SIGNED_OUT_CLEARED_KEYS がこれを取り込む（文字列を二重に持たない）。
+ */
+export const ANALYTICS_SESSION_STORAGE_KEY = 'mm_session_id'
 
 /**
  * 計測対象イベントと、そのイベントで載せてよい props のホワイトリスト。
@@ -77,20 +87,23 @@ async function sendEvent<T extends AnalyticsEventType>(type: T, props: EventProp
       user_id: userId,
       school_id: school_id ?? null,
       props: rest,
-      session_id: getSessionId(),
+      session_id: getAnalyticsSessionId(),
     })
   } catch {
     // 何が起きても握りつぶす（計測は UX より常に劣後する）
   }
 }
 
-/** localStorage に永続する匿名 session_id を取得（無ければ発行）。cookie は使わない。 */
-function getSessionId(): string {
+/**
+ * localStorage に永続する匿名 session_id を取得（無ければ発行）。cookie は使わない。
+ * サインアウトでキーが消えるので、次の記録では新しい ID がここで発行される。
+ */
+export function getAnalyticsSessionId(): string {
   try {
-    let id = localStorage.getItem(SESSION_STORAGE_KEY)
+    let id = localStorage.getItem(ANALYTICS_SESSION_STORAGE_KEY)
     if (!id) {
       id = createId()
-      localStorage.setItem(SESSION_STORAGE_KEY, id)
+      localStorage.setItem(ANALYTICS_SESSION_STORAGE_KEY, id)
     }
     return id
   } catch {
