@@ -44,6 +44,9 @@ scripts/local/
 docs/ai-audit-prompts/
 # many-ai-cli が実行時に作るロックファイル（一時ファイル・追跡しない）
 *.many-ai-cli.lock
+# opencode のリポジトリ設定（作者環境のエージェント許可設定。追跡するとリポジトリ外への
+# アクセス確認など既定の確認を打ち消す設定を公開リポ側で固定してしまうため追跡しない）
+opencode.json
 
 # === DB ダンプ・バックアップ（本番 PII を含む可能性あり・public へ絶対に出さない） ===
 *.dump
