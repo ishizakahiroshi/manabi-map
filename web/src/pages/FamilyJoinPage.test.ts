@@ -1,10 +1,27 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
+const mocks = vi.hoisted(() => ({
+  rpc: vi.fn(),
+}))
+
+// 招待確認の RPC だけを観測する。AuthContext が LINE_PROVIDER も import するため、
+// mock には実体と同じ名前付き export を揃えておく。
+vi.mock('../lib/supabase', () => ({
+  supabase: { rpc: mocks.rpc },
+  LINE_PROVIDER: 'custom:line',
+}))
+
 import { inviteUrlFor } from '../hooks/useFamilyShare'
-import { parsePendingInvite, readInviteFromUrl, stripInviteTokenFromUrl } from './FamilyJoinPage'
+import {
+  fetchInviteGroupName,
+  parsePendingInvite,
+  readInviteFromUrl,
+  stripInviteTokenFromUrl,
+} from './FamilyJoinPage'
 
 afterEach(() => {
   vi.unstubAllGlobals()
+  mocks.rpc.mockReset()
 })
 
 describe('family invite URL', () => {
@@ -51,6 +68,31 @@ describe('family invite URL', () => {
     stripInviteTokenFromUrl('query')
 
     expect(replaceState).toHaveBeenCalledWith(null, '', '/family/join?keep=1#section')
+  })
+})
+
+describe('invite confirmation lookup', () => {
+  const token = '00000000-0000-4000-8000-000000000001'
+
+  it('asks only for the group name and never accepts the invitation', async () => {
+    mocks.rpc.mockResolvedValue({ data: '合成テスト家族', error: null })
+
+    await expect(fetchInviteGroupName(token)).resolves.toBe('合成テスト家族')
+
+    expect(mocks.rpc).toHaveBeenCalledTimes(1)
+    expect(mocks.rpc).toHaveBeenCalledWith('preview_family_invite', { p_token: token })
+  })
+
+  it('throws when the invitation is expired or already used', async () => {
+    mocks.rpc.mockResolvedValue({ data: null, error: { message: 'invitation expired' } })
+
+    await expect(fetchInviteGroupName(token)).rejects.toMatchObject({ message: 'invitation expired' })
+  })
+
+  it('falls back to an empty name when the RPC returns no string', async () => {
+    mocks.rpc.mockResolvedValue({ data: null, error: null })
+
+    await expect(fetchInviteGroupName(token)).resolves.toBe('')
   })
 })
 
