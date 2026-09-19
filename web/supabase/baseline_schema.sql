@@ -5,7 +5,7 @@
 -- ============================================================================
 -- baseline_schema.sql
 --
--- 本番 Supabase の public スキーマを、migration 202609180105 適用済みの状態で
+-- 本番 Supabase の public スキーマを、migration 202609190101 適用済みの状態で
 -- pg_dump --schema-only --no-owner --schema=public により取得した参照・DR 用
 -- スナップショット（データ・接続情報は含まない）。
 --
@@ -16,7 +16,7 @@
 -- docs/local/manual_production-restore-runbook.md を参照すること。
 -- ============================================================================
 
-\restrict ija7Ify61EWLSbVCRETgYEMKDsufzdBgSK42xTbKaAq0VPjTgzAdaCkhKuR4fUi
+\restrict oy9K9xthyMvwhuU5EG2NddcA5k9Kr1oAEmKx3Eelbpt2r7T4TCulgYbWP73TvWd
 
 -- Dumped from database version 17.6
 -- Dumped by pg_dump version 18.4
@@ -895,7 +895,7 @@ BEGIN
         RAISE LOG 'rls_auto_enable: enabled RLS on %', cmd.object_identity;
       EXCEPTION
         WHEN OTHERS THEN
-          RAISE LOG 'rls_auto_enable: failed to enable RLS on %', cmd.object_identity;
+          RAISE EXCEPTION 'rls_auto_enable: failed to enable RLS on % (%)', cmd.object_identity, SQLERRM;
       END;
      ELSE
         RAISE LOG 'rls_auto_enable: skip % (either system schema or not in enforced list: %.)', cmd.object_identity, cmd.schema_name;
@@ -5173,4 +5173,4 @@ ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin IN SCHEMA public GRANT ALL ON T
 -- PostgreSQL database dump complete
 --
 
-\unrestrict ija7Ify61EWLSbVCRETgYEMKDsufzdBgSK42xTbKaAq0VPjTgzAdaCkhKuR4fUi
+\unrestrict oy9K9xthyMvwhuU5EG2NddcA5k9Kr1oAEmKx3Eelbpt2r7T4TCulgYbWP73TvWd
