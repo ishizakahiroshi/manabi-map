@@ -70,7 +70,7 @@ const ALLOWED_PATHS = new Set([
 // 列挙外の URL は従来どおり next() へ流し、Pages が dist/404.html を HTTP 404 で
 // 返す（2026-08-04 のソフト 404 解消の成果。
 // docs/local/archive/plan_seo-growth-strategy_c5_static-routes.md C4）。
-// `/`・`/school/*`・`/schools/`・`/pref/*`・`/legal/*`・`/press`・`/data`・`/guide/*` は
+// `/`・`/school/*`・`/schools/`・`/pref/*`・`/legal/*`・`/about`・`/press`・`/data`・`/guide/*` は
 // build 時に静的 HTML(SSR プリレンダー)を生成しているので、ここで横取りしない。
 //
 // ルートを足すときは web/src/App.tsx の <Route> と対応させる。

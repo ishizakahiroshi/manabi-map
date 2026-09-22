@@ -39,7 +39,6 @@ export const en: MessageTree = {
     closeMenu: 'Close menu',
     favStat: '{fav} favorites / {note} commute notes',
     serviceInfo: 'About the service',
-    about: 'About Manabi Map',
     help: 'How to use / Help',
     license: 'Licenses',
     settings: 'Settings',

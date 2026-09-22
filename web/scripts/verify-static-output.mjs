@@ -516,6 +516,7 @@ export async function verifyStaticOutput({
     '/schools/',
     ...activePrefectures.map((p) => `/pref/${p.slug}/`),
     '/data/',
+    '/about/',
     '/press/',
     ...LEGAL_DOCS.map((doc) => `/legal/${doc}/`),
     ...GUIDE_SLUGS.map((slug) => `/guide/${slug}/`),
@@ -1188,7 +1189,7 @@ export async function verifyStaticOutput({
     }
   }
 
-  // --- /data/・/press・/legal/* ---
+  // --- /data/・/about・/press・/legal/* ---
   {
     const html = await readPage(absoluteDist, join('data', 'index.html'), '/data/')
     const main = checkPageSkeleton(html, '/data/', `${SITE_ORIGIN}/data/`)
@@ -1217,6 +1218,16 @@ export async function verifyStaticOutput({
       )
     ) {
       throw new Error('/data/ is missing required Dataset JSON-LD')
+    }
+  }
+  {
+    const html = await readPage(absoluteDist, join('about', 'index.html'), '/about/')
+    const main = checkPageSkeleton(html, '/about/', `${SITE_ORIGIN}/about/`)
+    if (!/<h1[\s>]/.test(main)) throw new Error('missing <h1> on /about/')
+    checkSafeHrefAttributes(main, '/about/')
+    if (!main.includes(DATASET_CLAIM)) throw new Error('/about/ is missing the approved dataset claim')
+    if (!extractJsonLdBlocks(html).some((block) => block?.['@type'] === 'Organization')) {
+      throw new Error('/about/ is missing Organization JSON-LD')
     }
   }
   {

@@ -64,6 +64,7 @@ const PRERENDERED_PATHS = [
   '/pref/fukuoka/',
   '/pref/fukuoka/fukuoka-shi/',
   '/legal/terms/',
+  '/about/',
   '/press/',
   '/data/',
   '/guide/synthetic-guide/',

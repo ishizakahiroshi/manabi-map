@@ -6,6 +6,7 @@ import { HomePage } from './pages/HomePage'
 import { SchoolDetailPage } from './pages/SchoolDetailPage'
 import { LegalPage } from './pages/LegalPage'
 import { GuidePage } from './pages/GuidePage'
+import { AboutPage } from './pages/AboutPage'
 import { PressPage } from './pages/PressPage'
 import { DataPage } from './pages/DataPage'
 import { SchoolsHubPage } from './pages/SchoolsHubPage'
@@ -30,7 +31,7 @@ import { useIsAdmin } from './hooks/useIsAdmin'
 //
 // プリレンダー対象（web/scripts/gen-seo-pages.mjs が HTML を書き出すルート）:
 //   / , /school/:id , /schools , /pref/:pref , /pref/:pref/:city ,
-//   /legal/* , /guide/* , /press , /data , 404.html
+//   /legal/* , /guide/* , /about , /press , /data , 404.html
 // → これらは静的 import のまま据え置く。
 //
 // 下の 7 ルートは gen-seo-pages.mjs が HTML を出さず、必ず createRoot 経路になる
@@ -89,6 +90,7 @@ export default function App() {
     path === '/family/join' ||
     path.startsWith('/legal/') ||
     path.startsWith('/guide/') ||
+    path === '/about' ||
     path === '/press' ||
     path === '/data'
   )
@@ -123,6 +125,7 @@ export default function App() {
           <Route path="/legal/third-party" element={<LegalPage doc="third-party" />} />
           <Route path="/legal/deviation-methodology" element={<LegalPage doc="deviation-methodology" />} />
           <Route path="/guide/:slug" element={<GuideRoute />} />
+          <Route path="/about" element={<AboutPage />} />
           <Route path="/press" element={<PressPage />} />
           <Route path="/data" element={<DataPage />} />
           <Route path="/schools" element={<SchoolsHubPage />} />

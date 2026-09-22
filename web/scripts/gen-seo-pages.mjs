@@ -7,7 +7,7 @@
 //     JSON-LD / 静的コンテンツ）
 //   - dist/schools/index.html（全域ハブ）と dist/pref/<slug>/index.html（都道府県ハブ）
 //     … トップ → 県 → 学校の 2 ホップのクロール経路（plan_seo-growth-strategy_c5 C3）
-//   - dist/press/index.html（Organization JSON-LD 付き）と dist/legal/*/index.html
+//   - dist/about/index.html・dist/press/index.html（Organization JSON-LD 付き）と dist/legal/*/index.html
 //     … E-E-A-T シグナルの機械可読化（同 C2。GPTBot / ClaudeBot は JS を実行しない）
 //   - dist/404.html … ソフト 404 の解消（同 C4。Cloudflare Pages が 404 時に自動で使う）
 //   - dist/sitemap.xml
@@ -864,6 +864,16 @@ function renderDataPage() {
   )
 }
 
+function renderAboutPage() {
+  const url = `${SITE_ORIGIN}/about/`
+  const title = 'このサービスについて | Manabi Map'
+  const description =
+    'Manabi Map（まなびマップ）は親子で使う学校選びの地図ノートです。できること・大切にしていること・' +
+    'データの方針・作っている人・お問い合わせ先を紹介しています。'
+  const withHead = renderHead(template, { title, description, url })
+  return withRootContent(withJsonLd(withHead, ORGANIZATION_JSON_LD), renderApp('/about').html, '', '/about')
+}
+
 function renderPressPage() {
   const url = `${SITE_ORIGIN}/press/`
   const title = '配布素材・プレスキット | Manabi Map'
@@ -946,6 +956,9 @@ for (const pref of activePrefectures) {
 await mkdir(join(distDir, 'schools'), { recursive: true })
 await writeFile(join(distDir, 'schools', 'index.html'), renderSchoolsHubPage())
 
+await mkdir(join(distDir, 'about'), { recursive: true })
+await writeFile(join(distDir, 'about', 'index.html'), renderAboutPage())
+
 await mkdir(join(distDir, 'press'), { recursive: true })
 await writeFile(join(distDir, 'press', 'index.html'), renderPressPage())
 
@@ -1001,6 +1014,7 @@ const urls = [
   ...prefPages.map((path) => ({ path })),
   ...cityPages.map((path) => ({ path })),
   { path: '/data/' },
+  { path: '/about/' },
   { path: '/press/' },
   ...LEGAL_DOCS.map(({ doc }) => ({ path: `/legal/${doc}/` })),
   ...GUIDES.map((guide) => ({ path: `/guide/${guide.slug}/` })),
@@ -1030,7 +1044,7 @@ if (pageStats.admissionTablesWithoutSource > 0) {
 console.log(
   `wrote ${targets.length} school pages, ${prefPages.length} pref hubs, ` +
   `${cityPages.length} city pages, ` +
-  `${LEGAL_DOCS.length} legal pages, ${GUIDES.length} guides, data, press, 404 and sitemap.xml (${urls.length} urls) to ${distDir}`,
+  `${LEGAL_DOCS.length} legal pages, ${GUIDES.length} guides, data, about, press, 404 and sitemap.xml (${urls.length} urls) to ${distDir}`,
 )
 
 const llms = [
@@ -1045,6 +1059,7 @@ const llms = [
   '',
   '- [トップ](https://manabi-map.app/): 地図と学校検索',
   '- [公開データセットと API](https://manabi-map.app/data/): 収録基準・ライセンス・安定エンドポイント',
+  '- [このサービスについて](https://manabi-map.app/about/): 利用者向けのサービス紹介と作っている人',
   '- [プレスキット](https://manabi-map.app/press/): サービスの基礎情報と配布素材',
   '- [編集推計の方法と限界](https://manabi-map.app/legal/deviation-methodology/): 根拠と限界',
   '- [利用規約](https://manabi-map.app/legal/terms/)',

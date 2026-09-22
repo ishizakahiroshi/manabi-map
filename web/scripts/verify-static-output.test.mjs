@@ -321,6 +321,13 @@ async function syntheticDist() {
       ],
     },
   }))
+  await mkdir(join(dir, 'about'), { recursive: true })
+  await writeFile(join(dir, 'about', 'index.html'), page({
+    title: 'このサービスについて | Manabi Map',
+    canonical: `${ORIGIN}/about/`,
+    main: `<h1>Manabi Map（まなびマップ）について</h1><p>${DATASET_CLAIM}</p>`,
+    jsonLd: { '@context': 'https://schema.org', '@type': 'Organization', name: 'Manabi Map' },
+  }))
   await mkdir(join(dir, 'press'), { recursive: true })
   await writeFile(join(dir, 'press', 'index.html'), page({
     title: '配布素材・プレスキット | Manabi Map',
@@ -404,6 +411,7 @@ async function syntheticDist() {
     `<loc>${ORIGIN}/pref/gunma/</loc>`,
     `<loc>${ORIGIN}${MAEBASHI_PATH}</loc>`,
     `<loc>${ORIGIN}/data/</loc>`,
+    `<loc>${ORIGIN}/about/</loc>`,
     `<loc>${ORIGIN}/press/</loc>`,
     `<loc>${ORIGIN}/legal/terms/</loc>`,
     `<loc>${ORIGIN}/legal/privacy/</loc>`,
@@ -426,8 +434,8 @@ test('gzip magic, manifest, sitemap, all pages and size gate pass together', asy
   assert.equal(result.seoSchoolCount, 2)
   assert.equal(result.prefPageCount, 1)
   assert.equal(result.cityPageCount, 1)
-  assert.equal(result.sitemapUrlCount, 15)
-  assert.equal(result.sitemapUniqueUrlCount, 15)
+  assert.equal(result.sitemapUrlCount, 16)
+  assert.equal(result.sitemapUniqueUrlCount, 16)
   assert.equal(result.schoolDataCount, 2)
   assert.equal(result.prefDataCount, 1)
   assert.equal(result.publicApiSchoolCount, 2)

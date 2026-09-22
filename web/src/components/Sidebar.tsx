@@ -106,11 +106,11 @@ export function Sidebar({ favCount, noteCount, isAdmin }: SidebarProps) {
 
           <div className="sb-section">
             <div className="sb-label">{t('nav.serviceInfo')}</div>
-            <a className="sb-item" href={REPO_URL} target="_blank" rel="noreferrer" onClick={close}>
+            <button className="sb-item" onClick={() => go('/about')}>
               <span className="ic" aria-hidden="true">ℹ️</span>
-              <span className="tx">{t('nav.about')}</span>
+              <span className="tx">{siteLinkLabel('/about')}</span>
               <span className="arrow" aria-hidden="true">›</span>
-            </a>
+            </button>
             <a className="sb-item" href={`${REPO_URL}#readme`} target="_blank" rel="noreferrer" onClick={close}>
               <span className="ic" aria-hidden="true">❓</span>
               <span className="tx">{t('nav.help')}</span>
