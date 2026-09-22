@@ -3,6 +3,7 @@ import { getMarkdownRuntime, loadMarkdownRuntime } from '../lib/markdownRuntime'
 import { useI18n } from '../contexts/I18nContext'
 import { useGoBack } from '../hooks/useGoBack'
 import { getInitialData } from '../lib/initialData'
+import { sanitizeLegalHref } from '../lib/legalUrl'
 
 interface Props {
   doc: 'terms' | 'privacy' | 'third-party' | 'deviation-methodology'
@@ -99,14 +100,12 @@ export function LegalPage({ doc }: Props) {
             remarkPlugins={[markdown.remarkGfm]}
             components={{
               a: ({ href, children, ...rest }) => {
-                // 第一党 markdown でも javascript: 等を href に通さない多層防御
-                const safe =
-                  href && /^(https?:|mailto:)/i.test(href) ? href : undefined
+                const { safe, isExternal } = sanitizeLegalHref(href)
                 return (
                   <a
                     href={safe}
-                    target="_blank"
-                    rel="noopener noreferrer"
+                    target={isExternal ? '_blank' : undefined}
+                    rel={isExternal ? 'noopener noreferrer' : undefined}
                     {...rest}
                   >
                     {children}
