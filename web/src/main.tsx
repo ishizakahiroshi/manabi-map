@@ -5,6 +5,12 @@ import './index.css'
 import { AppShell, AppTree } from './AppTree'
 import { isPrerenderedForRoute } from './lib/ssrRoute'
 import { loadMarkdownRuntime } from './lib/markdownRuntime'
+import { captureAdLanding } from './lib/analytics'
+
+// Google 検索広告の少額試験（plan_ads-trial-google-search.md C1）。着地時に 1 回だけ UTM を
+// 読み、広告経由なら sessionStorage へ印を付ける。main.tsx はクライアントのみのエントリなので
+// SSR（entry-server.tsx）には乗らない。
+captureAdLanding()
 
 const container = document.getElementById('root')!
 

@@ -57,6 +57,55 @@ export type AnalyticsEventType = keyof EventPropsMap
 type WithSchoolId = { school_id?: string }
 
 /**
+ * C1（plan_ads-trial-google-search.md）: Google 検索広告の少額試験用、来訪元の記録。
+ *
+ * 来訪元は「広告経由かどうか」の 1 ビットだけを持つ。着地 URL の UTM が下記 3 条件を
+ * すべて満たすときだけ、このタブの間 `sessionStorage` に立てる。Cookie は使わず、
+ * `gclid`・UTM の値そのもの・リファラーは一切保存しない（読むだけで捨てる）。
+ * タブを閉じれば消えるので、日をまたいで同一人物を追う経路にはならない。
+ */
+const AD_VIA_SESSION_STORAGE_KEY = 'mm_via'
+
+/** captureAdLanding が書き込み、sendEvent が読む値。この文字列以外は使わない。 */
+const AD_VIA_VALUE = 'google-ads'
+
+/**
+ * 着地時に 1 回だけ呼ぶ（web/src/main.tsx・クライアントのみ）。
+ * `utm_source=google` かつ `utm_medium=cpc` かつ `utm_campaign` が `mm-trial-` で
+ * 始まるときだけ `sessionStorage` へ印を立てる。条件に合わないとき（UTM なし・別の
+ * UTM）は何も書かず、**既存の値も消さない**（同じタブで複数回呼ばれても、一度立った
+ * 印を後続のページ遷移で消してしまわないため）。
+ *
+ * SSR（`location` が無い）・`sessionStorage` 不可・URL 解析失敗はすべて握りつぶし、
+ * 例外を投げない。`search` は主にテスト用の差し替え口で、省略時は `location.search` を読む。
+ */
+export function captureAdLanding(search?: string): void {
+  try {
+    const params = new URLSearchParams(search ?? location.search)
+    const isTrialAdLanding =
+      params.get('utm_source') === 'google' &&
+      params.get('utm_medium') === 'cpc' &&
+      (params.get('utm_campaign') ?? '').startsWith('mm-trial-')
+    if (!isTrialAdLanding) return
+    sessionStorage.setItem(AD_VIA_SESSION_STORAGE_KEY, AD_VIA_VALUE)
+  } catch {
+    // 何が起きても無視する（計測は UX より常に劣後する）
+  }
+}
+
+/** 現在のタブが captureAdLanding で広告経由と印を付けられていれば `via` を返す（無ければ空）。 */
+function getAdViaProp(): { via?: typeof AD_VIA_VALUE } {
+  try {
+    if (sessionStorage.getItem(AD_VIA_SESSION_STORAGE_KEY) === AD_VIA_VALUE) {
+      return { via: AD_VIA_VALUE }
+    }
+  } catch {
+    // SSR・sessionStorage 不可では付けない
+  }
+  return {}
+}
+
+/**
  * KPI イベントを 1 件記録する（fire-and-forget）。
  *
  * 呼び出し側は await しない。ネットワーク・RLS・migration 未適用に関わらず
@@ -81,12 +130,13 @@ async function sendEvent<T extends AnalyticsEventType>(type: T, props: EventProp
     // school_id はトップレベル列へ、それ以外を props(jsonb) へ振り分ける
     const { school_id, ...rest } = props as WithSchoolId & Record<string, unknown>
 
+    // 広告経由の印（sessionStorage）があれば props へ足す。呼び出し側（trackEvent の各所）は関与しない。
     // 返り値の error は敢えて見ない（migration 未適用中は 404/403 になるが UX 非影響）
     await supabase.from('events').insert({
       event_type: type,
       user_id: userId,
       school_id: school_id ?? null,
-      props: rest,
+      props: { ...rest, ...getAdViaProp() },
       session_id: getAnalyticsSessionId(),
     })
   } catch {
