@@ -868,7 +868,7 @@ function renderAboutPage() {
   const url = `${SITE_ORIGIN}/about/`
   const title = 'このサービスについて | Manabi Map'
   const description =
-    'Manabi Map（まなびマップ）は親子で使う学校選びの地図ノートです。できること・大切にしていること・' +
+    'Manabi Map（まなびマップ）は親子で使う学校選びの地図ノートです。使い方・大切にしていること・' +
     'データの方針・作っている人・お問い合わせ先を紹介しています。'
   const withHead = renderHead(template, { title, description, url })
   return withRootContent(withJsonLd(withHead, ORGANIZATION_JSON_LD), renderApp('/about').html, '', '/about')
@@ -1059,7 +1059,7 @@ const llms = [
   '',
   '- [トップ](https://manabi-map.app/): 地図と学校検索',
   '- [公開データセットと API](https://manabi-map.app/data/): 収録基準・ライセンス・安定エンドポイント',
-  '- [このサービスについて](https://manabi-map.app/about/): 利用者向けのサービス紹介と作っている人',
+  '- [このサービスについて](https://manabi-map.app/about/): 利用者向けのサービス紹介・使い方・作っている人',
   '- [プレスキット](https://manabi-map.app/press/): サービスの基礎情報と配布素材',
   '- [編集推計の方法と限界](https://manabi-map.app/legal/deviation-methodology/): 根拠と限界',
   '- [利用規約](https://manabi-map.app/legal/terms/)',

@@ -7,8 +7,6 @@ import { useI18n } from '../contexts/I18nContext'
 import { useFocusTrap } from '../hooks/useFocusTrap'
 import { useEscapeKey } from '../hooks/useEscapeKey'
 
-const REPO_URL = 'https://github.com/ishizakahiroshi/manabi-map'
-
 // メニューから別ページへ移るとき、移動元の履歴エントリに付ける印。
 // 戻る操作（ヘッダーの ← も端末の戻るボタンも POP になる）でそのエントリへ戻ったら
 // メニューを開き直す。react-router はユーザー状態を history.state.usr に持つので、
@@ -138,11 +136,6 @@ export function Sidebar({ favCount, noteCount, isAdmin }: SidebarProps) {
               <span className="tx">{siteLinkLabel('/about')}</span>
               <span className="arrow" aria-hidden="true">›</span>
             </button>
-            <a className="sb-item" href={`${REPO_URL}#readme`} target="_blank" rel="noreferrer" onClick={close}>
-              <span className="ic" aria-hidden="true">❓</span>
-              <span className="tx">{t('nav.help')}</span>
-              <span className="arrow" aria-hidden="true">›</span>
-            </a>
             <button className="sb-item" onClick={() => go('/legal/third-party')}>
               <span className="ic" aria-hidden="true">⚖️</span>
               <span className="tx">{t('nav.license')}</span>

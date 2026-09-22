@@ -39,7 +39,6 @@ export const ja: MessageTree = {
     closeMenu: 'メニューを閉じる',
     favStat: '志望校 {fav} 件 / 通学メモ {note} 件',
     serviceInfo: 'サービス情報',
-    help: '使い方 / ヘルプ',
     license: 'ライセンス',
     settings: '設定・その他',
     addToHome: 'ホーム画面に追加',
