@@ -75,7 +75,11 @@ body {
   overflow: hidden;
   display: flex; flex-direction: column;
 }
-@media (max-width: 640px) {
+/* 枠を消して画面いっぱいに出す端末: 幅 640px 以下のスマホ、と iPad などタッチ操作が主の大きい画面。
+   iPad は縦の 820×1180 でも枠の高さが --phone-h で止まり、下タブが途中に浮いて下が空くため。
+   iPad 横の 1180×820 は PC の 1280×800 と大きさが近く、幅では分けられないので pointer で分ける。
+   min-height は iPhone の横向き（高さ 430px 以下）を対象外にする（viewport-fit=cover でノッチ側に食い込むのを避ける）。 */
+@media (max-width: 640px), (pointer: coarse) and (min-height: 641px) {
   .stage { padding: 0; background: var(--bg); }
   .phone {
     width: 100vw;
