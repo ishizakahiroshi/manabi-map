@@ -25,6 +25,8 @@ export const ja: MessageTree = {
     schoolUnknown: '（学校情報を取得できませんでした）',
     estimate: '推定',
     dash: '−',
+    // 広告カードの「これは広告です」表示。漢字アプリの広告表示（「広告（PR）」を各言語へ訳す）と対応させる。
+    adLabel: '広告（PR）',
   },
   nav: {
     map: '地図',

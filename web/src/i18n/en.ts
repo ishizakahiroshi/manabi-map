@@ -25,6 +25,7 @@ export const en: MessageTree = {
     schoolUnknown: '(School info unavailable)',
     estimate: 'est.',
     dash: '—',
+    adLabel: 'Ad (PR)',
   },
   nav: {
     map: 'Map',

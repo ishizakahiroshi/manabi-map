@@ -79,7 +79,7 @@ export function AboutPage() {
             根拠と限界は {internalLink('/legal/deviation-methodology')} で公開しています。
           </li>
           <li>
-            広告は進路・教育に関係するものだけを「PR」と明示して控えめに載せ、
+            広告は進路・教育に関係するものだけを「広告（PR）」と明示して控えめに載せ、
             無差別に配信される広告は使いません。
           </li>
         </ul>
