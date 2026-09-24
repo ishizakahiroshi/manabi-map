@@ -18,6 +18,7 @@ import { LoginSheet } from './components/LoginSheet'
 import { Toast } from './components/Toast'
 import { OfflineBanner } from './components/OfflineBanner'
 import { MaintenanceBanner } from './components/MaintenanceBanner'
+import { SiteMoveBanner } from './components/SiteMoveNotice'
 import { BottomTabBar } from './components/BottomTabBar'
 import { useIsAdmin } from './hooks/useIsAdmin'
 
@@ -140,6 +141,7 @@ export default function App() {
         {showBottomTabs && <BottomTabBar />}
         <Sidebar favCount={favCount} noteCount={noteCount} isAdmin={isAdmin} />
         <LoginSheet />
+        <SiteMoveBanner />
         <MaintenanceBanner />
         <OfflineBanner />
         <Toast />

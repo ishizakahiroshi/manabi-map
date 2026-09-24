@@ -682,6 +682,16 @@ export const en: MessageTree = {
     toast: 'Maintenance in progress',
     stale: 'This page may not have the latest status; please reload.',
   },
+  // School site address move notices (components/SiteMoveNotice.tsx; decided in lib/siteMove.ts).
+  siteMove: {
+    guestBeforeTitle: 'This site is moving to a new address on {date}',
+    guestBeforeBody: 'The new address is {newHost}. If you stay a guest, you will not be able to see your favorites, memos, and personal records after the move. Please link LINE or Google now.',
+    accountBeforeTitle: 'On {date}, this site moves to {newHost}.',
+    accountBeforeBody: 'After the move, please log in again. Your favorites, memos, and map center (Home location) come back when you log in. If you added this site to your home screen, please add it again.',
+    afterTitle: 'This site has moved from {oldHost} to {newHost}.',
+    afterBody: 'If you used LINE or Google, please log in again (your favorites, memos, and map center will come back). If you were not logged in, please set your map center (Home location) again. If you added this site to your home screen, please add it again.',
+    dismiss: 'Close this notice',
+  },
   error: {
     title: 'Something went wrong',
     text: 'A problem occurred while loading the screen. Try again on a stable connection.',

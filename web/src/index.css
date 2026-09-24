@@ -968,6 +968,31 @@ body {
   box-shadow: 0 2px 0 var(--line);
 }
 
+/* 学校サイトの住所の移転のお知らせ（予告 2・お知らせ 3。components/SiteMoveNotice.tsx）
+   MaintenanceBanner と同じく画面の上に重ねる。閉じられる案内なので警告色にせず、メンテより下に重ねる。 */
+.site-move-banner {
+  position: absolute; top: 0; left: 0; right: 0;
+  display: flex; align-items: flex-start; gap: 8px;
+  background: #fff1e9; color: var(--ink);
+  border-bottom: 2px solid var(--ink);
+  font-family: var(--body); font-size: 0.8rem; line-height: 1.5;
+  padding: 8px 10px 8px 14px; z-index: 1140;
+  box-shadow: 0 2px 0 var(--line);
+}
+.site-move-banner-text { flex: 1; min-width: 0; margin: 0; }
+.site-move-banner-close {
+  flex: 0 0 auto; width: 32px; height: 32px;
+  background: #fff; border: 2px solid var(--ink); border-radius: 10px;
+  font-family: var(--display); font-weight: 800; line-height: 1; cursor: pointer;
+}
+/* 予告 1（マイページ・お気に入りの上。見逃すとデータを失うので閉じるボタンは付けない） */
+.site-move-guest {
+  padding: 12px 14px; border: 2px solid var(--accent); border-radius: 14px;
+  background: #fff1e9; box-shadow: 2px 3px 0 var(--line);
+}
+.site-move-guest-title { margin: 0 0 4px; font-family: var(--display); font-weight: 700; font-size: 0.95rem; }
+.site-move-guest-body { margin: 0; font-size: 0.86rem; line-height: 1.6; }
+
 /* エラーバウンダリのフォールバック画面（C5・白画面回避） */
 .app-error {
   position: fixed; inset: 0; background: var(--bg);

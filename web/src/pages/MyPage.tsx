@@ -8,6 +8,8 @@ import { useFormat } from '../hooks/useFormat'
 import { useSchools } from '../hooks/useSchools'
 import type { useUserData } from '../hooks/useUserData'
 import { FamilyShareSheet } from '../components/FamilyShareSheet'
+import { SiteMoveGuestNotice } from '../components/SiteMoveNotice'
+import { countMyData } from '../lib/export'
 
 interface Props {
   userData: ReturnType<typeof useUserData>
@@ -42,6 +44,11 @@ export function MyPage({ userData, favCount, noteCount }: Props) {
         })
         .sort((a, b) => shortSchoolName(a.name, a).localeCompare(shortSchoolName(b.name, b), 'ja')),
     [schools, mine],
+  )
+
+  const hasUserData = useMemo(
+    () => countMyData({ favorites: userData.favorites, notes, mine }) > 0,
+    [userData.favorites, notes, mine],
   )
 
   const needsLogin = !session || kind === 'anon'
@@ -84,6 +91,7 @@ export function MyPage({ userData, favCount, noteCount }: Props) {
         <div className="brand">{t('mypage.title')}</div>
       </div>
       <main id="main-content" className="content mypage-content" tabIndex={-1}>
+        <SiteMoveGuestNotice hasUserData={hasUserData} />
         <section className="mypage-user">
           <div className="sb-avatar" aria-hidden="true">👤</div>
           <div className="sb-user-info">
