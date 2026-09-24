@@ -173,7 +173,7 @@ function ReportsPanel() {
 function MaintenanceControl() {
   const { session } = useAuth()
   const { toast } = useApp()
-  const { dbOn, envForced, loading: maintenanceLoading } = useMaintenanceMode()
+  const { dbOn, envForced, loading: maintenanceLoading, applyDbOn } = useMaintenanceMode()
   const [serverState, setServerState] = useState<MaintenanceState | null>(null)
   const [optimisticOn, setOptimisticOn] = useState<boolean | null>(null)
   const [loading, setLoading] = useState(true)
@@ -235,6 +235,8 @@ function MaintenanceControl() {
       if (!response.ok) throw new Error('maintenance state update failed')
       const next = await response.json() as MaintenanceState
       setServerState(next)
+      // 切替はこのタブへ読み直しでしか届かないので、応答の値を先に入れてから楽観表示を外す。
+      applyDbOn(next.on)
       setOptimisticOn(null)
       toast('メンテナンスモードを変更しました')
     } catch {
