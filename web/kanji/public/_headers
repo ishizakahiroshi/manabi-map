@@ -1,0 +1,22 @@
+# Cloudflare Pages のレスポンスヘッダ設定（漢字アプリ専用・学校サイトの web/public/_headers とは別）。
+#
+# 学校サイトの _headers との違い:
+# - 学校サイトは CSP を試験中のため Report-Only にし、違反を Pages Function
+#   （/api/csp-report）へ送っている。漢字サイトにはその送り先を受ける Function が
+#   無いので、Report-Only ではなく最初から適用（enforce）する。
+# - Cloudflare Web Analytics の beacon（static.cloudflareinsights.com /
+#   cloudflareinsights.com）は、この CSP の script-src / connect-src に含めていないため
+#   ブロックされる。計測を使うなら、学校サイトの _headers に倣って
+#   script-src へ https://static.cloudflareinsights.com、connect-src へ
+#   https://cloudflareinsights.com を足すこと（親 plan C10 で判断）。
+/*
+  X-Frame-Options: DENY
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(), usb=()
+  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; manifest-src 'self'; worker-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'
+
+# Vite のビルド成果物。ファイル名に内容ハッシュが入るので、中身が変われば URL も変わる。
+# よって永久キャッシュ可（学校サイトの _headers と同じ理由）。
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable

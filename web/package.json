@@ -19,7 +19,10 @@
     "test:functions": "node --test ../functions/api/admin/_auth.test.ts ../functions/api/csp-report.test.ts ../functions/_middleware.test.ts ../scripts/admission/schools-candidate-check.test.mjs ../scripts/admission/pdf-extract.test.mjs ../scripts/admission/official-fetch.test.mjs ../scripts/admission/mext-schools-fetch.test.mjs ../scripts/admission/gsi-batch-geocode.test.mjs ../scripts/admission/gen-admission-v2.test.mjs ../scripts/secrets-scan.test.mjs",
     "verify:static": "node scripts/verify-static-output.mjs --dist dist --max-file-mib 25",
     "check:budget": "node scripts/check-payload-budget.mjs --dist dist",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "dev:kanji": "vite --config vite.kanji.config.ts",
+    "build:kanji": "vite build --config vite.kanji.config.ts",
+    "preview:kanji": "vite preview --config vite.kanji.config.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.110.0",

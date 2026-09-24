@@ -10,6 +10,7 @@ lerna-debug.log*
 node_modules
 dist
 dist-ssr
+dist-kanji
 public/schools.json
 public/schools-*.json
 public/schools-*.json.gz
