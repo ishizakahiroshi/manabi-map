@@ -17,8 +17,9 @@ import {
   formatDatasetCoverage,
   toPublicSchoolRecord,
 } from './lib/public-api.mjs'
+import { SITE_ORIGIN } from './lib/site.mjs'
 
-const ORIGIN = 'https://manabi-map.app'
+const ORIGIN = SITE_ORIGIN
 const scriptsDir = dirname(fileURLToPath(import.meta.url))
 const SITE_FOOTER_LINKS = JSON.parse(
   await readFile(join(scriptsDir, '..', 'data', 'site-footer-links.json'), 'utf8'),
@@ -417,9 +418,9 @@ async function syntheticDist() {
     `<loc>${ORIGIN}/legal/privacy/</loc>`,
     `<loc>${ORIGIN}/legal/third-party/</loc>`,
     `<loc>${ORIGIN}/legal/deviation-methodology/</loc>`,
-    '<loc>https://manabi-map.app/guide/commute-time/</loc>',
-    '<loc>https://manabi-map.app/guide/school-visit/</loc>',
-    '<loc>https://manabi-map.app/guide/deviation-with-care/</loc>',
+    `<loc>${ORIGIN}/guide/commute-time/</loc>`,
+    `<loc>${ORIGIN}/guide/school-visit/</loc>`,
+    `<loc>${ORIGIN}/guide/deviation-with-care/</loc>`,
     ...SCHOOLS.map((s) => `<loc>${ORIGIN}/school/${s.id}/</loc>`),
   ].join('\n'))
   return dir

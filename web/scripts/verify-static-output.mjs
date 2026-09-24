@@ -26,9 +26,9 @@ import {
   isPublicSchoolRecord,
 } from './lib/public-api.mjs'
 import { DEPT_GROUP_BY_CODE, hasReliableDeptData } from './lib/dept-groups-shared.mjs'
+import { SITE_ORIGIN } from './lib/site.mjs'
 
 const DEFAULT_MAX_FILE_MIB = 25
-const SITE_ORIGIN = 'https://manabi-map.app'
 /**
  * 市区町村ページの meta description の上限。日本語の検索結果は概ね 120 字前後で切られる。
  * 実データ 1,265 ページの実測最大は 109 字（2026-08-25）。ここを超えたら、数字ではなく

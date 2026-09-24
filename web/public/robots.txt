@@ -1,8 +1,8 @@
 # Manabi Map データセット（CC BY-SA 4.0）
-#   説明:   https://manabi-map.app/data/
-#   全校:   https://manabi-map.app/api/v1/schools.json
-#   県別:   https://manabi-map.app/api/v1/schools/<prefecture>.json
-#   定義:   https://manabi-map.app/api/v1/openapi.json
+#   説明:   __SITE_ORIGIN__/data/
+#   全校:   __SITE_ORIGIN__/api/v1/schools.json
+#   県別:   __SITE_ORIGIN__/api/v1/schools/<prefecture>.json
+#   定義:   __SITE_ORIGIN__/api/v1/openapi.json
 # 全データは上記 1 ファイルで配布しています。個別ページを大量にクロールする必要はありません。
 
 User-agent: *
@@ -25,4 +25,4 @@ Allow: /api/v1/
 Allow: /data/
 Disallow: /
 
-Sitemap: https://manabi-map.app/sitemap.xml
+Sitemap: __SITE_ORIGIN__/sitemap.xml

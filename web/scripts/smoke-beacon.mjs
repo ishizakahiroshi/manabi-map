@@ -5,16 +5,17 @@
 // デプロイ後や CSP 変更後に手動で回して外形確認する。
 //
 // 実行例:
-//   node scripts/smoke-beacon.mjs
-//   node scripts/smoke-beacon.mjs --url https://manabi-map.app/pref/gunma/
+//   node scripts/smoke-beacon.mjs                         （既定は web/data/site.json の住所のトップ）
+//   node scripts/smoke-beacon.mjs --url <サイトの住所>/pref/gunma/
 //   node scripts/smoke-beacon.mjs --url https://example.pages.dev/
 //
 // beacon が見つかれば 0、見つからなければ 1 で終了する。
 import { parseArgs } from 'node:util'
+import { SITE_ORIGIN } from './lib/site.mjs'
 
 const { values } = parseArgs({
   options: {
-    url: { type: 'string', default: 'https://manabi-map.app/' },
+    url: { type: 'string', default: `${SITE_ORIGIN}/` },
   },
 })
 

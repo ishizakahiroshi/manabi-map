@@ -23,6 +23,7 @@ import { readFileSync, readdirSync, statSync, existsSync } from 'node:fs'
 import { join, relative } from 'node:path'
 import { gzipSync } from 'node:zlib'
 import { fileURLToPath } from 'node:url'
+import { SITE_HOSTNAME } from './lib/site.mjs'
 
 const argv = process.argv.slice(2)
 const distArg = argv.indexOf('--dist')
@@ -174,8 +175,8 @@ function collectHosts() {
   }
   const indexHtml = join(WEB_ROOT, 'index.html')
   const headers = join(WEB_ROOT, 'public', '_headers')
-  // index.html は自サイトの絶対 URL（OGP 等）を大量に含むので、外部読み込みになる
-  // 属性だけを対象にする。CSP はディレクティブ本文をそのまま見る。
+  // index.html は自サイトの URL（OGP 等。住所の部分は vite.config.ts が差し込む）を大量に含むので、
+  // 外部読み込みになる属性だけを対象にする。CSP はディレクティブ本文をそのまま見る。
   if (existsSync(indexHtml)) {
     const html = readFileSync(indexHtml, 'utf8')
     for (const m of html.matchAll(/<(?:script|link|img|iframe)\b[^>]*?(?:src|href)="([^"]+)"/g)) add(m[1])
@@ -187,7 +188,7 @@ function collectHosts() {
       if (/Content-Security-Policy/i.test(line)) add(line)
     }
   }
-  hosts.delete('manabi-map.app')
+  hosts.delete(SITE_HOSTNAME)
   return hosts
 }
 

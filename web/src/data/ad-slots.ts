@@ -7,6 +7,7 @@
  * v0.1.4 時点では ASP 審査待ちのため、下記はすべて「ダミー案件」。
  * 承認後に baseUrl とタイトル・説明を実案件に差し替える運用。
  */
+import site from '../../data/site.json'
 
 /** 表示対象地域。'nation'=全国 / 'kanto'=関東 / 'gunma' 等の県コード / 個別県名 */
 export type AdScope = 'nation' | 'kanto' | 'gunma' | (string & {})
@@ -60,7 +61,7 @@ export const AD_SLOTS: AdSlotItem[] = [
     description:
       '志望校ごとに強い塾・個別指導を比較できます。※こちらは掲載レイアウト確認用のダミーです（実際の広告リンクではありません）。',
     ctaText: '塾情報を見る',
-    baseUrl: 'https://manabi-map.app/legal/privacy#ads',
+    baseUrl: `${site.origin}/legal/privacy#ads`,
     scope: 'nation',
     startDate: '2026-07-06',
   },
@@ -72,7 +73,7 @@ export const AD_SLOTS: AdSlotItem[] = [
     description:
       '学習塾・個別指導・オンライン教室を進路検討と合わせて比較できます。※掲載レイアウト確認用のダミーです。',
     ctaText: '塾を探す',
-    baseUrl: 'https://manabi-map.app/legal/privacy#ads',
+    baseUrl: `${site.origin}/legal/privacy#ads`,
     scope: 'nation',
     startDate: '2026-07-06',
   },
@@ -86,7 +87,7 @@ export const AD_SLOTS: AdSlotItem[] = [
     description:
       '志望校対策に。過去数年分＋解説付きの学習教材を掲載予定。※掲載レイアウト確認用のダミーです。',
     ctaText: '見る',
-    baseUrl: 'https://manabi-map.app/legal/privacy#ads',
+    baseUrl: `${site.origin}/legal/privacy#ads`,
     scope: 'nation',
     startDate: '2026-07-06',
   },
@@ -98,7 +99,7 @@ export const AD_SLOTS: AdSlotItem[] = [
     description:
       '志望校対策の通信教育・模試を比較できます。※掲載レイアウト確認用のダミーです。',
     ctaText: '見る',
-    baseUrl: 'https://manabi-map.app/legal/privacy#ads',
+    baseUrl: `${site.origin}/legal/privacy#ads`,
     scope: 'nation',
     startDate: '2026-07-06',
   },

@@ -4,6 +4,7 @@
  * Secrets are supplied only through the environment (GitHub Actions secrets).
  */
 import { createSign } from 'node:crypto'
+import { SITE_ORIGIN } from '../web/scripts/lib/site.mjs'
 
 const DRY_RUN = process.argv.includes('--dry-run')
 const REQUIRED_ENV = [
@@ -170,7 +171,7 @@ async function fetchCloudflare() {
 }
 
 async function fetchSitemapPageCount() {
-  const response = await fetch('https://manabi-map.app/sitemap.xml')
+  const response = await fetch(`${SITE_ORIGIN}/sitemap.xml`)
   if (!response.ok) throw new Error(`Sitemap request failed (${response.status})`)
   return (await response.text()).match(/<loc>/g)?.length ?? 0
 }

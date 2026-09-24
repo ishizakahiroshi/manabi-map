@@ -1,5 +1,7 @@
 const ALLOWED_ORIGIN_EXACT = new Set([
   'https://manabi-map.app',
+  // 学校サイトの移転先（docs/local/school/plan_school-subdomain-move.md）。切替後もしばらく apex は残す
+  'https://school.manabi-map.app',
   'http://localhost:5173',
   'http://127.0.0.1:5173',
 ])

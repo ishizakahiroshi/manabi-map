@@ -1,9 +1,14 @@
 import { useEffect, useState } from 'react'
 import datasetClaims from '../../data/dataset-claims.json'
+import site from '../../data/site.json'
 import { useI18n } from '../contexts/I18nContext'
 import { useGoBack } from '../hooks/useGoBack'
 import { getInitialData } from '../lib/initialData'
 import { PREFECTURES } from '../lib/prefecture'
+
+// 出典表記の住所は web/data/site.json から入れる（dataset-claims.json には {origin} と書いてある。
+// scripts/lib/public-api.mjs の DATASET_ATTRIBUTION と同じ組み立て）。
+const DATASET_ATTRIBUTION = datasetClaims.attribution.replaceAll('{origin}', site.origin)
 
 type DatasetMetadata = {
   school_count: number
@@ -129,7 +134,7 @@ export function DataPage() {
           22MB を転送せずに「変わっていない」ことを確認できます。
         </p>
         <p>
-          curl なら <code>curl --etag-save etag.txt --etag-compare etag.txt https://manabi-map.app/api/v1/schools.json</code> の形です。
+          curl なら <code>{`curl --etag-save etag.txt --etag-compare etag.txt ${site.origin}/api/v1/schools.json`}</code> の形です。
           多くの HTTP クライアントライブラリはこの往復を自動で行います。
         </p>
         <p>
@@ -157,7 +162,7 @@ export function DataPage() {
         <h2>ライセンスと出典表記</h2>
         <p>
           データは <a href={datasetClaims.licenseUrl}>CC BY-SA 4.0</a> です。
-          利用・再配布時は「{datasetClaims.attribution}」と表記してください。
+          利用・再配布時は「{DATASET_ATTRIBUTION}」と表記してください。
         </p>
         <p>
           <a href="https://github.com/ishizakahiroshi/manabi-map/blob/main/DATA.md" target="_blank" rel="noopener noreferrer">

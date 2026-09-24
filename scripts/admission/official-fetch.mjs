@@ -21,8 +21,9 @@
 import { createHash } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
+import { SITE_ORIGIN } from '../../web/scripts/lib/site.mjs';
 
-const UA = 'manabi-map-official-fetch/1.0 (+https://manabi-map.app; contact: hello@manabi-map.app)';
+const UA = `manabi-map-official-fetch/1.0 (+${SITE_ORIGIN}; contact: hello@manabi-map.app)`;
 const DEFAULT_SLEEP_MS = 500;
 const MAX_RETRIES = 3;
 const TIMEOUT_MS = 30000;

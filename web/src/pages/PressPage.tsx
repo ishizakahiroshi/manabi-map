@@ -1,5 +1,6 @@
 import { useNavigate } from 'react-router-dom'
 import datasetClaims from '../../data/dataset-claims.json'
+import site from '../../data/site.json'
 import { useI18n } from '../contexts/I18nContext'
 import { useGoBack } from '../hooks/useGoBack'
 
@@ -120,7 +121,7 @@ export function PressPage() {
 
   const basics: Array<[string, React.ReactNode]> = [
     ['サービス名', 'Manabi Map（まなびマップ）'],
-    ['URL', <a key="u" href="https://manabi-map.app" target="_blank" rel="noopener noreferrer">https://manabi-map.app</a>],
+    ['URL', <a key="u" href={site.origin} target="_blank" rel="noopener noreferrer">{site.origin}</a>],
     ['現行バージョン', <span key="v">v{__APP_VERSION__}</span>],
     // 校数はデータ追加で変わるのでここには書かない（トップの og:description が
     // ビルド時に実データから生成している）。都道府県数は 47 で頭打ちなので固定でよい。
