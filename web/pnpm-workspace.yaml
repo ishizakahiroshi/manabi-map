@@ -1,2 +1,7 @@
 allowBuilds:
   esbuild: true
+
+# 推移的依存の入れ替え指定。pnpm 11 は package.json の "pnpm" 欄を読まないので、ここに書く。
+# Cloudflare Pages も環境変数 PNPM_VERSION=11.1.1 で CI（.github/workflows/validate.yml）と同じ版にそろえてある。
+overrides:
+  nanoid: ^3.3.18
