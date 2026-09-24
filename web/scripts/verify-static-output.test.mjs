@@ -6,7 +6,14 @@ import { fileURLToPath } from 'node:url'
 import test from 'node:test'
 import { gzipSync } from 'node:zlib'
 
-import { isDetailSchool, verifyStaticOutput } from './verify-static-output.mjs'
+import {
+  isDetailSchool,
+  listFunctionRoutes,
+  readSpaRoutes,
+  routeRuleToRegExp,
+  verifyStaticOutput,
+} from './verify-static-output.mjs'
+import { isSpaRoute } from '../../functions/_middleware.ts'
 import { cityPageDescription } from './lib/city-breakdown.mjs'
 import { DEPT_GROUP_CODES } from './lib/dept-groups-shared.mjs'
 import {
@@ -24,6 +31,13 @@ const scriptsDir = dirname(fileURLToPath(import.meta.url))
 const SITE_FOOTER_LINKS = JSON.parse(
   await readFile(join(scriptsDir, '..', 'data', 'site-footer-links.json'), 'utf8'),
 )
+// 本番の web/public/_routes.json（ビルドで dist 直下へコピーされる）。fixture に複製を作らない。
+const ROUTES_JSON_TEXT = await readFile(join(scriptsDir, '..', 'public', '_routes.json'), 'utf8')
+const ROUTES_JSON = JSON.parse(ROUTES_JSON_TEXT)
+
+async function writeRoutes(dir, { include = ROUTES_JSON.include, exclude = ROUTES_JSON.exclude } = {}) {
+  await writeFile(join(dir, '_routes.json'), JSON.stringify({ version: 1, include, exclude }))
+}
 
 function syntheticFooterHtml() {
   return '<footer><nav aria-label="サイト情報">' +
@@ -271,6 +285,8 @@ async function syntheticDist() {
     '  Access-Control-Allow-Origin: *',
     '',
   ].join('\n'))
+  // Pages Functions を通すパス（plan_free-tier-headroom.md C1）
+  await writeFile(join(dir, '_routes.json'), ROUTES_JSON_TEXT)
 
   await writeFile(join(dir, 'index.html'), page({
     title: 'Manabi Map',
@@ -441,6 +457,7 @@ test('gzip magic, manifest, sitemap, all pages and size gate pass together', asy
   assert.equal(result.prefDataCount, 1)
   assert.equal(result.publicApiSchoolCount, 2)
   assert.equal(result.publicApiPrefCount, 1)
+  assert.equal(result.routesExcludeCount, ROUTES_JSON.exclude.length)
 })
 
 test('name index target set excludes a synthetic school without coordinates', () => {
@@ -925,6 +942,88 @@ test('losing the public API CORS header is rejected', async (t) => {
     verifyStaticOutput({ distDir: dir, maxFileBytes: 1024 * 1024 }),
     /Access-Control-Allow-Origin/,
   )
+})
+
+// --- Pages Functions を通すパス（_routes.json・plan_free-tier-headroom.md C1） ---
+
+test('_routes.json が出力に無ければ落とす', async (t) => {
+  const dir = await syntheticDist()
+  t.after(() => rm(dir, { recursive: true, force: true }))
+  await rm(join(dir, '_routes.json'))
+  await assert.rejects(
+    verifyStaticOutput({ distDir: dir, maxFileBytes: 1024 * 1024 }),
+    /_routes\.json is missing/,
+  )
+})
+
+test('画面の HTML・SPA ルート・Functions の API を外す規則は落とす', async () => {
+  // /map は位置つき URL（/map?lat=…&lng=…）の noindex もここで付くので外せない。
+  for (const rule of ['/map', '/family/*', '/school/*', '/pref/*', '/legal/*', '/api/*']) {
+    const dir = await syntheticDist()
+    try {
+      await writeRoutes(dir, { exclude: [...ROUTES_JSON.exclude, rule] })
+      await assert.rejects(
+        verifyStaticOutput({ distDir: dir, maxFileBytes: 1024 * 1024 }),
+        new RegExp(`away from Pages Functions \\(exclude rule ${rule.replace(/[*/]/g, '\\$&')}\\)`),
+        rule,
+      )
+    } finally {
+      await rm(dir, { recursive: true, force: true })
+    }
+  }
+})
+
+test('1 PV ごとに読む静的ファイルを Functions に通したままなら落とす', async (t) => {
+  const dir = await syntheticDist()
+  t.after(() => rm(dir, { recursive: true, force: true }))
+  await writeRoutes(dir, { exclude: ROUTES_JSON.exclude.filter((rule) => rule !== '/school-data/*') })
+  await assert.rejects(
+    verifyStaticOutput({ distDir: dir, maxFileBytes: 1024 * 1024 }),
+    /does not exclude static file \/school-data\//,
+  )
+})
+
+test('_routes.json の上限（合わせて 100 個・1 規則 100 文字）と include の不足を落とす', async () => {
+  const cases = [
+    [
+      { exclude: [...ROUTES_JSON.exclude, ...Array.from({ length: 100 }, (_, i) => `/synthetic-${i}.txt`)] },
+      /max 100 include\/exclude combined/,
+    ],
+    [{ exclude: [...ROUTES_JSON.exclude, `/${'a'.repeat(100)}`] }, /rule is invalid or unsupported/],
+    [{ include: ['/api/*'] }, /away from Pages Functions \(no include rule\)/],
+  ]
+  for (const [routes, expected] of cases) {
+    const dir = await syntheticDist()
+    try {
+      await writeRoutes(dir, routes)
+      await assert.rejects(verifyStaticOutput({ distDir: dir, maxFileBytes: 1024 * 1024 }), expected)
+    } finally {
+      await rm(dir, { recursive: true, force: true })
+    }
+  }
+})
+
+test('_routes.json の規則は wrangler と同じく /foo/* が /foo にも一致する', () => {
+  const match = (rule, path) => routeRuleToRegExp(rule).test(path)
+  assert.equal(match('/assets/*', '/assets'), true)
+  assert.equal(match('/assets/*', '/assets/nested/app.js'), true)
+  assert.equal(match('/assets/*', '/assets-app.js'), false)
+  assert.equal(match('/schools-*', '/schools-manifest.json'), true)
+  assert.equal(match('/schools-*', '/schools/'), false)
+  assert.equal(match('/robots.txt', '/robots.txt'), true)
+  assert.equal(match('/robots.txt', '/robotsXtxt'), false)
+  assert.equal(match('/*', '/school/synthetic-a/'), true)
+})
+
+test('SPA ルートと Functions の URL の読み取りが functions/ の実体と一致する', async () => {
+  const spaRoutes = await readSpaRoutes()
+  assert.ok(spaRoutes.includes('/map'))
+  for (const route of spaRoutes) assert.equal(isSpaRoute(route), true, route)
+
+  const functionRoutes = await listFunctionRoutes()
+  assert.ok(functionRoutes.includes('/api/csp-report'))
+  assert.ok(functionRoutes.includes('/api/admin/me'))
+  assert.equal(functionRoutes.some((route) => route.endsWith('_middleware')), false)
 })
 
 test('llms.txt without the openapi entry point is rejected', async (t) => {
