@@ -263,6 +263,28 @@ async function main() {
   } catch (error) {
     failures.push(`Supabase app metrics: ${error.message}`)
   }
+  // 無料枠（DB 500MB・MAU 5 万人）までの距離。アプリ内件数と同じく当日の観測値だけを保存する。
+  // 取れた値の列だけを送り、取れなかった値で既存の記録を消さない。取り方の違う値（転送量など）は
+  // 別の try で usage に足せば、互いの失敗に巻き込まれない。
+  const usage = { snapshot_date: endDate }
+  try {
+    const result = await supabaseRequest('/rest/v1/rpc/dash_supabase_usage_metrics', { method: 'POST' })
+    const metrics = Array.isArray(result) ? result[0] : result
+    if (metrics?.db_size_bytes == null || metrics?.auth_users_signed_in_30d == null) {
+      throw new Error('dash_supabase_usage_metrics returned no complete row')
+    }
+    Object.assign(usage, {
+      db_size_bytes: toInteger(metrics.db_size_bytes),
+      auth_users_signed_in_30d: toInteger(metrics.auth_users_signed_in_30d),
+    })
+  } catch (error) {
+    failures.push(`Supabase usage metrics: ${error.message}`)
+  }
+  try {
+    if (Object.keys(usage).length > 1) await upsert('dash_supabase_usage', [usage], 'snapshot_date')
+  } catch (error) {
+    failures.push(`Supabase usage store: ${error.message}`)
+  }
 
   const dailyGroups = new Map()
   for (const row of daily.values()) {
