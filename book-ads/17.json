@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "enabled": true,
+  "ads": [
+    {
+      "id": "ishikawa-public-exam-2027",
+      "prefectureCode": "17",
+      "title": "石川県公立高校 2027年度版",
+      "publisher": "東京学参",
+      "examYear": 2027,
+      "enabled": true,
+      "links": [
+        {
+          "store": "amazon",
+          "href": "https://www.amazon.co.jp/dp/481414055X?&linkCode=ll2&tag=ishizaka-22&linkId=73fd60ff41bb46036dcb4bd1db303ba9&ref_=as_li_ss_tl"
+        },
+        {
+          "store": "rakuten",
+          "href": "https://hb.afl.rakuten.co.jp/ichiba/16aeabad.77964702.16aeabae.828f5f41/?pc=https%3A%2F%2Fitem.rakuten.co.jp%2Fbook%2F18695550%2F&link_type=hybrid_url&ut=eyJwYWdlIjoiaXRlbSIsInR5cGUiOiJoeWJyaWRfdXJsIiwic2l6ZSI6IjEyOHgxMjgiLCJuYW0iOjEsIm5hbXAiOiJyaWdodCIsImNvbSI6MSwiY29tcCI6ImRvd24iLCJwcmljZSI6MCwiYm9yIjoxLCJjb2wiOjEsImJidG4iOjEsInByb2QiOjAsImFtcCI6ZmFsc2V9"
+        }
+      ],
+      "coverHtml": "<a href=\"https://hb.afl.rakuten.co.jp/ichiba/16aeabad.77964702.16aeabae.828f5f41/?pc=https%3A%2F%2Fitem.rakuten.co.jp%2Fbook%2F18695550%2F&link_type=pict&ut=eyJwYWdlIjoiaXRlbSIsInR5cGUiOiJwaWN0Iiwic2l6ZSI6IjEyOHgxMjgiLCJuYW0iOjEsIm5hbXAiOiJyaWdodCIsImNvbSI6MSwiY29tcCI6ImRvd24iLCJwcmljZSI6MCwiYm9yIjoxLCJjb2wiOjEsImJidG4iOjEsInByb2QiOjAsImFtcCI6ZmFsc2V9\" target=\"_blank\" rel=\"nofollow sponsored noopener\" style=\"word-wrap:break-word;\"><img src=\"https://hbb.afl.rakuten.co.jp/hgb/16aeabad.77964702.16aeabae.828f5f41/?me_id=1213310&item_id=22013839&pc=https%3A%2F%2Fthumbnail.image.rakuten.co.jp%2F%400_mall%2Fbook%2Fcabinet%2F0558%2F9784814140558_1_3.jpg%3F_ex%3D128x128&s=128x128&t=pict\" border=\"0\" style=\"margin:2px\" alt=\"\" title=\"\"></a>"
+    }
+  ]
+}
