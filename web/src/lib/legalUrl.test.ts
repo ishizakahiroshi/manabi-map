@@ -39,6 +39,33 @@ describe('sanitizeLegalHref', () => {
       safe: undefined,
       isExternal: false,
     })
+    expect(sanitizeLegalHref('//example.com')).toEqual({
+      safe: undefined,
+      isExternal: false,
+    })
+    expect(sanitizeLegalHref('/\\example.com')).toEqual({
+      safe: undefined,
+      isExternal: false,
+    })
+    expect(sanitizeLegalHref('/\t/evil.example')).toEqual({
+      safe: undefined,
+      isExternal: false,
+    })
+    expect(sanitizeLegalHref('/\n/evil.example')).toEqual({
+      safe: undefined,
+      isExternal: false,
+    })
+    expect(sanitizeLegalHref('/\r/evil.example')).toEqual({
+      safe: undefined,
+      isExternal: false,
+    })
+  })
+
+  it('strips tab, CR, and LF inside an otherwise allowed URL', () => {
+    expect(sanitizeLegalHref('https://exa\tmple.com/a')).toEqual({
+      safe: 'https://example.com/a',
+      isExternal: true,
+    })
   })
 
   it('handles empty or undefined href safely', () => {

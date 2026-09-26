@@ -22,7 +22,7 @@
   X-Content-Type-Options: nosniff
   Referrer-Policy: strict-origin-when-cross-origin
   Permissions-Policy: camera=(), microphone=(), payment=(), usb=()
-  Content-Security-Policy-Report-Only: default-src 'self'; script-src 'self' https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data: https://tile.openstreetmap.org blob:; connect-src 'self' https://*.supabase.co https://nominatim.openstreetmap.org https://msearch.gsi.go.jp https://cloudflareinsights.com; frame-ancestors 'none'; report-uri /api/csp-report
+  Content-Security-Policy-Report-Only: default-src 'self'; script-src 'self' https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data: https://tile.openstreetmap.org https://hbb.afl.rakuten.co.jp https://thumbnail.image.rakuten.co.jp blob:; connect-src 'self' https://*.supabase.co https://nominatim.openstreetmap.org https://msearch.gsi.go.jp https://cloudflareinsights.com; frame-ancestors 'none'; report-uri /api/csp-report
 
 # Vite のビルド成果物。ファイル名に内容ハッシュが入るので、中身が変われば URL も変わる。
 # よって永久キャッシュ可（2026-09-11 追加・plan_edge-cache-and-security-headers.md C1）。

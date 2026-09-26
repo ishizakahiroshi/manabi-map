@@ -27,6 +27,16 @@ export const en: MessageTree = {
     dash: '—',
     adLabel: 'Ad (PR)',
   },
+  bookAd: {
+    category: 'High school entrance exam papers',
+    coverCaption: 'Cover image links to Rakuten Books',
+    description: 'Past papers for public high school entrance exams in Gunma.',
+    amazon: 'Amazon',
+    rakuten: 'Rakuten Books',
+    linkLabel: 'View “{title}” on {store} (opens in a new tab)',
+    disclosure: 'The operator may earn a commission from purchases through these links.',
+    aboutAds: 'About ads',
+  },
   nav: {
     map: 'Map',
     favorites: 'Favorites',

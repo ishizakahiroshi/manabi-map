@@ -28,6 +28,16 @@ export const ja: MessageTree = {
     // 広告カードの「これは広告です」表示。漢字アプリの広告表示（「広告（PR）」を各言語へ訳す）と対応させる。
     adLabel: '広告（PR）',
   },
+  bookAd: {
+    category: '高校受験の過去問',
+    coverCaption: '表紙画像のリンク先：楽天ブックス',
+    description: '群馬県の公立高校入試対策に。',
+    amazon: 'Amazon',
+    rakuten: '楽天ブックス',
+    linkLabel: '{store}で「{title}」を見る（新しいタブで開きます）',
+    disclosure: 'リンク先で購入すると、運営者に紹介料が支払われる場合があります。',
+    aboutAds: '広告について',
+  },
   nav: {
     map: '地図',
     favorites: 'お気に入り',
