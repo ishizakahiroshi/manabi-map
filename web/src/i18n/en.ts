@@ -30,7 +30,7 @@ export const en: MessageTree = {
   bookAd: {
     category: 'High school entrance exam papers',
     coverCaption: 'Cover image links to Rakuten Books',
-    description: 'Past papers for public high school entrance exams in Gunma.',
+    description: 'Past papers for public high school entrance exams in {prefecture}.',
     amazon: 'Amazon',
     rakuten: 'Rakuten Books',
     linkLabel: 'View “{title}” on {store} (opens in a new tab)',

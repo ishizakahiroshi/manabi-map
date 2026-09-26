@@ -131,6 +131,8 @@ const ALLOWED_HOSTS = new Set([
   'nominatim.openstreetmap.org', // 住所検索
   'msearch.gsi.go.jp', // 国土地理院の住所検索
   '*.supabase.co', // DB / 認証
+  // 県別PR JSONを1件取得。2026-09-27: 最大県2,956 B、圧縮時1,484 B + HTTP/1.1応答ヘッダー956 B（DNS/TLS等は除く）。
+  'raw.githubusercontent.com', // 広告専用ブランチ。47県の一括取得はせず、取得本文は64KiBに制限
   // 群馬の過去問表紙1枚。2026-09-27: 128px JPEG 7,844 B、302と応答ヘッダー込み9,050 B（HTTP/1.1、TLS等は除く）
   'hbb.afl.rakuten.co.jp', // 楽天提供の画像URL（302）
   'thumbnail.image.rakuten.co.jp', // 表紙JPEGのリダイレクト先
