@@ -26,15 +26,151 @@ import {
   isPublicSchoolRecord,
 } from './lib/public-api.mjs'
 import { DEPT_GROUP_BY_CODE, hasReliableDeptData } from './lib/dept-groups-shared.mjs'
+import { SITE_ORIGIN } from './lib/site.mjs'
 
 const DEFAULT_MAX_FILE_MIB = 25
-const SITE_ORIGIN = 'https://manabi-map.app'
 /**
  * 市区町村ページの meta description の上限。日本語の検索結果は概ね 120 字前後で切られる。
  * 実データ 1,265 ページの実測最大は 109 字（2026-08-25）。ここを超えたら、数字ではなく
  * 締めの文を短くして直す（内訳のほうが切られるため）。
  */
 const CITY_DESCRIPTION_MAX_CHARS = 120
+
+// --- Pages Functions を通すパス（_routes.json・plan_free-tier-headroom.md C1） ---
+//
+// functions/_middleware.ts があるので、_routes.json が無いと静的ファイルまで全リクエストで
+// Functions が動き、無料枠（アカウント全体で 1 日 10 万回）を 1 PV あたり 11 回ずつ使う。
+// exclude に載せたパスは Functions を通らずに配信される代わりに、middleware の処理
+// （保守モードの 503・SPA ルートの index.html・位置つき URL の noindex）も受けない。
+// そこで checkRoutesJson() で次の両方を検査する:
+// - 画面の HTML（dist の *.html 全件）・SPA ルート・Functions の API は Functions を通る
+// - 1 PV ごとに読む JS/CSS・学校データ・公開 API は Functions を通らない（外し忘れ）
+// 上限は公式 https://developers.cloudflare.com/pages/functions/routing/ の
+// 「include/exclude 合わせて 100 個まで」「1 規則 100 文字まで」。
+const FUNCTIONS_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'functions')
+const ROUTES_MAX_RULES = 100
+const ROUTES_MAX_RULE_CHARS = 100
+
+/**
+ * _routes.json の 1 規則を正規表現にする。公式の説明は「ワイルドカードは任意個のパス区切りに
+ * 一致する」まで。`/foo/*` が `/foo` にも一致する・末尾スラッシュの有無を区別しない、という細部は
+ * wrangler のローカル実行系（workers-sdk の templates/pages-dev-util.ts）に合わせた。
+ */
+export function routeRuleToRegExp(rule) {
+  let body
+  if (rule === '/' || rule === '/*') body = rule
+  else if (rule.endsWith('/*')) body = `${rule.slice(0, -2)}(/*)?`
+  else if (rule.endsWith('/')) body = `${rule.slice(0, -1)}(/)?`
+  else if (rule.endsWith('*')) body = rule
+  else body = `${rule}(/)?`
+  return new RegExp(`^${body.replaceAll('.', '\\.').replaceAll('*', '.*')}$`)
+}
+
+/**
+ * SPA ルートの正典は functions/_middleware.ts の SPA_ROUTES。TS を import せず本文から読むのは、
+ * この検査が Cloudflare Pages のビルドでも走り、そこの Node の版をリポジトリで固定していないため。
+ * 読み取りが本文とずれていないことは verify-static-output.test.mjs が isSpaRoute で突き合わせる。
+ */
+export async function readSpaRoutes(functionsDir = FUNCTIONS_DIR) {
+  const source = await readFile(join(functionsDir, '_middleware.ts'), 'utf8')
+  const body = source.match(/const SPA_ROUTES = new Set\(\[([\s\S]*?)\]\)/)?.[1]
+  const routes = body ? [...body.matchAll(/["']([^"']+)["']/g)].map((match) => match[1]) : []
+  if (routes.length === 0) throw new Error('SPA_ROUTES could not be read from functions/_middleware.ts')
+  return routes
+}
+
+/** functions/ のファイル配置（Pages のファイル名ルーティング）から、Function が応答する URL を作る。
+ * _middleware は全パスに掛かるので個別の URL にしない（画面の HTML と SPA ルートの側で見る）。 */
+export async function listFunctionRoutes(dir = FUNCTIONS_DIR, prefix = '') {
+  const routes = []
+  for (const entry of await readdir(dir, { withFileTypes: true })) {
+    if (entry.isDirectory()) {
+      routes.push(...await listFunctionRoutes(join(dir, entry.name), `${prefix}/${entry.name}`))
+    } else if (/\.(?:ts|js)$/.test(entry.name) && !/\.test\.(?:ts|js)$/.test(entry.name)) {
+      const name = entry.name.replace(/\.(?:ts|js)$/, '')
+      if (name !== '_middleware') routes.push(`${prefix}/${name}`)
+    }
+  }
+  return routes
+}
+
+/** dist の HTML 1 枚に届く URL（x/index.html は /x/ と /x、x.html は /x.html と /x）。 */
+function htmlRequestPaths(relativePath) {
+  if (relativePath === 'index.html') return ['/']
+  const path = `/${encodeURI(relativePath)}`
+  if (relativePath.endsWith('/index.html')) {
+    const dir = path.slice(0, -'index.html'.length)
+    return [dir, dir.slice(0, -1)]
+  }
+  return [path, path.slice(0, -'.html'.length)]
+}
+
+async function checkRoutesJson({ absoluteDist, files, manifest }) {
+  let spec
+  try {
+    spec = JSON.parse(await readFile(join(absoluteDist, '_routes.json'), 'utf8'))
+  } catch (error) {
+    if (error?.code === 'ENOENT') {
+      throw new Error('_routes.json is missing in static output (every request would invoke Pages Functions)')
+    }
+    throw error
+  }
+  const { include, exclude } = spec ?? {}
+  if (spec?.version !== 1 || !Array.isArray(include) || include.length === 0 || !Array.isArray(exclude)) {
+    throw new Error('_routes.json must have version 1, at least one include rule and an exclude array')
+  }
+  const rules = [...include, ...exclude]
+  if (rules.length > ROUTES_MAX_RULES) {
+    throw new Error(`_routes.json has ${rules.length} rules (max ${ROUTES_MAX_RULES} include/exclude combined)`)
+  }
+  for (const rule of rules) {
+    // 検査側の正規表現へ安全に移せる文字だけを許す（それ以外は本番との一致を保証できない）。
+    if (typeof rule !== 'string' || rule.length > ROUTES_MAX_RULE_CHARS || !/^\/[A-Za-z0-9._*/-]*$/.test(rule)) {
+      throw new Error(`_routes.json rule is invalid or unsupported by this check: ${rule}`)
+    }
+  }
+  const includeRules = include.map(routeRuleToRegExp)
+  const excludeRules = exclude.map((rule) => ({ rule, regExp: routeRuleToRegExp(rule) }))
+  const excludedBy = (path) => excludeRules.find(({ regExp }) => regExp.test(path))?.rule ?? null
+  const invokesFunctions = (path) => includeRules.some((regExp) => regExp.test(path)) && excludedBy(path) == null
+
+  // 画面の HTML・SPA ルート・Functions の API。外すと保守モード中も 503 にならず、
+  // SPA ルートの直リンクと位置つき URL の noindex も壊れる。
+  const mustInvoke = [
+    ...files
+      .filter((file) => file.relativePath.endsWith('.html'))
+      .flatMap((file) => htmlRequestPaths(file.relativePath)),
+    ...(await readSpaRoutes()).flatMap((route) => [route, `${route}/`]),
+    ...await listFunctionRoutes(),
+  ]
+  for (const path of mustInvoke) {
+    if (!invokesFunctions(path)) {
+      const rule = excludedBy(path)
+      throw new Error(
+        `_routes.json keeps ${path} away from Pages Functions ` +
+        (rule ? `(exclude rule ${rule})` : '(no include rule)'),
+      )
+    }
+  }
+
+  // 1 PV ごとに読む静的ファイル。ここが Functions を通ると C1 の効果が消える。
+  const mustSkip = [
+    '/schools-manifest.json',
+    manifest.url,
+    manifest.mapUrl,
+    manifest.cityIndexUrl,
+    manifest.nameIndexUrl,
+    ...files
+      .filter((file) => /^(?:assets|school-data|api\/v1)\//.test(file.relativePath))
+      .map((file) => `/${file.relativePath}`),
+  ]
+  for (const path of mustSkip) {
+    if (invokesFunctions(path)) {
+      throw new Error(`_routes.json does not exclude static file ${path} from Pages Functions`)
+    }
+  }
+  return exclude.length
+}
 
 export function isDetailSchool(school) {
   return school?.latitude != null && school?.longitude != null
@@ -516,6 +652,7 @@ export async function verifyStaticOutput({
     '/schools/',
     ...activePrefectures.map((p) => `/pref/${p.slug}/`),
     '/data/',
+    '/about/',
     '/press/',
     ...LEGAL_DOCS.map((doc) => `/legal/${doc}/`),
     ...GUIDE_SLUGS.map((slug) => `/guide/${slug}/`),
@@ -911,6 +1048,8 @@ export async function verifyStaticOutput({
     throw new Error('_headers must serve /api/v1/* with Access-Control-Allow-Origin: *')
   }
 
+  const routesExcludeCount = await checkRoutesJson({ absoluteDist, files, manifest })
+
   // --- 学校ページ全件検査 ---
   let neighborLinkTotal = 0
   for (const target of targets) {
@@ -1188,7 +1327,7 @@ export async function verifyStaticOutput({
     }
   }
 
-  // --- /data/・/press・/legal/* ---
+  // --- /data/・/about・/press・/legal/* ---
   {
     const html = await readPage(absoluteDist, join('data', 'index.html'), '/data/')
     const main = checkPageSkeleton(html, '/data/', `${SITE_ORIGIN}/data/`)
@@ -1217,6 +1356,16 @@ export async function verifyStaticOutput({
       )
     ) {
       throw new Error('/data/ is missing required Dataset JSON-LD')
+    }
+  }
+  {
+    const html = await readPage(absoluteDist, join('about', 'index.html'), '/about/')
+    const main = checkPageSkeleton(html, '/about/', `${SITE_ORIGIN}/about/`)
+    if (!/<h1[\s>]/.test(main)) throw new Error('missing <h1> on /about/')
+    checkSafeHrefAttributes(main, '/about/')
+    if (!main.includes(DATASET_CLAIM)) throw new Error('/about/ is missing the approved dataset claim')
+    if (!extractJsonLdBlocks(html).some((block) => block?.['@type'] === 'Organization')) {
+      throw new Error('/about/ is missing Organization JSON-LD')
     }
   }
   {
@@ -1290,6 +1439,7 @@ export async function verifyStaticOutput({
     prefDataCount: activePrefectures.length,
     publicApiSchoolCount: publicPayload.schools.length,
     publicApiPrefCount: prefApiFiles.length,
+    routesExcludeCount,
   }
 }
 
@@ -1315,6 +1465,7 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1
       `sitemap=${result.sitemapUrlCount} neighborLinks=${result.neighborLinkTotal} ` +
       `schoolData=${result.schoolDataCount} prefData=${result.prefDataCount} ` +
       `publicApi=${result.publicApiSchoolCount}/${result.publicApiPrefCount} ` +
+      `routesExclude=${result.routesExcludeCount} ` +
       `largest=${result.largestFile} (${result.largestFileBytes} bytes) ` +
     `gzip=${result.schoolsPayloadGzip}`,
   )

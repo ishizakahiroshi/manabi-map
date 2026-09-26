@@ -9,6 +9,9 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { gunzipSync } from 'node:zlib'
+// 出典表記と住所は公開 API と同じ正本（web/data/dataset-claims.json・web/data/site.json）から読む。
+import { DATASET_ATTRIBUTION } from '../web/scripts/lib/public-api.mjs'
+import { SITE_ORIGIN } from '../web/scripts/lib/site.mjs'
 
 const here = dirname(fileURLToPath(import.meta.url))
 const root = join(here, '..')
@@ -76,11 +79,10 @@ const payload = JSON.parse(payloadText)
 if (!Array.isArray(payload?.schools)) throw new Error('school payload does not contain schools')
 
 const schools = payload.schools.map(publicSchool)
-const attribution = '出典: Manabi Map（まなびマップ） https://manabi-map.app （CC BY-SA 4.0）'
 const dataset = {
   license: 'CC BY-SA 4.0',
-  attribution,
-  sourceUrl: 'https://manabi-map.app',
+  attribution: DATASET_ATTRIBUTION,
+  sourceUrl: SITE_ORIGIN,
   generatedAt: new Date().toISOString(),
   count: schools.length,
   fields: [...PUBLIC_FIELDS.filter((field) => field !== 'school_departments'), 'departments'],

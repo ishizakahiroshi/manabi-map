@@ -13,7 +13,8 @@
 
 製品のやらないこと、教育系広告だけを許可する方針、個人情報・偏差値相当値・公開 API の境界は [`docs/reference_manabi-map-operating-rules.md`](docs/reference_manabi-map-operating-rules.md) を正本とする。
 
-- ネイティブ化、ランキングサイト化、商用偏差値の転載、自由口コミ大量収集、有料課金の本実装は提案しない。
+- 正式決定前のネイティブアプリ化（Capacitor 等の導入）、ランキングサイト化、商用偏差値の転載、自由口コミ大量収集、有料課金の本実装は提案しない。
+- URL・DB・API・Pages プロジェクト名にはサービス名ではなく機能名を使う。詳細は operating rules の「ブランドと URL」節。
 - 公開 fixture は合成データだけで作る。外部 KB の表示名・実値・秘密を公開ファイルへ残さない。
 - 既存の表示・API・RLS のガードを緩める提案をしない。機械的な強制層は正本コードとテストを読む。
 
@@ -78,6 +79,7 @@ SSR、初期データ、storage 復元、静的出力の検査は [`docs/referen
 - 製品・運用正本: [`docs/reference_manabi-map-operating-rules.md`](docs/reference_manabi-map-operating-rules.md)
 - 進行中の plan / runbook: `docs/local/plan_*.md` / `docs/local/manual_*.md`
 - 作者環境の外部サービス台帳: `docs/local/reference_external-services.md`
+- 作者環境のブランド・命名の正本: `docs/local/reference_brand-and-naming.md`
 - 過去記録: `docs/local/archive/<version>/`
 
 ## 文書変更時の検査

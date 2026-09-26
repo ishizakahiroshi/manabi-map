@@ -11,6 +11,7 @@ import {
   DATASET_ATTRIBUTION,
   DATASET_CLAIM,
   DATASET_LICENSE_URL,
+  DATASET_ORIGIN,
 } from './lib/public-api.mjs'
 // 近隣校の選定と後継校の逆引きは React 側・gen-seo-pages.mjs と同一実装を共有する
 // （tsx 経由で .ts を直 import（package.json の scripts が tsx で起動する。Node の type stripping には依存しない — Cloudflare Pages のビルドイメージは pnpm 同梱の preinstall Node しか使えないため）。フォーク禁止 —
@@ -313,8 +314,8 @@ await writeFile(
     inclusion_policy: '学校公式 URL を持つ現行校と、追跡可能な公式出典を伴う項目のみを収録します。',
     exclusion_policy: '偏差値の編集推計と、出典 URL を確認できない項目は収録しません。',
     distributions: [
-      { content_url: 'https://manabi-map.app/api/v1/schools.json', encoding_format: 'application/json' },
-      { content_url_template: 'https://manabi-map.app/api/v1/schools/{prefecture}.json', encoding_format: 'application/json' },
+      { content_url: `${DATASET_ORIGIN}/api/v1/schools.json`, encoding_format: 'application/json' },
+      { content_url_template: `${DATASET_ORIGIN}/api/v1/schools/{prefecture}.json`, encoding_format: 'application/json' },
     ],
   }, null, 2)}\n`,
 )

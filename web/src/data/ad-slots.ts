@@ -7,6 +7,7 @@
  * v0.1.4 時点では ASP 審査待ちのため、下記はすべて「ダミー案件」。
  * 承認後に baseUrl とタイトル・説明を実案件に差し替える運用。
  */
+import site from '../../data/site.json'
 
 /** 表示対象地域。'nation'=全国 / 'kanto'=関東 / 'gunma' 等の県コード / 個別県名 */
 export type AdScope = 'nation' | 'kanto' | 'gunma' | (string & {})
@@ -26,8 +27,8 @@ export interface AdSlotItem {
   category: AdCategory
   /** 掲載箇所（同じ案件を複数箇所に出したい場合は placements で拡張する） */
   placement: AdPlacement
-  /** カード上部の小バッジ文言（原則 "PR" を推奨） */
-  label: string
+  /** カード上部の小バッジ文言。特別な表示が要る案件だけ書く（省略時は既定の「広告（PR）」） */
+  label?: string
   title: string
   description: string
   ctaText: string
@@ -56,12 +57,11 @@ export const AD_SLOTS: AdSlotItem[] = [
     id: 'dummy-juku-school-detail-v014',
     category: 'juku',
     placement: 'school-detail',
-    label: 'PR',
     title: '志望校対策の学習塾を探す（サンプル）',
     description:
       '志望校ごとに強い塾・個別指導を比較できます。※こちらは掲載レイアウト確認用のダミーです（実際の広告リンクではありません）。',
     ctaText: '塾情報を見る',
-    baseUrl: 'https://manabi-map.app/legal/privacy#ads',
+    baseUrl: `${site.origin}/legal/privacy#ads`,
     scope: 'nation',
     startDate: '2026-07-06',
   },
@@ -69,12 +69,11 @@ export const AD_SLOTS: AdSlotItem[] = [
     id: 'dummy-juku-home-v014',
     category: 'juku',
     placement: 'home',
-    label: 'PR',
     title: 'お子様の学習を支える塾情報（サンプル）',
     description:
       '学習塾・個別指導・オンライン教室を進路検討と合わせて比較できます。※掲載レイアウト確認用のダミーです。',
     ctaText: '塾を探す',
-    baseUrl: 'https://manabi-map.app/legal/privacy#ads',
+    baseUrl: `${site.origin}/legal/privacy#ads`,
     scope: 'nation',
     startDate: '2026-07-06',
   },
@@ -84,12 +83,11 @@ export const AD_SLOTS: AdSlotItem[] = [
     // 地図画面のボトムシート撤去（v0.4.0）に伴い、school-detail へ寄せた。
     // 'map' placement は型・枠定義としては残すが、現状これを使う案件は無い。
     placement: 'school-detail',
-    label: 'PR',
     title: '公立高校 過去問集（サンプル）',
     description:
       '志望校対策に。過去数年分＋解説付きの学習教材を掲載予定。※掲載レイアウト確認用のダミーです。',
     ctaText: '見る',
-    baseUrl: 'https://manabi-map.app/legal/privacy#ads',
+    baseUrl: `${site.origin}/legal/privacy#ads`,
     scope: 'nation',
     startDate: '2026-07-06',
   },
@@ -97,12 +95,11 @@ export const AD_SLOTS: AdSlotItem[] = [
     id: 'dummy-tsuushin-favorites-v014',
     category: 'tsuushin_kyouiku',
     placement: 'favorites',
-    label: 'PR',
     title: '通信教育・模試情報（サンプル）',
     description:
       '志望校対策の通信教育・模試を比較できます。※掲載レイアウト確認用のダミーです。',
     ctaText: '見る',
-    baseUrl: 'https://manabi-map.app/legal/privacy#ads',
+    baseUrl: `${site.origin}/legal/privacy#ads`,
     scope: 'nation',
     startDate: '2026-07-06',
   },

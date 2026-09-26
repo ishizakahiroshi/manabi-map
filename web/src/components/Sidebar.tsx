@@ -1,13 +1,27 @@
-import { useRef } from 'react'
+import { useEffect, useRef } from 'react'
 import siteFooterLinks from '../../data/site-footer-links.json'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate, useNavigationType } from 'react-router-dom'
 import { useApp } from '../contexts/AppContext'
 import { useAuth } from '../contexts/AuthContext'
 import { useI18n } from '../contexts/I18nContext'
 import { useFocusTrap } from '../hooks/useFocusTrap'
 import { useEscapeKey } from '../hooks/useEscapeKey'
 
-const REPO_URL = 'https://github.com/ishizakahiroshi/manabi-map'
+// メニューから別ページへ移るとき、移動元の履歴エントリに付ける印。
+// 戻る操作（ヘッダーの ← も端末の戻るボタンも POP になる）でそのエントリへ戻ったら
+// メニューを開き直す。react-router はユーザー状態を history.state.usr に持つので、
+// 移動元のエントリを router に通知せず書き換える（再描画や key の変化を起こさない）。
+const REOPEN_SIDEBAR_KEY = 'reopenSidebar'
+
+type RouterHistoryState = { usr?: Record<string, unknown> | null } & Record<string, unknown>
+
+function setReopenMark(on: boolean) {
+  const state = (window.history.state ?? {}) as RouterHistoryState
+  const usr = { ...(state.usr ?? {}) }
+  if (on) usr[REOPEN_SIDEBAR_KEY] = true
+  else delete usr[REOPEN_SIDEBAR_KEY]
+  window.history.replaceState({ ...state, usr }, '')
+}
 
 interface SidebarProps {
   favCount: number
@@ -20,10 +34,20 @@ export function Sidebar({ favCount, noteCount, isAdmin }: SidebarProps) {
   const { session, kind, displayName, signOut } = useAuth()
   const { t, locale, setLocale } = useI18n()
   const navigate = useNavigate()
+  const location = useLocation()
+  const navigationType = useNavigationType()
   const asideRef = useRef<HTMLElement>(null)
 
   useFocusTrap(asideRef, sidebarOpen)
   useEscapeKey(() => setSidebarOpen(false), sidebarOpen)
+
+  // 印は一度使ったら消す。残すと、あとで別の導線から同じ画面へ戻ったときにも開いてしまう。
+  useEffect(() => {
+    const state = location.state as Record<string, unknown> | null
+    if (navigationType !== 'POP' || !state?.[REOPEN_SIDEBAR_KEY]) return
+    setReopenMark(false)
+    setSidebarOpen(true)
+  }, [location.key, location.state, navigationType, setSidebarOpen])
 
   // サイドバーとフッターは別コンポーネントだが、外向けページの表示名は同じ実体を使う。
   // ラベルの実体は web/data/site-footer-links.json（ここに文字列を直書きしない）。
@@ -33,6 +57,7 @@ export function Sidebar({ favCount, noteCount, isAdmin }: SidebarProps) {
   const close = () => setSidebarOpen(false)
   const go = (path: string) => {
     close()
+    setReopenMark(true)
     navigate(path)
   }
 
@@ -106,16 +131,11 @@ export function Sidebar({ favCount, noteCount, isAdmin }: SidebarProps) {
 
           <div className="sb-section">
             <div className="sb-label">{t('nav.serviceInfo')}</div>
-            <a className="sb-item" href={REPO_URL} target="_blank" rel="noreferrer" onClick={close}>
+            <button className="sb-item" onClick={() => go('/about')}>
               <span className="ic" aria-hidden="true">ℹ️</span>
-              <span className="tx">{t('nav.about')}</span>
+              <span className="tx">{siteLinkLabel('/about')}</span>
               <span className="arrow" aria-hidden="true">›</span>
-            </a>
-            <a className="sb-item" href={`${REPO_URL}#readme`} target="_blank" rel="noreferrer" onClick={close}>
-              <span className="ic" aria-hidden="true">❓</span>
-              <span className="tx">{t('nav.help')}</span>
-              <span className="arrow" aria-hidden="true">›</span>
-            </a>
+            </button>
             <button className="sb-item" onClick={() => go('/legal/third-party')}>
               <span className="ic" aria-hidden="true">⚖️</span>
               <span className="tx">{t('nav.license')}</span>

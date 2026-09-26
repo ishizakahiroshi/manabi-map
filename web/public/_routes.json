@@ -1,0 +1,28 @@
+{
+  "version": 1,
+  "include": ["/*"],
+  "exclude": [
+    "/assets/*",
+    "/school-data/*",
+    "/api/v1/*",
+    "/logos/*",
+    "/schools-*",
+    "/city-index-*",
+    "/school-name-index-*",
+    "/favicon.ico",
+    "/favicon.svg",
+    "/favicon-16.png",
+    "/favicon-32.png",
+    "/favicon-48.png",
+    "/apple-touch-icon.png",
+    "/icon-192.png",
+    "/icon-512.png",
+    "/icon.svg",
+    "/brand-mark.svg",
+    "/manifest.webmanifest",
+    "/og-hero.png",
+    "/robots.txt",
+    "/sitemap.xml",
+    "/llms.txt"
+  ]
+}

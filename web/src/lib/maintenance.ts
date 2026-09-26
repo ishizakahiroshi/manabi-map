@@ -33,43 +33,105 @@ export function readMaintenanceOn(value: unknown): boolean {
 }
 
 /*
- * runtime フラグの伝達（plan_security-audit-remediation.md C6）
+ * runtime フラグの伝達（plan_free-tier-headroom.md C2）
  *
- * 既に開いているタブへ切替を伝える手段は realtime の購読 1 本しか無い。購読は黙って切れるので、
- * 状態を受け取らずに呼ぶと「切替が届かなかった」と「OFF のまま」が区別できない。
- * 読み直す機会は「購読の状態が変わった時」と「画面に戻った時」の 2 つだけにする。
- * 常時ポーリングは要求数がそのまま費用になるので入れない。
+ * 既に開いているタブへは、app_config を読み直して切替を届ける。realtime の購読は使わない。
+ * 購読はタブごとに同時接続を 1 本ずつ使い、Supabase 無料枠の同時接続（200）で頭打ちになるため。
+ *
+ * 読み直すのは次の 4 つだけ。画面の移動では読まない（1 PV あたりの問い合わせを増やさない）。
+ * - 最初の読み込み
+ * - タブが見えている間、直近の読み込みから MAINTENANCE_REFETCH_INTERVAL_MS が経った時
+ * - タブが見える状態に戻った時
+ * - 回線が戻った時（タブが見えている場合。見えていないタブは、見えた時点で読む）
+ * 読み込み中に次のきっかけが来ても、重ねて読まない。
  */
 
-/** 購読が成立している状態（supabase-js の REALTIME_SUBSCRIBE_STATES と同じ文字列）。 */
-const LIVE_CHANNEL_STATUS = 'SUBSCRIBED'
-/** 購読が切れた・張れなかった状態。ここに来た時点で以降の切替は届かない。 */
-const BROKEN_CHANNEL_STATUSES = ['CHANNEL_ERROR', 'TIMED_OUT', 'CLOSED']
+/**
+ * タブが見えている間の読み直し間隔。
+ * 保守モードの切替が、開いている画面へ届くまでの最大の遅れになる。
+ */
+export const MAINTENANCE_REFETCH_INTERVAL_MS = 5 * 60 * 1000
 
-export function isMaintenanceChannelLive(status: string): boolean {
-  return status === LIVE_CHANNEL_STATUS
+/** 読み直し 1 回の結果。読めなかったときは値を持たせず、OFF と区別する。 */
+export type MaintenanceReadResult = { failed: false; on: boolean } | { failed: true }
+
+/** 監視が待ち受けるイベントの発生元（document / window。テストでは EventTarget で代用する）。 */
+interface ListenerTarget {
+  addEventListener(type: string, listener: () => void): void
+  removeEventListener(type: string, listener: () => void): void
 }
 
-export function isMaintenanceChannelBroken(status: string): boolean {
-  return BROKEN_CHANNEL_STATUSES.includes(status)
+export interface MaintenanceWatchOptions {
+  /** app_config の runtime フラグを 1 回読む。読めなかったときは throw する。 */
+  fetchOn: () => Promise<boolean>
+  /** 読み込みが終わるたびに呼ぶ。止めた後に終わった読み込みの結果は渡さない。 */
+  onRead: (result: MaintenanceReadResult) => void
+  /** タブがいま見えているか。 */
+  isVisible: () => boolean
+  doc: ListenerTarget
+  win: ListenerTarget
 }
 
 /**
- * 購読状態が変わった時に読み直すか。
- * 成立時も読み直す（張り直しが済むまでの間に起きた切替を、ここで 1 回だけ拾う）。
+ * runtime フラグの監視を始め、止める関数を返す。
+ *
+ * 読めなかったときは failed だけを渡し、値は渡さない。どちらに倒すかは呼び出し側が決める
+ * （Provider は直前に読めた値を保つ。保守中に読み直しが 1 回失敗しただけで書込ブロックが外れないため）。
  */
-export function shouldRefetchForChannelStatus(status: string): boolean {
-  return isMaintenanceChannelLive(status) || isMaintenanceChannelBroken(status)
-}
+export function watchMaintenanceFlag(options: MaintenanceWatchOptions): () => void {
+  const { fetchOn, onRead, isVisible, doc, win } = options
+  let stopped = false
+  let inFlight = false
+  let timer: ReturnType<typeof setTimeout> | null = null
 
-/**
- * 読み直しの最小間隔。切断時は supabase 側が再接続を繰り返すので、
- * 状態変化のたびに問い合わせると事実上のポーリングになる。その下限だけを決める。
- */
-export const MAINTENANCE_REFETCH_MIN_INTERVAL_MS = 10_000
+  const clearTimer = () => {
+    if (timer === null) return
+    clearTimeout(timer)
+    timer = null
+  }
 
-/** 直近の読み込みからの経過で、いま読み直してよいかを決める純粋関数。 */
-export function shouldRefetchNow(lastFetchedAt: number | null, now: number): boolean {
-  if (lastFetchedAt === null) return true
-  return now - lastFetchedAt >= MAINTENANCE_REFETCH_MIN_INTERVAL_MS
+  // 次の間隔の読み直しは、直近の読み込みが終わった時点から数える。見えていないタブでは予約しない。
+  const scheduleNext = () => {
+    clearTimer()
+    if (stopped || !isVisible()) return
+    timer = setTimeout(() => {
+      timer = null
+      void read()
+    }, MAINTENANCE_REFETCH_INTERVAL_MS)
+  }
+
+  const read = async () => {
+    if (stopped || inFlight) return
+    inFlight = true
+    clearTimer()
+    let result: MaintenanceReadResult
+    try {
+      result = { failed: false, on: await fetchOn() }
+    } catch {
+      result = { failed: true }
+    }
+    inFlight = false
+    if (stopped) return
+    onRead(result)
+    scheduleNext()
+  }
+
+  const onVisibilityChange = () => {
+    if (isVisible()) void read()
+    else clearTimer()
+  }
+  const onOnline = () => {
+    if (isVisible()) void read()
+  }
+
+  doc.addEventListener('visibilitychange', onVisibilityChange)
+  win.addEventListener('online', onOnline)
+  void read()
+
+  return () => {
+    stopped = true
+    clearTimer()
+    doc.removeEventListener('visibilitychange', onVisibilityChange)
+    win.removeEventListener('online', onOnline)
+  }
 }

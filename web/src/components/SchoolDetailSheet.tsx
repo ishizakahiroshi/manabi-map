@@ -27,6 +27,8 @@ import { trackEvent } from '../lib/analytics'
 import { supabase } from '../lib/supabase'
 import { useMaintenanceMode } from '../hooks/useMaintenanceMode'
 import { AdSlot } from './AdSlot'
+import { BookAdSlot } from './BookAdSlot'
+import { showsGunmaBookAd } from '../data/gunma-book-ad'
 import { slotsForPlacement } from '../data/ad-slots'
 import { DataReportForm } from './DataReportForm'
 import { scaleBand } from '../lib/format'
@@ -1355,7 +1357,9 @@ function SchoolDetailSheetView({ school, onClose, userData, extras, standalone, 
           {saving ? t('common.saving') : t('common.save')}
         </button>
 
-        {slotsForPlacement('school-detail', school.prefecture).map((s) => (
+        {showsGunmaBookAd(school) ? (
+          <BookAdSlot schoolId={school.id} prefecture={school.prefecture} />
+        ) : slotsForPlacement('school-detail', school.prefecture).map((s) => (
           <AdSlot
             key={s.id}
             slot={s}

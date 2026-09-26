@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * 通信量バジェット検査（docs/local/plan_data-usage-audit.md C5）
+ * 通信量バジェット検査（docs/local/school/plan_data-usage-audit.md C5）
  *
  * 目的は「増えたら気づく」こと。体験の良し悪しは測れない。
  * **CI が緑でも画面は保証されない。** 目視は別途必要（ui-change-verify）。
@@ -23,6 +23,7 @@ import { readFileSync, readdirSync, statSync, existsSync } from 'node:fs'
 import { join, relative } from 'node:path'
 import { gzipSync } from 'node:zlib'
 import { fileURLToPath } from 'node:url'
+import { SITE_HOSTNAME } from './lib/site.mjs'
 
 const argv = process.argv.slice(2)
 const distArg = argv.indexOf('--dist')
@@ -121,7 +122,7 @@ const COMPOSITE_BUDGETS = [
  * 外部ドメインの allowlist。
  * **ここに無いホストが増えたら落ちる。**「外部から取ってくるものを足す前に転送量を実測する」
  * という原則（operating-rules の「通信量（ギガ）」）を機械で担保するための網。
- * 足すときは、足す理由と実測した転送量を docs/local/plan_data-usage-audit.md へ書いてから。
+ * 足すときは、足す理由と実測した転送量を docs/local/school/plan_data-usage-audit.md へ書いてから。
  */
 const ALLOWED_HOSTS = new Set([
   'static.cloudflareinsights.com', // Web Analytics の beacon
@@ -130,6 +131,9 @@ const ALLOWED_HOSTS = new Set([
   'nominatim.openstreetmap.org', // 住所検索
   'msearch.gsi.go.jp', // 国土地理院の住所検索
   '*.supabase.co', // DB / 認証
+  // 群馬の過去問表紙1枚。2026-09-27: 128px JPEG 7,844 B、302と応答ヘッダー込み9,050 B（HTTP/1.1、TLS等は除く）
+  'hbb.afl.rakuten.co.jp', // 楽天提供の画像URL（302）
+  'thumbnail.image.rakuten.co.jp', // 表紙JPEGのリダイレクト先
 ])
 
 function walk(dir, base = dir, out = []) {
@@ -174,8 +178,8 @@ function collectHosts() {
   }
   const indexHtml = join(WEB_ROOT, 'index.html')
   const headers = join(WEB_ROOT, 'public', '_headers')
-  // index.html は自サイトの絶対 URL（OGP 等）を大量に含むので、外部読み込みになる
-  // 属性だけを対象にする。CSP はディレクティブ本文をそのまま見る。
+  // index.html は自サイトの URL（OGP 等。住所の部分は vite.config.ts が差し込む）を大量に含むので、
+  // 外部読み込みになる属性だけを対象にする。CSP はディレクティブ本文をそのまま見る。
   if (existsSync(indexHtml)) {
     const html = readFileSync(indexHtml, 'utf8')
     for (const m of html.matchAll(/<(?:script|link|img|iframe)\b[^>]*?(?:src|href)="([^"]+)"/g)) add(m[1])
@@ -187,7 +191,7 @@ function collectHosts() {
       if (/Content-Security-Policy/i.test(line)) add(line)
     }
   }
-  hosts.delete('manabi-map.app')
+  hosts.delete(SITE_HOSTNAME)
   return hosts
 }
 
@@ -257,7 +261,7 @@ function main() {
   if (unknown.length) {
     failures.push(
       `[budget] allowlist に無い外部ホストが増えました: ${unknown.join(', ')}\n` +
-        `         足す前に転送量を実測し、docs/local/plan_data-usage-audit.md へ記録してから\n` +
+        `         足す前に転送量を実測し、docs/local/school/plan_data-usage-audit.md へ記録してから\n` +
         `         scripts/check-payload-budget.mjs の ALLOWED_HOSTS へ追加してください。`,
     )
   }
@@ -280,7 +284,7 @@ function main() {
     for (const f of failures) console.error(f)
     console.error('')
     console.error('[budget] 上限は「増えたら気づく」ための網です。上げる前に、')
-    console.error('         その増加が利用者にとって必要かを docs/local/plan_data-usage-audit.md で判断してください。')
+    console.error('         その増加が利用者にとって必要かを docs/local/school/plan_data-usage-audit.md で判断してください。')
     process.exit(1)
   }
   console.log('[budget] OK: すべて上限内。allowlist 外の外部ホストもありません。')

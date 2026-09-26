@@ -6,7 +6,10 @@
     <meta name="theme-color" content="#ff7a3d" />
     <meta name="description" content="Manabi Map（まなびマップ）は、住所を入れると通える高校が地図に出る、親子で使う学校選びの地図ノートです。" />
 
-    <link rel="canonical" href="https://manabi-map.app/" />
+    <!-- サイトの住所（origin）の正本は web/data/site.json。この head の canonical・og:url・og:image・
+         twitter:image・JSON-LD の住所部分は、vite.config.ts が dev サーバーとビルドで差し込む。
+         手書きの URL に戻さない（住所を切り替えたときに、ここだけ古い住所が残る）。 -->
+    <link rel="canonical" href="__SITE_ORIGIN__/" />
 
     <!-- OGP -->
     <meta property="og:type" content="website" />
@@ -15,8 +18,8 @@
          手書きすると県追加のたびに版ずれする（旧: 「東日本 20 都道県・2,591 校に対応。」が
          全国展開後も残る事故）。置換に失敗した場合はビルドを落とす。 -->
     <meta property="og:description" content="住所を入れると通える高校が地図に出る。気になる学校をお気に入り保存、見学メモや通学メモを残せます。__COVERAGE__" />
-    <meta property="og:url" content="https://manabi-map.app/" />
-    <meta property="og:image" content="https://manabi-map.app/og-hero.png" />
+    <meta property="og:url" content="__SITE_ORIGIN__/" />
+    <meta property="og:image" content="__SITE_ORIGIN__/og-hero.png" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
     <meta property="og:image:alt" content="Manabi Map（まなびマップ）｜親子で使う、学校選びの地図ノート" />
@@ -27,7 +30,7 @@
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="Manabi Map（まなびマップ）｜親子で使う、学校選びの地図ノート" />
     <meta name="twitter:description" content="住所を入れると通える高校が地図に出る。気になる学校をお気に入り保存、見学メモや通学メモを残せます。" />
-    <meta name="twitter:image" content="https://manabi-map.app/og-hero.png" />
+    <meta name="twitter:image" content="__SITE_ORIGIN__/og-hero.png" />
     <meta name="twitter:image:alt" content="Manabi Map（まなびマップ）｜親子で使う、学校選びの地図ノート" />
 
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
@@ -52,13 +55,13 @@
       {
         "@context": "https://schema.org",
         "@type": "WebSite",
-        "@id": "https://manabi-map.app/#website",
+        "@id": "__SITE_ORIGIN__/#website",
         "name": "Manabi Map",
         "alternateName": "まなびマップ",
-        "url": "https://manabi-map.app/",
+        "url": "__SITE_ORIGIN__/",
         "inLanguage": "ja",
         "description": "住所を入れると通える高校が地図に出る、親子で使う学校選びの地図ノート。",
-        "publisher": { "@id": "https://manabi-map.app/#organization" }
+        "publisher": { "@id": "__SITE_ORIGIN__/#organization" }
       }
     </script>
   </head>

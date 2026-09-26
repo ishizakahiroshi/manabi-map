@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs'
+import { SITE_ORIGIN } from './site.mjs'
 
 const datasetClaims = JSON.parse(
   readFileSync(new URL('../../data/dataset-claims.json', import.meta.url), 'utf8'),
@@ -53,7 +54,13 @@ const ADMISSION_METRICS = ['capacity', 'applicants', 'examinees', 'admitted']
 
 export const DATASET_CLAIM = datasetClaims.claim
 export const DATASET_LICENSE_URL = datasetClaims.licenseUrl
-export const DATASET_ATTRIBUTION = datasetClaims.attribution
+// 出典表記の中の住所は web/data/site.json から入れる（dataset-claims.json には {origin} と書く）。
+// 手書きの URL に戻すと、住所を切り替えたときに出典表記だけが古い住所を指すので落とす。
+const ORIGIN_TOKEN = '{origin}'
+if (!datasetClaims.attribution.includes(ORIGIN_TOKEN)) {
+  throw new Error(`dataset-claims.json の attribution に ${ORIGIN_TOKEN} が無い（住所は web/data/site.json から入れる）`)
+}
+export const DATASET_ATTRIBUTION = datasetClaims.attribution.replaceAll(ORIGIN_TOKEN, SITE_ORIGIN)
 
 /** 公開県数が正典の全県数と一致するときだけ「全国」を名乗る。 */
 export function formatDatasetCoverage(prefectureCount, schoolCount, nationwidePrefectureCount) {
@@ -264,7 +271,7 @@ export function buildPublicSchoolRecords(rows, sourceCatalog, builtAt) {
   return rows.map((row) => toPublicSchoolRecord(row, sourceCatalog, builtAt)).filter(Boolean)
 }
 
-export const DATASET_ORIGIN = 'https://manabi-map.app'
+export const DATASET_ORIGIN = SITE_ORIGIN
 export const DATASET_FIELDS_DOC_URL =
   'https://github.com/ishizakahiroshi/manabi-map/blob/main/DATA.md'
 

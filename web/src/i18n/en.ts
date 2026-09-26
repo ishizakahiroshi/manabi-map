@@ -25,6 +25,17 @@ export const en: MessageTree = {
     schoolUnknown: '(School info unavailable)',
     estimate: 'est.',
     dash: '—',
+    adLabel: 'Ad (PR)',
+  },
+  bookAd: {
+    category: 'High school entrance exam papers',
+    coverCaption: 'Cover image links to Rakuten Books',
+    description: 'Past papers for public high school entrance exams in Gunma.',
+    amazon: 'Amazon',
+    rakuten: 'Rakuten Books',
+    linkLabel: 'View “{title}” on {store} (opens in a new tab)',
+    disclosure: 'The operator may earn a commission from purchases through these links.',
+    aboutAds: 'About ads',
   },
   nav: {
     map: 'Map',
@@ -39,8 +50,6 @@ export const en: MessageTree = {
     closeMenu: 'Close menu',
     favStat: '{fav} favorites / {note} commute notes',
     serviceInfo: 'About the service',
-    about: 'About Manabi Map',
-    help: 'How to use / Help',
     license: 'Licenses',
     settings: 'Settings',
     addToHome: 'Add to Home Screen',
@@ -682,6 +691,16 @@ export const en: MessageTree = {
     banner: 'Maintenance in progress. You can browse, but saving favorites, memos, and personal records is paused.',
     toast: 'Maintenance in progress',
     stale: 'This page may not have the latest status; please reload.',
+  },
+  // School site address move notices (components/SiteMoveNotice.tsx; decided in lib/siteMove.ts).
+  siteMove: {
+    guestBeforeTitle: 'This site is moving to a new address on {date}',
+    guestBeforeBody: 'The new address is {newHost}. If you stay a guest, you will not be able to see your favorites, memos, and personal records after the move. Please link LINE or Google now.',
+    accountBeforeTitle: 'On {date}, this site moves to {newHost}.',
+    accountBeforeBody: 'After the move, please log in again. Your favorites, memos, and map center (Home location) come back when you log in. If you added this site to your home screen, please add it again.',
+    afterTitle: 'This site has moved from {oldHost} to {newHost}.',
+    afterBody: 'If you used LINE or Google, please log in again (your favorites, memos, and map center will come back). If you were not logged in, please set your map center (Home location) again. If you added this site to your home screen, please add it again.',
+    dismiss: 'Close this notice',
   },
   error: {
     title: 'Something went wrong',

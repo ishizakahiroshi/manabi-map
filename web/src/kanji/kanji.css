@@ -1,0 +1,241 @@
+/*
+ * 漢字アプリだけで使う追加の CSS（C6・子 plan「作業内容」3）。
+ * 学校サイトの web/src/index.css は変えない。index.css にある .stage .phone .header .icon-btn
+ * .bottom-tabs .bottom-tab .content .brand .link-btn 等はそのまま使い、ここには
+ * 「見本にあって index.css に無いクラス」のうち実際に使うものだけを足す。
+ * 色は index.css と同じ house tokens（var(--accent) 等）を使い、値を直書きしない
+ * （学習者の色は KanjiLayout.tsx が style で渡す）。house tokens に無地の白のトークンが無いため、
+ * 「素の白」が要る場所は --card（#fffdf8。見た目はほぼ白）で代用する（must 4: #fff の直書きを
+ * index.css の慣習のまま持ち込んでいたのを直した）。
+ */
+
+/* ヘッダー右側のボタン群。.header.compact は中央寄せ（justify-content: center）なので、
+   兄弟の hd-right が幅を取ると画面名が真ん中からずれる。絶対配置で外す（見本と同じ扱い）。 */
+.header .hd-right { display: inline-flex; align-items: center; gap: 6px; }
+.header.compact .hd-right { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); }
+
+.hd-lang {
+  border: 2px solid var(--ink); border-radius: 999px; background: var(--card);
+  padding: 3px 10px; font-family: var(--display); font-weight: 800; font-size: 0.8rem;
+  box-shadow: 2px 2px 0 var(--line); cursor: pointer;
+}
+
+.hd-prof {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 3px 10px 3px 3px; border: 2px solid var(--ink); border-radius: 999px;
+  background: var(--card); font-family: var(--display); font-weight: 800; font-size: 0.84rem;
+  box-shadow: 2px 2px 0 var(--line); cursor: pointer;
+}
+.header.compact .hd-prof { padding: 2px 8px 2px 2px; font-size: 0.76rem; }
+.header.compact .hd-prof .avatar { width: 24px; height: 24px; font-size: 0.7rem; }
+
+/* C9 レビュー must 2 の付帯対応: 級の表記を level.nameEq / level.namePreEq（「○級相当」）にした
+   ぶん、学習者ボタンの文字が長くなる（例: 「Level 10」→「Level 10 equiv.」）。既存の省略指定は
+   .header .brand（index.css）にしかなく、.hd-prof のニックネーム＋級（KanjiLayout.tsx の
+   .hd-prof-label）には無かったので、同じ考え方で足す。text-overflow: ellipsis 自体は
+   overflow: hidden・white-space: nowrap・（何らかの）幅の制約が揃わないと効かないため、
+   min-width: 0・text-overflow: ellipsis の 2 つだけでなく、この 3 つと max-width も一緒に足す。
+   幅は端末ごとに変わるので px 固定ではなく vw にする。
+   2026-09-24 C9 再レビュー should 1: compact ヘッダー（/practice・/map）で、上限いっぱいまで
+   伸びると中央の題（「れんしゅう」「Kanji map」等）と重なることを 390×844 の iframe で実測した
+   （例: 「Kanji map」+ 10 文字のニックネームで titleRight 227.8px・profLeft 216.2px の 11.6px 重なり）。
+   上限を 30vw → 26vw に下げ、同じ条件で 3.9〜5.7px の隙間が空くことを確かめた。
+   あわせて、ふりがな「すべて」のとき overflow: hidden が「級相当」の上の読み（<rt>）の上端を
+   切っていることも実測で確認した（rt の getBoundingClientRect().top が label 自身の top より
+   上に出ていた＝ box の外にはみ出していた）。読みぶんの上余白を padding-top で確保する
+   （overflow は横方向の省略のために必要なので外さない）。 */
+.hd-prof-label {
+  display: inline-block; max-width: 42vw; min-width: 0; padding-top: 6px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: middle;
+}
+.header.compact .hd-prof-label { max-width: 26vw; }
+
+.avatar {
+  width: 40px; height: 40px; border-radius: 50%; color: var(--card);
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--display); font-weight: 800; border: 2px solid var(--ink);
+  flex: 0 0 auto; background: var(--accent);
+}
+.avatar.sm { width: 28px; height: 28px; font-size: 0.8rem; }
+
+/* 下のタブが無い画面は、タブぶんの余白を確保しなくてよい */
+.content.no-tabs { padding-bottom: var(--content-pad); }
+
+.maxw { max-width: 640px; margin: 0 auto; }
+
+.box {
+  padding: 12px 14px; border: 2px solid var(--ink); border-radius: 14px;
+  background: var(--card); box-shadow: 2px 3px 0 var(--line);
+}
+
+.center { text-align: center; }
+
+/* C9・子 plan「作業内容」0-1: 最後の確認で見つかった問題 1。英語など日本語以外のとき、下のタブの
+   文言を包む <span lang="en">（i18n/I18nProvider.tsx の t()）に、index.css の
+   `.bottom-tab span { font-size: 1.1rem; line-height: 1; }`（アイコンの絵文字用）が子孫セレクタで
+   効いてしまい、文字が大きくなって iPhone 幅（390px）で「Kanji m…」のように切れていた。
+   ラベルを包む <b> の中の span だけを打ち消して .bottom-tab b（font: inherit 済み）から
+   継承させる。アイコンの span（<b> の外）はそのまま 1.1rem を使う。
+   詳細度は .bottom-tab（class）+ b（type）+ span（type）= (0,1,2) で、元の (0,1,1) より高いため
+   ソース順に関わらず勝つ。 */
+.bottom-tab b span { font-size: inherit; line-height: inherit; }
+
+.muted { color: var(--ink-soft); font-size: 0.84rem; }
+
+/* 保存できない端末の帯・接続が閉じた帯（子 plan「作業内容」2・3） */
+.volatile-banner {
+  flex: 0 0 auto; display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 8px 14px; background: var(--card); border-bottom: 2px solid var(--warn);
+  color: var(--ink); font-size: 0.82rem; line-height: 1.4;
+}
+.volatile-banner .link-btn { flex: 0 0 auto; padding: 0; }
+
+/* .phone.kid: 「こども / おとな」の演出差分（親 plan D-10）はこの C ではまだ何も変えない。
+   KanjiLayout.tsx がクラスだけ付けておき、中身は後の C で足す。 */
+
+/* 「いま」のタグ・「このアプリについて」の注記（C7・子 plan「作業内容」2・4）。
+   見本の値をそのまま使うが、house tokens に無地の白のトークンが無いため #fff は --card に
+   置き換える（このファイル冒頭のコメントと同じ理由）。 */
+.tag {
+  display: inline-block; font-weight: 700; font-size: 0.72rem;
+  padding: 1px 8px; border: 2px solid var(--ink); border-radius: 999px; background: var(--card);
+}
+.tag.accent { background: var(--accent); color: var(--card); }
+
+.notice {
+  margin: 24px auto 0; max-width: 520px; color: var(--ink-soft);
+  font-size: 0.74rem; line-height: 1.6; text-align: center;
+}
+/* C9・子 plan「作業内容」2: notice.unofficial・notice.localOnly を続けて 2 つ出す場所
+   （はじめての画面・「このアプリについて」）では、1 つ目の周り（前の内容との 24px）はそのまま、
+   2 つ目の上だけ詰めて 1 つの注記としてまとまって見えるようにする。 */
+.notice + .notice { margin-top: 6px; }
+
+/* C9・子 plan「作業内容」0-2 の直し（2026-09-24 C9 レビュー should 5 で置き場所を直した）。
+   最後の確認で見つかった問題 2 は、MoreDrawer.tsx が .sb-footer を .sb-body（左右の余白を持つ）の
+   外（.sidebar の直下）に置いていたことが原因だった。MoreDrawer.tsx 側を学校サイトの
+   Sidebar.tsx と同じ「.sb-footer は .sb-body の中の末尾」という置き方に直したので、左右の余白は
+   .sb-body の padding（12px 14px 24px。index.css）でまかなえるようになり、.sb-footer 自体への
+   上書きは不要になった（このファイル側では消した）。
+   iPhone のホームバー分の下余白（safe-area）だけ、.sb-body の下端（スクロールの最後）に効くよう
+   ここで足す。.sb-body は index.css 由来の汎用クラスだが、この上書きは kanji.css だけが読み込まれる
+   漢字アプリのビルドの中でしか効かない（学校サイトの Sidebar.tsx には影響しない）。 */
+.sb-body { padding-bottom: calc(24px + env(safe-area-inset-bottom)); }
+
+/* ことば・学習者のシートの背景（C7・子 plan「作業内容」1: 背景を押して閉じる）。
+   学校サイトの LoginSheet（.sheet auto の見本）には背景を押して閉じる動線が無いが、子 plan の
+   指示で LanguageSheet・ProfileSheet にはこれを足す。
+   色は must 5（2026-09-24 レビュー）: house tokens に無地の黒のトークンが無いため、値の直書き
+   （rgba(36, 31, 26, 0.4)）ではなく color-mix で --ink（同じ #241f1a）から作る。 */
+.sheet-backdrop {
+  position: absolute; inset: 0; background: color-mix(in srgb, var(--ink) 40%, transparent);
+  z-index: 855; border: 0; padding: 0;
+}
+
+/* ことば・学習者のシートの位置と重なり順（should 1: 2026-09-24 レビュー）。
+   - index.css の .header は z-index 800、.bottom-tabs は 850。もとの .sheet-backdrop（690）・
+     .sheet（700。index.css 由来）はどちらより下で、開いてもヘッダー・下のタブの下に隠れて
+     しまっていたため、両方より上（.sheet-backdrop 855・.sheet.auto 860）にする。
+   - 下のタブが無い画面（/welcome・/about 等。KanjiLayout.tsx が noTabs prop で伝える）では
+     index.css の .sheet の bottom: var(--tabbar-h) だと下のタブの高さぶんの隙間が余るので、
+     .no-tabs のときは bottom: 0 にする。
+   - height: auto（.sheet.auto。LoginSheet と同じ）は中身の量に応じて青天井に伸びるため、
+     max-height で頭打ちにする。.body は index.css 側で overflow: auto 済みなので、
+     flex: 1 と min-height: 0 を足して外枠の max-height に収まる分だけスクロールさせる。 */
+.sheet.auto {
+  max-height: 80%;
+  z-index: 860;
+}
+.sheet.auto.no-tabs { bottom: 0; }
+/* 下のタブが無い画面（.no-tabs）はシートが端末の下端に接するため、下のタブの
+   .bottom-tabs（index.css）と同じように iPhone のホームバー分の余白を .body に足す
+   （C7 再レビュー should 3）。 */
+.sheet.auto.no-tabs .body { padding-bottom: calc(22px + env(safe-area-inset-bottom)); }
+.sheet.auto .body { flex: 1; min-height: 0; }
+
+/* 「このアプリについて」の見出し・段落の余白（C7 再レビュー should 2）。Tailwind の preflight が
+   h1・h2・p の margin を 0 にし、見出しの font-size・font-weight も本文へ継承させるため、
+   このクラスで見出しの大きさ・太さと段落の下余白を付ける。色は house tokens（var(--ink)）を使う。
+   .notice はすでに margin を持つため .about-body は付けていない（pages/AboutPage.tsx）。
+   .about-title は「このアプリについて」専用の名前だが、見出しの見た目そのものは汎用（大きさ・太さ・
+   余白だけ）なので、pages/ProfileEditPage.tsx の <h1>（back ヘッダーの .brand は見出し要素で
+   ないため、本文側にも見出し文書構造を置く。AboutPage と同じ理由）にも再利用する（C8）。 */
+.about-title {
+  font-family: var(--display); font-weight: 800; font-size: 1.4rem;
+  line-height: 1.3; color: var(--ink); margin: 0 0 14px;
+}
+.about-subtitle {
+  font-family: var(--display); font-weight: 800; font-size: 1.05rem;
+  line-height: 1.3; color: var(--ink); margin: 20px 0 6px;
+}
+.about-body { margin: 0 0 12px; }
+/* C9・子 plan「作業内容」1: 「このアプリについて」の見出し（about.title「このアプリについて」）は
+   ブランド名そのものではないため、見出しの直後に brand.withSubtitle（「たねもじ — 漢字学習」）を
+   小さく添える。about-subtitle（h2 用・font-weight 800・margin-top 20px）ほど強調しない。 */
+.about-brand { font-family: var(--display); font-weight: 700; font-size: 0.92rem; color: var(--ink-soft); margin: 0 0 14px; }
+
+/* はじめての画面の見出し（wel.title。.catch は index.css）の下に添える副題（brand.subtitle。
+   C9・子 plan「作業内容」3）。2026-09-24 までは同じ場所に「登録しないで始める」ボタンの説明文
+   （旧 wel.localSub・.cta-sub）があったが、その情報は notice.localOnly に移したため、
+   .cta-sub は使われなくなり削除した。 */
+.catch-subtitle { display: block; margin: 0 0 10px; font-family: var(--display); font-weight: 700; font-size: 0.88rem; color: var(--ink-soft); }
+
+/* 学習者の追加・編集画面（C8・子 plan「作業内容」4）。
+   見本の .mode-switch（級の選び方の切り替え）・.chip.swatch（アイコンの色）・.level-band
+   （級のチップを band ごとに見出しで分ける）・.chip small（チップの下の小さい説明）を、
+   house tokens を使って移植する（D-14: 見本の CSS を丸ごと移植せず、値は house tokens にする）。 */
+.mode-switch {
+  display: inline-flex; border: 2px solid var(--ink); border-radius: 999px;
+  overflow: hidden; background: var(--card); margin: 8px 0;
+}
+.mode-switch button {
+  border: 0; background: transparent; padding: 6px 14px; cursor: pointer;
+  font-family: var(--display); font-weight: 700; font-size: 0.82rem; color: var(--ink);
+}
+.mode-switch button.on { background: var(--ink); color: var(--card); }
+
+.level-band { margin-top: 10px; }
+.level-band > span {
+  display: block; font-size: 0.76rem; font-weight: 700; color: var(--ink-soft); margin-bottom: 2px;
+}
+.level-band .chip-row { margin: 4px 0; }
+
+/* .chip（index.css）は white-space: nowrap の 1 行ボタンなので、チップの下に添える説明
+   （級の学年・字数・「準備中」、学年・立場から選ぶときの「○級相当から」等）はここで改行を許す。
+   should 5（2026-09-24 C8 レビュー）: .chip はこのフォーム専用ではなく、C7 のことばのシート
+   （components/LanguageSheet.tsx）の言語ボタンにも使われている。かつてここを .profile-edit-form
+   .chip（子孫セレクタ）にしていたところ、フォームの中の「ことば」ボタンから開いたシートの
+   「English」チップの下に出る「仮訳」（2 行目）の揃え方だけが、ヘッダーの「その他」から開いた
+   同じシートと違って見えていた（申し送り 3）。EditLangField.tsx が LanguageSheet を
+   <form className="profile-edit-form"> の中に描く（Fragment を挟んでいるだけなので、開いたときの
+   .sheet は実際には <form> の直下の子になる）ため、.profile-edit-form の子孫セレクタだと
+   .sheet .body .chip-row の中のチップまで拾ってしまう。
+   フォーム自身が持つチップの行は、必ず <form> の直下（level-band 経由も含む）にしか無い
+   （.sheet はさらに .body を挟むので directly the child にならない）ので、.profile-edit-form の
+   直下の .chip-row と .level-band だけに絞ることで、ことばのシートのチップには一切触れなくなる。 */
+.profile-edit-form > .chip-row .chip,
+.profile-edit-form .level-band .chip {
+  text-align: left;
+}
+.profile-edit-form > .chip-row .chip small,
+.profile-edit-form .level-band .chip small {
+  display: block; margin-top: 2px; font-size: 0.68rem; font-weight: 500;
+  color: inherit; white-space: normal; opacity: 0.85;
+}
+.chip.swatch { width: 44px; height: 36px; padding: 0; }
+.chip.swatch.on { outline: 3px solid var(--ink); outline-offset: 2px; }
+.profile-edit-form > .chip-row .chip:disabled,
+.profile-edit-form .level-band .chip:disabled {
+  opacity: 0.5; cursor: default; box-shadow: none;
+}
+
+/* かなキーボードの切り替え（edit.kbd）のようなオン・オフの入力行 */
+.check-row {
+  display: flex; align-items: center; gap: 8px; margin: 14px 0;
+  font-family: var(--body); font-size: 0.92rem; color: var(--ink);
+}
+.check-row input[type="checkbox"] { width: 20px; height: 20px; accent-color: var(--accent); }
+
+/* 学習者を消す（edit.delete）の取り消せる操作であることを示す色。.link-btn（index.css）の
+   既定は var(--accent) なので、危険な操作だけ var(--bad) に変える。 */
+.link-btn.bad { color: var(--bad); }

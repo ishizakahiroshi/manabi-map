@@ -7,7 +7,7 @@
 //     JSON-LD / 静的コンテンツ）
 //   - dist/schools/index.html（全域ハブ）と dist/pref/<slug>/index.html（都道府県ハブ）
 //     … トップ → 県 → 学校の 2 ホップのクロール経路（plan_seo-growth-strategy_c5 C3）
-//   - dist/press/index.html（Organization JSON-LD 付き）と dist/legal/*/index.html
+//   - dist/about/index.html・dist/press/index.html（Organization JSON-LD 付き）と dist/legal/*/index.html
 //     … E-E-A-T シグナルの機械可読化（同 C2。GPTBot / ClaudeBot は JS を実行しない）
 //   - dist/404.html … ソフト 404 の解消（同 C4。Cloudflare Pages が 404 時に自動で使う）
 //   - dist/sitemap.xml
@@ -34,6 +34,7 @@ import {
   DATASET_LICENSE_URL,
   formatDatasetCoverage,
 } from './lib/public-api.mjs'
+import { SITE_ORIGIN } from './lib/site.mjs'
 import { cityPageDescription } from './lib/city-breakdown.mjs'
 // 近隣校の選定・距離計算と選抜実績の集計・後継校の逆引きは React 側と同一実装を共有する
 // （tsx 経由で .ts を直 import（package.json の scripts が tsx で起動する。Node の type stripping には依存しない — Cloudflare Pages のビルドイメージは pnpm 同梱の preinstall Node しか使えないため）。フォーク禁止 —
@@ -59,8 +60,6 @@ try {
     { cause },
   )
 }
-
-const SITE_ORIGIN = 'https://manabi-map.app'
 
 const here = dirname(fileURLToPath(import.meta.url))
 const webRoot = join(here, '..')
@@ -864,6 +863,16 @@ function renderDataPage() {
   )
 }
 
+function renderAboutPage() {
+  const url = `${SITE_ORIGIN}/about/`
+  const title = 'このサービスについて | Manabi Map'
+  const description =
+    'Manabi Map（まなびマップ）は親子で使う学校選びの地図ノートです。使い方・大切にしていること・' +
+    'データの方針・作っている人・お問い合わせ先を紹介しています。'
+  const withHead = renderHead(template, { title, description, url })
+  return withRootContent(withJsonLd(withHead, ORGANIZATION_JSON_LD), renderApp('/about').html, '', '/about')
+}
+
 function renderPressPage() {
   const url = `${SITE_ORIGIN}/press/`
   const title = '配布素材・プレスキット | Manabi Map'
@@ -946,6 +955,9 @@ for (const pref of activePrefectures) {
 await mkdir(join(distDir, 'schools'), { recursive: true })
 await writeFile(join(distDir, 'schools', 'index.html'), renderSchoolsHubPage())
 
+await mkdir(join(distDir, 'about'), { recursive: true })
+await writeFile(join(distDir, 'about', 'index.html'), renderAboutPage())
+
 await mkdir(join(distDir, 'press'), { recursive: true })
 await writeFile(join(distDir, 'press', 'index.html'), renderPressPage())
 
@@ -1001,6 +1013,7 @@ const urls = [
   ...prefPages.map((path) => ({ path })),
   ...cityPages.map((path) => ({ path })),
   { path: '/data/' },
+  { path: '/about/' },
   { path: '/press/' },
   ...LEGAL_DOCS.map(({ doc }) => ({ path: `/legal/${doc}/` })),
   ...GUIDES.map((guide) => ({ path: `/guide/${guide.slug}/` })),
@@ -1020,6 +1033,21 @@ const sitemap =
   '\n</urlset>\n'
 await writeFile(join(distDir, 'sitemap.xml'), sitemap)
 
+// robots.txt の Sitemap 行とデータセットの案内の住所は、web/data/site.json から差し込む。
+// web/public/robots.txt には __SITE_ORIGIN__ と書いておき、Vite が dist へ写したものをここで書き換える
+// （docs/local/school/plan_school-subdomain-move.md C1）。Sitemap 行が差し込みの形でなくなっていたら
+// 住所の切替で robots.txt だけが古い sitemap を指し続けるので、ビルドを落とす。
+const ROBOTS_ORIGIN_PLACEHOLDER = '__SITE_ORIGIN__'
+const robotsPath = join(distDir, 'robots.txt')
+const robotsTemplate = await readFile(robotsPath, 'utf8')
+if (!robotsTemplate.includes(`Sitemap: ${ROBOTS_ORIGIN_PLACEHOLDER}/sitemap.xml`)) {
+  throw new Error(
+    `gen-seo-pages: robots.txt の Sitemap 行が ${ROBOTS_ORIGIN_PLACEHOLDER}/sitemap.xml になっていない` +
+    '（住所は web/data/site.json から差し込む）',
+  )
+}
+await writeFile(robotsPath, robotsTemplate.replaceAll(ROBOTS_ORIGIN_PLACEHOLDER, SITE_ORIGIN))
+
 // 出典なしの年度表は c4 C3 完了条件（全数値に出典）に反するのでビルドを落とす。
 if (pageStats.admissionTablesWithoutSource > 0) {
   throw new Error(
@@ -1030,7 +1058,7 @@ if (pageStats.admissionTablesWithoutSource > 0) {
 console.log(
   `wrote ${targets.length} school pages, ${prefPages.length} pref hubs, ` +
   `${cityPages.length} city pages, ` +
-  `${LEGAL_DOCS.length} legal pages, ${GUIDES.length} guides, data, press, 404 and sitemap.xml (${urls.length} urls) to ${distDir}`,
+  `${LEGAL_DOCS.length} legal pages, ${GUIDES.length} guides, data, about, press, 404 and sitemap.xml (${urls.length} urls) to ${distDir}`,
 )
 
 const llms = [
@@ -1039,16 +1067,17 @@ const llms = [
   '> 親子で使う、学校選びの地図ノート。学校を序列化せず、地図、見学、家族の対話を通じた進路検討を支援します。',
   '',
   `- 収録範囲: ${coverageText(schools)}`,
-  '- 公式サイト: https://manabi-map.app/',
+  `- 公式サイト: ${SITE_ORIGIN}/`,
   '',
   '## 主要ページ',
   '',
-  '- [トップ](https://manabi-map.app/): 地図と学校検索',
-  '- [公開データセットと API](https://manabi-map.app/data/): 収録基準・ライセンス・安定エンドポイント',
-  '- [プレスキット](https://manabi-map.app/press/): サービスの基礎情報と配布素材',
-  '- [編集推計の方法と限界](https://manabi-map.app/legal/deviation-methodology/): 根拠と限界',
-  '- [利用規約](https://manabi-map.app/legal/terms/)',
-  '- [プライバシーポリシー](https://manabi-map.app/legal/privacy/)',
+  `- [トップ](${SITE_ORIGIN}/): 地図と学校検索`,
+  `- [公開データセットと API](${SITE_ORIGIN}/data/): 収録基準・ライセンス・安定エンドポイント`,
+  `- [このサービスについて](${SITE_ORIGIN}/about/): 利用者向けのサービス紹介・使い方・作っている人`,
+  `- [プレスキット](${SITE_ORIGIN}/press/): サービスの基礎情報と配布素材`,
+  `- [編集推計の方法と限界](${SITE_ORIGIN}/legal/deviation-methodology/): 根拠と限界`,
+  `- [利用規約](${SITE_ORIGIN}/legal/terms/)`,
+  `- [プライバシーポリシー](${SITE_ORIGIN}/legal/privacy/)`,
   '',
   '## データとライセンス',
   '',
@@ -1056,10 +1085,10 @@ const llms = [
   '- 学校基本情報: CC BY-SA 4.0',
   `- 収録方針: ${DATASET_CLAIM}`,
   `- 出典表記: ${DATASET_ATTRIBUTION}`,
-  '- 全件 API: https://manabi-map.app/api/v1/schools.json',
-  '- 県別 API: https://manabi-map.app/api/v1/schools/{prefecture}.json',
-  '- API メタデータ: https://manabi-map.app/api/v1/dataset.json',
-  '- API の呼び方（OpenAPI 3.1）: https://manabi-map.app/api/v1/openapi.json',
+  `- 全件 API: ${SITE_ORIGIN}/api/v1/schools.json`,
+  `- 県別 API: ${SITE_ORIGIN}/api/v1/schools/{prefecture}.json`,
+  `- API メタデータ: ${SITE_ORIGIN}/api/v1/dataset.json`,
+  `- API の呼び方（OpenAPI 3.1）: ${SITE_ORIGIN}/api/v1/openapi.json`,
   '- 認証は不要です。CORS は全 origin に開いています。',
   '- 偏差値の編集推計は公開 API に含めません。',
   '- データセットの説明: https://github.com/ishizakahiroshi/manabi-map/blob/main/DATA.md',

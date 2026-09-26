@@ -6,6 +6,7 @@ import { useSchools } from '../hooks/useSchools'
 import type { useUserData } from '../hooks/useUserData'
 import { SchoolDetailSheet } from '../components/SchoolDetailSheet'
 import { FamilyShareSheet } from '../components/FamilyShareSheet'
+import { SiteMoveGuestNotice } from '../components/SiteMoveNotice'
 import { AdSlot } from '../components/AdSlot'
 import { slotsForPlacement } from '../data/ad-slots'
 import { countMyData, downloadMyData } from '../lib/export'
@@ -68,6 +69,7 @@ export function FavoritesPage({ userData }: Props) {
         <div className="brand">{t('nav.favoritesTitle')}</div>
       </div>
       <main id="main-content" className="content favs-content" tabIndex={-1}>
+        <SiteMoveGuestNotice hasUserData={dataCount > 0} />
         <div className="favs-toolbar">
           <span className="sort">{t('favorites.sort')}</span>
           <span style={{ display: 'flex', gap: 10 }}>

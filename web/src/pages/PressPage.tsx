@@ -1,7 +1,10 @@
 import { useNavigate } from 'react-router-dom'
 import datasetClaims from '../../data/dataset-claims.json'
+import site from '../../data/site.json'
 import { useI18n } from '../contexts/I18nContext'
 import { useGoBack } from '../hooks/useGoBack'
+
+const DEVELOPER_SITE_URL = 'https://ishizakahiroshi.com/'
 
 /**
  * /press — メディア関係者・教育関係者向けのプレスキット / 基礎情報ページ。
@@ -118,12 +121,12 @@ export function PressPage() {
 
   const basics: Array<[string, React.ReactNode]> = [
     ['サービス名', 'Manabi Map（まなびマップ）'],
-    ['URL', <a key="u" href="https://manabi-map.app" target="_blank" rel="noopener noreferrer">https://manabi-map.app</a>],
+    ['URL', <a key="u" href={site.origin} target="_blank" rel="noopener noreferrer">{site.origin}</a>],
     ['現行バージョン', <span key="v">v{__APP_VERSION__}</span>],
     // 校数はデータ追加で変わるのでここには書かない（トップの og:description が
     // ビルド時に実データから生成している）。都道府県数は 47 で頭打ちなので固定でよい。
     ['初回公開', '2026-07-05（群馬県版）。2026-07-31 に全国 47 都道府県へ拡大'],
-    ['開発者', 'ishizakahiroshi（個人 OSS）'],
+    ['開発者', <span key="d">ishizakahiroshi（個人 OSS）<br /><a href={DEVELOPER_SITE_URL} target="_blank" rel="noopener noreferrer">{DEVELOPER_SITE_URL}</a></span>],
     ['ライセンス', 'コード AGPL-3.0 / データ CC BY-SA 4.0'],
     ['料金', '無料（広告は進路・教育関連のみ控えめに掲載）'],
     ['対象年齢', '中学生・高校生とその保護者'],
@@ -248,6 +251,10 @@ export function PressPage() {
           ishizakahiroshi — 個人 OSS 開発者。Manabi Map を含む複数の教育・生活向け Web サービスを
           個人で企画・実装・運営しています。取材・登壇のご相談は
           <a href="mailto:hello@manabi-map.app">hello@manabi-map.app</a> までお願いします。
+        </p>
+        <p>
+          ほかの制作物や経歴は公式サイトで紹介しています:{' '}
+          <a href={DEVELOPER_SITE_URL} target="_blank" rel="noopener noreferrer">{DEVELOPER_SITE_URL}</a>
         </p>
 
         <h2>よくある質問</h2>

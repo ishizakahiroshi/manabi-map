@@ -25,6 +25,18 @@ export const ja: MessageTree = {
     schoolUnknown: '（学校情報を取得できませんでした）',
     estimate: '推定',
     dash: '−',
+    // 広告カードの「これは広告です」表示。漢字アプリの広告表示（「広告（PR）」を各言語へ訳す）と対応させる。
+    adLabel: '広告（PR）',
+  },
+  bookAd: {
+    category: '高校受験の過去問',
+    coverCaption: '表紙画像のリンク先：楽天ブックス',
+    description: '群馬県の公立高校入試対策に。',
+    amazon: 'Amazon',
+    rakuten: '楽天ブックス',
+    linkLabel: '{store}で「{title}」を見る（新しいタブで開きます）',
+    disclosure: 'リンク先で購入すると、運営者に紹介料が支払われる場合があります。',
+    aboutAds: '広告について',
   },
   nav: {
     map: '地図',
@@ -39,8 +51,6 @@ export const ja: MessageTree = {
     closeMenu: 'メニューを閉じる',
     favStat: '志望校 {fav} 件 / 通学メモ {note} 件',
     serviceInfo: 'サービス情報',
-    about: 'このサービスについて',
-    help: '使い方 / ヘルプ',
     license: 'ライセンス',
     settings: '設定・その他',
     addToHome: 'ホーム画面に追加',
@@ -683,6 +693,20 @@ export const ja: MessageTree = {
     banner: '現在メンテナンス中です。閲覧は可能ですが、お気に入り・メモ・私の記録の保存は一時停止しています。',
     toast: '現在メンテナンス中です',
     stale: '最新の状態が届いていない可能性があります。再読み込みしてください。',
+  },
+  // 学校サイトの住所の移転のお知らせ（components/SiteMoveNotice.tsx。判定は lib/siteMove.ts）。
+  // {date} は切替日（10月15日）、{oldHost} / {newHost} は data/site-move.ts の値。
+  siteMove: {
+    // 予告 1: 旧住所・ゲストでお気に入りかメモか私の記録を持つ人（マイページとお気に入りの上）
+    guestBeforeTitle: '{date}から、このサイトの住所が変わります',
+    guestBeforeBody: '新しい住所は {newHost} です。ゲストのままだと、住所が変わったあとに、お気に入り・メモ・私の記録が見られなくなります。今のうちに LINE か Google と連携しておいてください。',
+    // 予告 2: 旧住所・LINE / Google でログインしている人（画面の上・閉じたら出さない）
+    accountBeforeTitle: '{date}から、このサイトの住所が {newHost} に変わります。',
+    accountBeforeBody: '変わったあとは、もう一度ログインしてください。お気に入り・メモ・地図の中心（ホーム設定）はログインすれば戻ります。ホーム画面に追加している人は、追加し直してください。',
+    // お知らせ 3: 新住所・全員（切替日から決まった日数だけ・閉じたら出さない）
+    afterTitle: 'このサイトの住所が {oldHost} から {newHost} に変わりました。',
+    afterBody: 'LINE か Google でログインしていた人は、もう一度ログインしてください（お気に入り・メモ・地図の中心が戻ります）。ログインしていなかった人は、地図の中心（ホーム設定）を設定し直してください。ホーム画面に追加している人は、追加し直してください。',
+    dismiss: 'このお知らせを閉じる',
   },
   error: {
     title: '一時的な問題が発生しました',

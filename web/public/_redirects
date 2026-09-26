@@ -11,6 +11,6 @@
 #
 # ここに SPA fallback 行を書き足さないこと（二重管理になり、308 正規化の罠も再発する）。
 # 列挙外の URL は Cloudflare Pages が dist/404.html を HTTP 404 で返す。
-# /（トップ）・/school/*・/schools/・/pref/*・/legal/*・/press・/data・/guide/* は
+# /（トップ）・/school/*・/schools/・/pref/*・/legal/*・/about・/press・/data・/guide/* は
 # 静的 HTML が存在するのでフォールバック不要。
 # 注意: _redirects の上限は 静的 2,000 + 動的 100。ルールを増やすときは意識すること。

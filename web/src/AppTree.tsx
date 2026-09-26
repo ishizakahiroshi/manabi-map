@@ -23,7 +23,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
 /**
  * Router の内側。プリレンダーとブラウザで完全に同一のツリーを描く。
- * 各 Provider の副作用（Supabase セッション取得・メンテ状態の購読）は useEffect 内にあり、
+ * 各 Provider の副作用（Supabase セッション取得・メンテ状態の読み込み）は useEffect 内にあり、
  * 初回 render の出力は session=null / loading=true で両者一致する。
  */
 export function AppTree() {

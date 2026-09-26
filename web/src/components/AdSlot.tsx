@@ -1,6 +1,7 @@
 import type { AdSlotItem } from '../data/ad-slots'
 import { AD_CAMPAIGN, withUtm } from '../lib/utm'
 import { trackEvent } from '../lib/analytics'
+import { useI18n } from '../contexts/I18nContext'
 
 interface AdSlotProps {
   slot: AdSlotItem
@@ -23,11 +24,12 @@ const CATEGORY_JA: Record<AdSlotItem['category'], string> = {
 /**
  * 塾アフィリ枠のカード（docs/reference_manabi-map-operating-rules.md 準拠）。
  *
- * - 常に「PR」バッジを目立たせて広告と明示する（景表法・プラットフォーム透明化）
+ * - 常に「広告（PR）」バッジを目立たせて広告と明示する（景表法・プラットフォーム透明化）
  * - CTA クリックは新規タブで開き、URL に UTM を自動付与
  * - 案件データは data/ad-slots.ts 側で管理し、本コンポーネントは表示のみ
  */
 export function AdSlot({ slot, context, categoryLabel, className }: AdSlotProps) {
+  const { t } = useI18n()
   const href = withUtm(slot.baseUrl, {
     campaign: AD_CAMPAIGN,
     medium: slot.placement,
@@ -36,7 +38,7 @@ export function AdSlot({ slot, context, categoryLabel, className }: AdSlotProps)
 
   return (
     <div className={`ad-slot ${className ?? ''}`} data-ad-slot-id={slot.id}>
-      <span className="pr-tag">{slot.label || 'PR'}</span>
+      <span className="pr-tag">{slot.label || t('common.adLabel')}</span>
       <span className="ad-cat">{categoryLabel ?? CATEGORY_JA[slot.category]}</span>
       <h4>{slot.title}</h4>
       <p>{slot.description}</p>

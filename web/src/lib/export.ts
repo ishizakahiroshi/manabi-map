@@ -1,3 +1,4 @@
+import site from '../../data/site.json'
 import type { School, Favorite, MineRecord, SchoolNote } from '../types/school'
 
 /**
@@ -116,7 +117,7 @@ export function buildMyData(schools: School[], u: UserDataSlice): MyDataExport {
 
   return {
     format_version: EXPORT_FORMAT_VERSION,
-    service: 'Manabi Map (https://manabi-map.app)',
+    service: `Manabi Map (${site.origin})`,
     exported_at: new Date().toISOString(),
     schools: entries,
   }

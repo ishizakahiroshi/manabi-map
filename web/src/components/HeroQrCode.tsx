@@ -1,4 +1,5 @@
 import { QRCodeSVG } from 'qrcode.react'
+import site from '../../data/site.json'
 
 /**
  * ヒーローの QR 本体。qrcode.react ごと初期バンドルから外すためにファイルを分けている
@@ -7,7 +8,8 @@ import { QRCodeSVG } from 'qrcode.react'
  */
 const HERO_QR_SIZE = 104
 
-const SITE_URL = 'https://manabi-map.app'
+// 住所の正本は web/data/site.json（ここに直書きしない）。
+const SITE_URL = site.origin
 
 export function HeroQrCode({ title }: { title: string }) {
   return (
