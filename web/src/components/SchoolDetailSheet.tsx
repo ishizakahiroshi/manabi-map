@@ -26,10 +26,7 @@ import type { useUserData } from '../hooks/useUserData'
 import { trackEvent } from '../lib/analytics'
 import { supabase } from '../lib/supabase'
 import { useMaintenanceMode } from '../hooks/useMaintenanceMode'
-import { AdSlot } from './AdSlot'
-import { BookAdSlot } from './BookAdSlot'
-import { showsGunmaBookAd } from '../data/gunma-book-ad'
-import { slotsForPlacement } from '../data/ad-slots'
+import { SchoolBookAd } from './SchoolBookAd'
 import { DataReportForm } from './DataReportForm'
 import { scaleBand } from '../lib/format'
 
@@ -1357,16 +1354,7 @@ function SchoolDetailSheetView({ school, onClose, userData, extras, standalone, 
           {saving ? t('common.saving') : t('common.save')}
         </button>
 
-        {showsGunmaBookAd(school) ? (
-          <BookAdSlot schoolId={school.id} prefecture={school.prefecture} />
-        ) : slotsForPlacement('school-detail', school.prefecture).map((s) => (
-          <AdSlot
-            key={s.id}
-            slot={s}
-            categoryLabel={t('detail.adCategory')}
-            context={{ schoolId: school.id, prefecture: school.prefecture }}
-          />
-        ))}
+        <SchoolBookAd school={school} />
       </div>
       <div className="sheet-bottom-bar" role="navigation" aria-label={t('detail.bottomBar')}>
         <button className={`fav-toggle ${fav ? 'on' : ''}`} onClick={() => void handleFav()}>

@@ -31,7 +31,7 @@ export const ja: MessageTree = {
   bookAd: {
     category: '高校受験の過去問',
     coverCaption: '表紙画像のリンク先：楽天ブックス',
-    description: '群馬県の公立高校入試対策に。',
+    description: '{prefecture}の公立高校入試対策に。',
     amazon: 'Amazon',
     rakuten: '楽天ブックス',
     linkLabel: '{store}で「{title}」を見る（新しいタブで開きます）',
