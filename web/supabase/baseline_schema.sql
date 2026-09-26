@@ -5,7 +5,7 @@
 -- ============================================================================
 -- baseline_schema.sql
 --
--- 本番 Supabase の public スキーマを、migration 202609190101 適用済みの状態で
+-- 本番 Supabase の public スキーマを、migration 202609240102 適用済みの状態で
 -- pg_dump --schema-only --no-owner --schema=public により取得した参照・DR 用
 -- スナップショット（データ・接続情報は含まない）。
 --
@@ -16,7 +16,7 @@
 -- docs/local/manual_production-restore-runbook.md を参照すること。
 -- ============================================================================
 
-\restrict oy9K9xthyMvwhuU5EG2NddcA5k9Kr1oAEmKx3Eelbpt2r7T4TCulgYbWP73TvWd
+\restrict 09yh1H5Zh8Q7aJb1HkATfpIrX4CzG2l3d6Iwse7rROrT4AYuJEJA3D8sXLqfBOT
 
 -- Dumped from database version 17.6
 -- Dumped by pg_dump version 18.4
@@ -328,6 +328,24 @@ CREATE FUNCTION public.dash_app_counts() RETURNS TABLE(users_total bigint, users
     (select count(*) from public.user_school_favorites),
     (select count(*) from public.user_school_notes),
     (select count(*) from public.home_locations);
+$$;
+
+
+--
+-- Name: dash_supabase_usage_metrics(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.dash_supabase_usage_metrics() RETURNS TABLE(db_size_bytes bigint, auth_users_signed_in_30d bigint)
+    LANGUAGE sql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+  select
+    pg_catalog.pg_database_size(pg_catalog.current_database()),
+    (
+      select count(*)
+      from auth.users u
+      where u.last_sign_in_at >= pg_catalog.now() - interval '30 days'
+    );
 $$;
 
 
@@ -1467,6 +1485,18 @@ CREATE TABLE public.dash_gsc_queries (
 
 
 --
+-- Name: dash_supabase_usage; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.dash_supabase_usage (
+    snapshot_date date NOT NULL,
+    db_size_bytes bigint,
+    auth_users_signed_in_30d integer,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+--
 -- Name: data_reports; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -2358,6 +2388,14 @@ ALTER TABLE ONLY public.dash_gsc_pages
 
 ALTER TABLE ONLY public.dash_gsc_queries
     ADD CONSTRAINT dash_gsc_queries_pkey PRIMARY KEY (snapshot_date, query);
+
+
+--
+-- Name: dash_supabase_usage dash_supabase_usage_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.dash_supabase_usage
+    ADD CONSTRAINT dash_supabase_usage_pkey PRIMARY KEY (snapshot_date);
 
 
 --
@@ -3737,6 +3775,12 @@ ALTER TABLE public.dash_gsc_pages ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.dash_gsc_queries ENABLE ROW LEVEL SECURITY;
 
 --
+-- Name: dash_supabase_usage; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.dash_supabase_usage ENABLE ROW LEVEL SECURITY;
+
+--
 -- Name: data_reports; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -4001,6 +4045,14 @@ GRANT ALL ON FUNCTION public.dash_app_counts() TO service_role;
 
 
 --
+-- Name: FUNCTION dash_supabase_usage_metrics(); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.dash_supabase_usage_metrics() FROM PUBLIC;
+GRANT ALL ON FUNCTION public.dash_supabase_usage_metrics() TO service_role;
+
+
+--
 -- Name: FUNCTION delete_family_group(p_group_id uuid); Type: ACL; Schema: public; Owner: -
 --
 
@@ -4211,17 +4263,11 @@ GRANT ALL ON TABLE public.admin_pin_attempts TO service_role;
 
 
 --
--- Name: TABLE admin_users; Type: ACL; Schema: public; Owner: -
---
-
-GRANT ALL ON TABLE public.admin_users TO service_role;
-
-
---
 -- Name: COLUMN admin_users.user_id; Type: ACL; Schema: public; Owner: -
 --
 
 GRANT SELECT(user_id) ON TABLE public.admin_users TO authenticated;
+GRANT SELECT(user_id) ON TABLE public.admin_users TO service_role;
 
 
 --
@@ -4242,79 +4288,71 @@ GRANT SELECT(created_at) ON TABLE public.admin_users TO authenticated;
 -- Name: TABLE admission_exam_component_master; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT ALL ON TABLE public.admission_exam_component_master TO anon;
-GRANT ALL ON TABLE public.admission_exam_component_master TO authenticated;
-GRANT ALL ON TABLE public.admission_exam_component_master TO service_role;
+GRANT SELECT ON TABLE public.admission_exam_component_master TO anon;
+GRANT SELECT ON TABLE public.admission_exam_component_master TO authenticated;
 
 
 --
 -- Name: TABLE admission_map_role_master; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT ALL ON TABLE public.admission_map_role_master TO anon;
-GRANT ALL ON TABLE public.admission_map_role_master TO authenticated;
-GRANT ALL ON TABLE public.admission_map_role_master TO service_role;
+GRANT SELECT ON TABLE public.admission_map_role_master TO anon;
+GRANT SELECT ON TABLE public.admission_map_role_master TO authenticated;
 
 
 --
 -- Name: TABLE admission_quality_reason_master; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT ALL ON TABLE public.admission_quality_reason_master TO anon;
-GRANT ALL ON TABLE public.admission_quality_reason_master TO authenticated;
-GRANT ALL ON TABLE public.admission_quality_reason_master TO service_role;
+GRANT SELECT ON TABLE public.admission_quality_reason_master TO anon;
+GRANT SELECT ON TABLE public.admission_quality_reason_master TO authenticated;
 
 
 --
 -- Name: TABLE admission_recruitment_unit_departments; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT ALL ON TABLE public.admission_recruitment_unit_departments TO anon;
-GRANT ALL ON TABLE public.admission_recruitment_unit_departments TO authenticated;
-GRANT ALL ON TABLE public.admission_recruitment_unit_departments TO service_role;
+GRANT SELECT ON TABLE public.admission_recruitment_unit_departments TO anon;
+GRANT SELECT ON TABLE public.admission_recruitment_unit_departments TO authenticated;
 
 
 --
 -- Name: TABLE admission_recruitment_unit_kind_master; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT ALL ON TABLE public.admission_recruitment_unit_kind_master TO anon;
-GRANT ALL ON TABLE public.admission_recruitment_unit_kind_master TO authenticated;
-GRANT ALL ON TABLE public.admission_recruitment_unit_kind_master TO service_role;
+GRANT SELECT ON TABLE public.admission_recruitment_unit_kind_master TO anon;
+GRANT SELECT ON TABLE public.admission_recruitment_unit_kind_master TO authenticated;
 
 
 --
 -- Name: TABLE admission_recruitment_units; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT ALL ON TABLE public.admission_recruitment_units TO anon;
-GRANT ALL ON TABLE public.admission_recruitment_units TO authenticated;
-GRANT ALL ON TABLE public.admission_recruitment_units TO service_role;
+GRANT SELECT ON TABLE public.admission_recruitment_units TO anon;
+GRANT SELECT ON TABLE public.admission_recruitment_units TO authenticated;
 
 
 --
 -- Name: TABLE admission_selection_stage_master; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT ALL ON TABLE public.admission_selection_stage_master TO anon;
-GRANT ALL ON TABLE public.admission_selection_stage_master TO authenticated;
-GRANT ALL ON TABLE public.admission_selection_stage_master TO service_role;
+GRANT SELECT ON TABLE public.admission_selection_stage_master TO anon;
+GRANT SELECT ON TABLE public.admission_selection_stage_master TO authenticated;
 
 
 --
 -- Name: TABLE admission_selection_track_master; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT ALL ON TABLE public.admission_selection_track_master TO anon;
-GRANT ALL ON TABLE public.admission_selection_track_master TO authenticated;
-GRANT ALL ON TABLE public.admission_selection_track_master TO service_role;
+GRANT SELECT ON TABLE public.admission_selection_track_master TO anon;
+GRANT SELECT ON TABLE public.admission_selection_track_master TO authenticated;
 
 
 --
 -- Name: TABLE app_config; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT ALL ON TABLE public.app_config TO service_role;
+GRANT SELECT,UPDATE ON TABLE public.app_config TO service_role;
 
 
 --
@@ -4337,54 +4375,50 @@ GRANT SELECT(value) ON TABLE public.app_config TO authenticated;
 -- Name: TABLE course_type_master; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT ALL ON TABLE public.course_type_master TO anon;
-GRANT ALL ON TABLE public.course_type_master TO authenticated;
-GRANT ALL ON TABLE public.course_type_master TO service_role;
+GRANT SELECT ON TABLE public.course_type_master TO anon;
+GRANT SELECT ON TABLE public.course_type_master TO authenticated;
 
 
 --
 -- Name: TABLE dash_cf_dims; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT ALL ON TABLE public.dash_cf_dims TO anon;
-GRANT ALL ON TABLE public.dash_cf_dims TO authenticated;
-GRANT ALL ON TABLE public.dash_cf_dims TO service_role;
+GRANT SELECT,INSERT,UPDATE ON TABLE public.dash_cf_dims TO service_role;
 
 
 --
 -- Name: TABLE dash_cf_referers; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT ALL ON TABLE public.dash_cf_referers TO anon;
-GRANT ALL ON TABLE public.dash_cf_referers TO authenticated;
-GRANT ALL ON TABLE public.dash_cf_referers TO service_role;
+GRANT SELECT,INSERT,UPDATE ON TABLE public.dash_cf_referers TO service_role;
 
 
 --
 -- Name: TABLE dash_daily; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT ALL ON TABLE public.dash_daily TO anon;
-GRANT ALL ON TABLE public.dash_daily TO authenticated;
-GRANT ALL ON TABLE public.dash_daily TO service_role;
+GRANT SELECT,INSERT,UPDATE ON TABLE public.dash_daily TO service_role;
 
 
 --
 -- Name: TABLE dash_gsc_pages; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT ALL ON TABLE public.dash_gsc_pages TO anon;
-GRANT ALL ON TABLE public.dash_gsc_pages TO authenticated;
-GRANT ALL ON TABLE public.dash_gsc_pages TO service_role;
+GRANT SELECT,INSERT,UPDATE ON TABLE public.dash_gsc_pages TO service_role;
 
 
 --
 -- Name: TABLE dash_gsc_queries; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT ALL ON TABLE public.dash_gsc_queries TO anon;
-GRANT ALL ON TABLE public.dash_gsc_queries TO authenticated;
-GRANT ALL ON TABLE public.dash_gsc_queries TO service_role;
+GRANT SELECT,INSERT,UPDATE ON TABLE public.dash_gsc_queries TO service_role;
+
+
+--
+-- Name: TABLE dash_supabase_usage; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT SELECT,INSERT,UPDATE ON TABLE public.dash_supabase_usage TO service_role;
 
 
 --
@@ -4623,16 +4657,13 @@ GRANT SELECT(created_at) ON TABLE public.family_members TO authenticated;
 -- Name: TABLE home_locations; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT SELECT,REFERENCES,DELETE,TRIGGER,TRUNCATE,MAINTAIN,UPDATE ON TABLE public.home_locations TO anon;
-GRANT SELECT,REFERENCES,DELETE,TRIGGER,TRUNCATE,MAINTAIN,UPDATE ON TABLE public.home_locations TO authenticated;
-GRANT ALL ON TABLE public.home_locations TO service_role;
+GRANT SELECT,DELETE ON TABLE public.home_locations TO authenticated;
 
 
 --
 -- Name: COLUMN home_locations.user_id; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT INSERT(user_id) ON TABLE public.home_locations TO anon;
 GRANT INSERT(user_id) ON TABLE public.home_locations TO authenticated;
 
 
@@ -4640,103 +4671,98 @@ GRANT INSERT(user_id) ON TABLE public.home_locations TO authenticated;
 -- Name: COLUMN home_locations.label; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT INSERT(label) ON TABLE public.home_locations TO anon;
-GRANT INSERT(label) ON TABLE public.home_locations TO authenticated;
+GRANT INSERT(label),UPDATE(label) ON TABLE public.home_locations TO authenticated;
 
 
 --
 -- Name: COLUMN home_locations.address; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT INSERT(address) ON TABLE public.home_locations TO anon;
-GRANT INSERT(address) ON TABLE public.home_locations TO authenticated;
+GRANT INSERT(address),UPDATE(address) ON TABLE public.home_locations TO authenticated;
 
 
 --
 -- Name: COLUMN home_locations.latitude; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT INSERT(latitude) ON TABLE public.home_locations TO anon;
-GRANT INSERT(latitude) ON TABLE public.home_locations TO authenticated;
+GRANT INSERT(latitude),UPDATE(latitude) ON TABLE public.home_locations TO authenticated;
 
 
 --
 -- Name: COLUMN home_locations.longitude; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT INSERT(longitude) ON TABLE public.home_locations TO anon;
-GRANT INSERT(longitude) ON TABLE public.home_locations TO authenticated;
+GRANT INSERT(longitude),UPDATE(longitude) ON TABLE public.home_locations TO authenticated;
 
 
 --
 -- Name: COLUMN home_locations.is_primary; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT INSERT(is_primary) ON TABLE public.home_locations TO anon;
 GRANT INSERT(is_primary) ON TABLE public.home_locations TO authenticated;
+
+
+--
+-- Name: COLUMN home_locations.updated_at; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT UPDATE(updated_at) ON TABLE public.home_locations TO authenticated;
 
 
 --
 -- Name: TABLE school_admission_selection_stats; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT ALL ON TABLE public.school_admission_selection_stats TO anon;
-GRANT ALL ON TABLE public.school_admission_selection_stats TO authenticated;
-GRANT ALL ON TABLE public.school_admission_selection_stats TO service_role;
+GRANT SELECT ON TABLE public.school_admission_selection_stats TO anon;
+GRANT SELECT ON TABLE public.school_admission_selection_stats TO authenticated;
 
 
 --
 -- Name: TABLE school_admission_stat_exam_components; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT ALL ON TABLE public.school_admission_stat_exam_components TO anon;
-GRANT ALL ON TABLE public.school_admission_stat_exam_components TO authenticated;
-GRANT ALL ON TABLE public.school_admission_stat_exam_components TO service_role;
+GRANT SELECT ON TABLE public.school_admission_stat_exam_components TO anon;
+GRANT SELECT ON TABLE public.school_admission_stat_exam_components TO authenticated;
 
 
 --
 -- Name: TABLE school_admission_stat_legacy_links; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT ALL ON TABLE public.school_admission_stat_legacy_links TO anon;
-GRANT ALL ON TABLE public.school_admission_stat_legacy_links TO authenticated;
-GRANT ALL ON TABLE public.school_admission_stat_legacy_links TO service_role;
+GRANT SELECT ON TABLE public.school_admission_stat_legacy_links TO anon;
+GRANT SELECT ON TABLE public.school_admission_stat_legacy_links TO authenticated;
 
 
 --
 -- Name: TABLE school_admission_stat_quality_flags; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT ALL ON TABLE public.school_admission_stat_quality_flags TO anon;
-GRANT ALL ON TABLE public.school_admission_stat_quality_flags TO authenticated;
-GRANT ALL ON TABLE public.school_admission_stat_quality_flags TO service_role;
+GRANT SELECT ON TABLE public.school_admission_stat_quality_flags TO anon;
+GRANT SELECT ON TABLE public.school_admission_stat_quality_flags TO authenticated;
 
 
 --
 -- Name: TABLE school_admission_stat_sources; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT ALL ON TABLE public.school_admission_stat_sources TO anon;
-GRANT ALL ON TABLE public.school_admission_stat_sources TO authenticated;
-GRANT ALL ON TABLE public.school_admission_stat_sources TO service_role;
+GRANT SELECT ON TABLE public.school_admission_stat_sources TO anon;
+GRANT SELECT ON TABLE public.school_admission_stat_sources TO authenticated;
 
 
 --
 -- Name: TABLE school_admission_stats; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT ALL ON TABLE public.school_admission_stats TO anon;
-GRANT ALL ON TABLE public.school_admission_stats TO authenticated;
-GRANT ALL ON TABLE public.school_admission_stats TO service_role;
+GRANT SELECT ON TABLE public.school_admission_stats TO anon;
+GRANT SELECT ON TABLE public.school_admission_stats TO authenticated;
 
 
 --
 -- Name: TABLE school_departments; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT ALL ON TABLE public.school_departments TO anon;
-GRANT ALL ON TABLE public.school_departments TO authenticated;
-GRANT ALL ON TABLE public.school_departments TO service_role;
+GRANT SELECT ON TABLE public.school_departments TO anon;
+GRANT SELECT ON TABLE public.school_departments TO authenticated;
 
 
 --
@@ -5086,27 +5112,21 @@ GRANT SELECT(status_description) ON TABLE public.schools TO authenticated;
 -- Name: TABLE user_school_deviations; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT ALL ON TABLE public.user_school_deviations TO anon;
-GRANT ALL ON TABLE public.user_school_deviations TO authenticated;
-GRANT ALL ON TABLE public.user_school_deviations TO service_role;
+GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.user_school_deviations TO authenticated;
 
 
 --
 -- Name: TABLE user_school_favorites; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT ALL ON TABLE public.user_school_favorites TO anon;
-GRANT ALL ON TABLE public.user_school_favorites TO authenticated;
-GRANT ALL ON TABLE public.user_school_favorites TO service_role;
+GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.user_school_favorites TO authenticated;
 
 
 --
 -- Name: TABLE user_school_notes; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT ALL ON TABLE public.user_school_notes TO anon;
-GRANT ALL ON TABLE public.user_school_notes TO authenticated;
-GRANT ALL ON TABLE public.user_school_notes TO service_role;
+GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.user_school_notes TO authenticated;
 
 
 --
@@ -5173,4 +5193,4 @@ ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin IN SCHEMA public GRANT ALL ON T
 -- PostgreSQL database dump complete
 --
 
-\unrestrict oy9K9xthyMvwhuU5EG2NddcA5k9Kr1oAEmKx3Eelbpt2r7T4TCulgYbWP73TvWd
+\unrestrict 09yh1H5Zh8Q7aJb1HkATfpIrX4CzG2l3d6Iwse7rROrT4AYuJEJA3D8sXLqfBOT

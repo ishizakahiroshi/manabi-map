@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * 通信量バジェット検査（docs/local/plan_data-usage-audit.md C5）
+ * 通信量バジェット検査（docs/local/school/plan_data-usage-audit.md C5）
  *
  * 目的は「増えたら気づく」こと。体験の良し悪しは測れない。
  * **CI が緑でも画面は保証されない。** 目視は別途必要（ui-change-verify）。
@@ -122,7 +122,7 @@ const COMPOSITE_BUDGETS = [
  * 外部ドメインの allowlist。
  * **ここに無いホストが増えたら落ちる。**「外部から取ってくるものを足す前に転送量を実測する」
  * という原則（operating-rules の「通信量（ギガ）」）を機械で担保するための網。
- * 足すときは、足す理由と実測した転送量を docs/local/plan_data-usage-audit.md へ書いてから。
+ * 足すときは、足す理由と実測した転送量を docs/local/school/plan_data-usage-audit.md へ書いてから。
  */
 const ALLOWED_HOSTS = new Set([
   'static.cloudflareinsights.com', // Web Analytics の beacon
@@ -131,6 +131,9 @@ const ALLOWED_HOSTS = new Set([
   'nominatim.openstreetmap.org', // 住所検索
   'msearch.gsi.go.jp', // 国土地理院の住所検索
   '*.supabase.co', // DB / 認証
+  // 群馬の過去問表紙1枚。2026-09-27: 128px JPEG 7,844 B、302と応答ヘッダー込み9,050 B（HTTP/1.1、TLS等は除く）
+  'hbb.afl.rakuten.co.jp', // 楽天提供の画像URL（302）
+  'thumbnail.image.rakuten.co.jp', // 表紙JPEGのリダイレクト先
 ])
 
 function walk(dir, base = dir, out = []) {
@@ -258,7 +261,7 @@ function main() {
   if (unknown.length) {
     failures.push(
       `[budget] allowlist に無い外部ホストが増えました: ${unknown.join(', ')}\n` +
-        `         足す前に転送量を実測し、docs/local/plan_data-usage-audit.md へ記録してから\n` +
+        `         足す前に転送量を実測し、docs/local/school/plan_data-usage-audit.md へ記録してから\n` +
         `         scripts/check-payload-budget.mjs の ALLOWED_HOSTS へ追加してください。`,
     )
   }
@@ -281,7 +284,7 @@ function main() {
     for (const f of failures) console.error(f)
     console.error('')
     console.error('[budget] 上限は「増えたら気づく」ための網です。上げる前に、')
-    console.error('         その増加が利用者にとって必要かを docs/local/plan_data-usage-audit.md で判断してください。')
+    console.error('         その増加が利用者にとって必要かを docs/local/school/plan_data-usage-audit.md で判断してください。')
     process.exit(1)
   }
   console.log('[budget] OK: すべて上限内。allowlist 外の外部ホストもありません。')
