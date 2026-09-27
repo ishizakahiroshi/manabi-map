@@ -3,7 +3,7 @@ import { mkdir, readdir, readFile, rm, unlink, writeFile } from 'node:fs/promise
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { gzipSync } from 'node:zlib'
-import { createClient } from '@supabase/supabase-js'
+import { buildSchoolPayload, loadSchoolSource, parseSchoolSourceArgs } from './lib/school-source.mjs'
 import { loadCivicData, resolveCityGroup, UNRESOLVED_CITY_LABEL } from './lib/municipalities.mjs'
 import {
   buildOpenApiDocument,
@@ -46,160 +46,136 @@ async function readEnvFile(path) {
   }
 }
 
-// .env の探索先。既定は web/（従来どおり）。MANABI_MAP_ENV_DIR を設定するとリポジトリ外を見る
-// （秘密をリポジトリ配下に置かないための仕組み。vite.config.ts の envDir と同じ変数を使う）。
-const envDir = process.env.MANABI_MAP_ENV_DIR || webRoot
+// Select before loading any credentials. A local failure never selects Supabase.
+const sourceOptions = parseSchoolSourceArgs(process.argv.slice(2))
+async function fetchSupabaseRows() {
+  // .env の探索先。既定は web/（従来どおり）。MANABI_MAP_ENV_DIR を設定するとリポジトリ外を見る
+  // （秘密をリポジトリ配下に置かないための仕組み。vite.config.ts の envDir と同じ変数を使う）。
+  const { createClient } = await import('@supabase/supabase-js')
+  const envDir = process.env.MANABI_MAP_ENV_DIR || webRoot
 
-const env = {
-  ...(await readEnvFile(join(envDir, '.env'))),
-  ...(await readEnvFile(join(envDir, '.env.local'))),
-  ...process.env,
-}
-
-const url = env.VITE_SUPABASE_URL
-const anonKey = env.VITE_SUPABASE_ANON_KEY
-
-if (!url || !anonKey) {
-  throw new Error(
-    'VITE_SUPABASE_URL と VITE_SUPABASE_ANON_KEY を web/.env.local か環境変数に設定してください。',
-  )
-}
-
-const supabase = createClient(url, anonKey, {
-  auth: {
-    persistSession: false,
-    autoRefreshToken: false,
-  },
-})
-
-/**
- * Supabase の statement timeout（3 秒）は、DB のキャッシュが冷えていると
- * 深い nest の 1 ページだけで到達しうる。
- *
- * 2026-07-31 実測: 入試履歴の 1 ページ目が cold 3.17 秒 / warm 0.30 秒。
- * ローカルでは事前アクセスで warm だったため通り、Cloudflare の本番ビルドは
- * cold で当たって失敗した（v0.4.0 リリース時）。同じページを少し待って引き直せば
- * warm になって通るので、タイムアウト系のエラーは再試行する。
- */
-async function runWithRetry(label, run, attempts = 4) {
-  let lastMessage = ''
-  for (let i = 1; i <= attempts; i += 1) {
-    const { data, error } = await run()
-    if (!error) return data ?? []
-    lastMessage = error.message
-    const retriable = /timeout|timed out|57014|fetch failed|ECONNRESET|502|503|504/i.test(error.message)
-    if (!retriable || i === attempts) break
-    const waitMs = 1500 * i
-    console.error(`${label}: ${error.message} — ${waitMs}ms 待って再試行 (${i}/${attempts - 1})`)
-    await new Promise((resolve) => setTimeout(resolve, waitMs))
+  const env = {
+    ...(await readEnvFile(join(envDir, '.env'))),
+    ...(await readEnvFile(join(envDir, '.env.local'))),
+    ...process.env,
   }
-  throw new Error(`${label}に失敗しました: ${lastMessage}`)
-}
 
-const select = GENERATOR_SCHOOL_SELECT
-// このページサイズは school_departments(school_id) の索引に依存する（migration 202607310101）。
-// 索引が無いと embed が親 1 行ごとに全件走査になり、全国 47 都道府県（学科 7,798 行）では
-// 250 件/ページでも 3.1 秒かかって Supabase の statement timeout（3 秒）に達する。
-//
-// 索引追加後も 1,000 件/ページでは 1 リクエスト 1.6〜2.9 秒と予算の大半を使ってしまうため
-// 500 件に下げる（2026-07-31 実測）。件数が増えたらここを先に疑うこと。
-const pageSize = 500
-const rows = []
+  const url = env.VITE_SUPABASE_URL
+  const anonKey = env.VITE_SUPABASE_ANON_KEY
 
-for (let from = 0; ; from += pageSize) {
-  const to = from + pageSize - 1
-  const data = await runWithRetry(`schools の取得（${from}〜${to}）`, () =>
-    supabase
-      .from('schools')
-      .select(select)
-      .eq('is_active', true)
-      .order('prefecture', { ascending: true })
-      .order('name', { ascending: true })
-      .range(from, to),
-  )
+  if (!url || !anonKey) {
+    throw new Error(
+      'VITE_SUPABASE_URL と VITE_SUPABASE_ANON_KEY を web/.env.local か環境変数に設定してください。',
+    )
+  }
 
-  rows.push(...data)
-  if (data.length < pageSize) break
-}
-
-// 全校＋全入試を1クエリへ深くnestするとPostgRESTのstatement timeoutに達する。
-// 募集単位は小さくページ分割して取得し、現行校と前身校へschool_idで結合する。
-// ページングは OFFSET ではなく keyset（id の続きから取る）にする。
-// OFFSET 方式だと深いページほど読み飛ばしコストが乗り、全国 47 都道府県のデータ量では
-// offset=2000 以降が軒並み statement timeout になった（2026-07-31 実測。offset=0 は 0.7 秒、
-// offset=2000 は 3 秒超で失敗）。keyset ならページ位置に関係なく一定時間で返る。
-// ページサイズは cold の 1 ページ目が timeout に収まる大きさにする。
-// 2026-07-31 実測（warm）: 250 件/ページで 1 ページ目 3.17 秒・2 ページ目以降 0.25〜0.62 秒。
-// 1 ページ目だけ突出するのは巨大な子テーブル（出典 83,957 行等）への初回アクセスのため。
-// 100 件へ下げて 1 ページ目の実測を約 1/3 にし、加えて runWithRetry で取りこぼしを拾う。
-const admissionsBySchool = new Map()
-const admissionPageSize = 100
-let lastUnitId = null
-let admissionPage = 0
-for (;;) {
-  admissionPage += 1
-  const cursor = lastUnitId
-  const data = await runWithRetry(`入試履歴の取得（page ${admissionPage}）`, () => {
-    let query = supabase
-      .from('admission_recruitment_units')
-      .select('school_id, id, unit_key, unit_kind_code, label, course_time, valid_from_year, valid_to_year, admission_recruitment_unit_departments(department_id), school_admission_selection_stats(id, year, selection_stage_code, selection_track_code, stage_label_raw, track_label_raw, selection_scope_raw, population_scope_raw, scope_key, map_role_code, is_ratio_comparable, capacity, applicants, examinees, admitted, exam_scope_raw, school_admission_stat_exam_components(component_code), school_admission_stat_quality_flags(metric_code, reason_code, note), school_admission_stat_sources(fact_kind_code, official_url, doc_title, published_at, source_page_or_table, quoted_evidence, last_verified_at, last_http_status))')
-      .order('id', { ascending: true })
-      .limit(admissionPageSize)
-    if (cursor !== null) query = query.gt('id', cursor)
-    return query
+  const supabase = createClient(url, anonKey, {
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
+    },
   })
-  for (const unit of data) {
-    const units = admissionsBySchool.get(unit.school_id) ?? []
-    units.push(unit)
-    admissionsBySchool.set(unit.school_id, units)
-  }
-  if (data.length < admissionPageSize) break
-  lastUnitId = data[data.length - 1].id
-}
-for (const row of rows) {
-  row.admission_recruitment_units = admissionsBySchool.get(row.id) ?? []
-  for (const relationship of row.predecessor_relationships ?? []) {
-    if (relationship.predecessor) {
-      relationship.predecessor.admission_recruitment_units =
-        admissionsBySchool.get(relationship.predecessor.id) ?? []
-    }
-  }
-}
 
-// 指標別出典は学校・年度ごとに同じ公式資料を繰り返すため、そのままJSON化
-// すると約46,000個の同型objectで単一ファイルがPages上限を超える。
-// 静的配信だけsource objectをcatalog化し、各統計にはindexを持たせる。
-// ブラウザ側で元objectへ復元するため、表示情報は一切落とさない。
-const sourceCatalog = []
-const sourceIndex = new Map()
-function compactUnitSources(units) {
-  for (const unit of units ?? []) {
-    for (const stat of unit.school_admission_selection_stats ?? []) {
-      stat.school_admission_stat_sources = (stat.school_admission_stat_sources ?? []).map((source) => {
-        // 前身校が現行校としても収録されている場合、admissionsBySchool の unit 配列は
-        // 両者で同一オブジェクトを共有しており、この関数が同じ stat を 2 回踏む。
-        // 2 回目は source が既に index（数値）なので、再圧縮せずそのまま返す
-        // （再圧縮すると catalog に数値が入り、復元側の object filter で出典が消える。
-        // 2026-08-04 に閉校予定 27 校の出典欠落として実際に発生）。
-        if (typeof source === 'number') return source
-        const key = JSON.stringify(source)
-        let index = sourceIndex.get(key)
-        if (index == null) {
-          index = sourceCatalog.length
-          sourceCatalog.push(source)
-          sourceIndex.set(key, index)
-        }
-        return index
-      })
+  /**
+   * Supabase の statement timeout（3 秒）は、DB のキャッシュが冷えていると
+   * 深い nest の 1 ページだけで到達しうる。
+   *
+   * 2026-07-31 実測: 入試履歴の 1 ページ目が cold 3.17 秒 / warm 0.30 秒。
+   * ローカルでは事前アクセスで warm だったため通り、Cloudflare の本番ビルドは
+   * cold で当たって失敗した（v0.4.0 リリース時）。同じページを少し待って引き直せば
+   * warm になって通るので、タイムアウト系のエラーは再試行する。
+   */
+  async function runWithRetry(label, run, attempts = 4) {
+    let lastMessage = ''
+    for (let i = 1; i <= attempts; i += 1) {
+      const { data, error } = await run()
+      if (!error) return data ?? []
+      lastMessage = error.message
+      const retriable = /timeout|timed out|57014|fetch failed|ECONNRESET|502|503|504/i.test(error.message)
+      if (!retriable || i === attempts) break
+      const waitMs = 1500 * i
+      console.error(`${label}: ${error.message} — ${waitMs}ms 待って再試行 (${i}/${attempts - 1})`)
+      await new Promise((resolve) => setTimeout(resolve, waitMs))
+    }
+    throw new Error(`${label}に失敗しました: ${lastMessage}`)
+  }
+
+  const select = GENERATOR_SCHOOL_SELECT
+  // このページサイズは school_departments(school_id) の索引に依存する（migration 202607310101）。
+  // 索引が無いと embed が親 1 行ごとに全件走査になり、全国 47 都道府県（学科 7,798 行）では
+  // 250 件/ページでも 3.1 秒かかって Supabase の statement timeout（3 秒）に達する。
+  //
+  // 索引追加後も 1,000 件/ページでは 1 リクエスト 1.6〜2.9 秒と予算の大半を使ってしまうため
+  // 500 件に下げる（2026-07-31 実測）。件数が増えたらここを先に疑うこと。
+  const pageSize = 500
+  const rows = []
+
+  for (let from = 0; ; from += pageSize) {
+    const to = from + pageSize - 1
+    const data = await runWithRetry(`schools の取得（${from}〜${to}）`, () =>
+      supabase
+        .from('schools')
+        .select(select)
+        .eq('is_active', true)
+        .order('prefecture', { ascending: true })
+        .order('name', { ascending: true })
+        .range(from, to),
+    )
+
+    rows.push(...data)
+    if (data.length < pageSize) break
+  }
+
+  // 全校＋全入試を1クエリへ深くnestするとPostgRESTのstatement timeoutに達する。
+  // 募集単位は小さくページ分割して取得し、現行校と前身校へschool_idで結合する。
+  // ページングは OFFSET ではなく keyset（id の続きから取る）にする。
+  // OFFSET 方式だと深いページほど読み飛ばしコストが乗り、全国 47 都道府県のデータ量では
+  // offset=2000 以降が軒並み statement timeout になった（2026-07-31 実測。offset=0 は 0.7 秒、
+  // offset=2000 は 3 秒超で失敗）。keyset ならページ位置に関係なく一定時間で返る。
+  // ページサイズは cold の 1 ページ目が timeout に収まる大きさにする。
+  // 2026-07-31 実測（warm）: 250 件/ページで 1 ページ目 3.17 秒・2 ページ目以降 0.25〜0.62 秒。
+  // 1 ページ目だけ突出するのは巨大な子テーブル（出典 83,957 行等）への初回アクセスのため。
+  // 100 件へ下げて 1 ページ目の実測を約 1/3 にし、加えて runWithRetry で取りこぼしを拾う。
+  const admissionsBySchool = new Map()
+  const admissionPageSize = 100
+  let lastUnitId = null
+  let admissionPage = 0
+  for (;;) {
+    admissionPage += 1
+    const cursor = lastUnitId
+    const data = await runWithRetry(`入試履歴の取得（page ${admissionPage}）`, () => {
+      let query = supabase
+        .from('admission_recruitment_units')
+        .select('school_id, id, unit_key, unit_kind_code, label, course_time, valid_from_year, valid_to_year, admission_recruitment_unit_departments(department_id), school_admission_selection_stats(id, year, selection_stage_code, selection_track_code, stage_label_raw, track_label_raw, selection_scope_raw, population_scope_raw, scope_key, map_role_code, is_ratio_comparable, capacity, applicants, examinees, admitted, exam_scope_raw, school_admission_stat_exam_components(component_code), school_admission_stat_quality_flags(metric_code, reason_code, note), school_admission_stat_sources(fact_kind_code, official_url, doc_title, published_at, source_page_or_table, quoted_evidence, last_verified_at, last_http_status))')
+        .order('id', { ascending: true })
+        .limit(admissionPageSize)
+      if (cursor !== null) query = query.gt('id', cursor)
+      return query
+    })
+    for (const unit of data) {
+      const units = admissionsBySchool.get(unit.school_id) ?? []
+      units.push(unit)
+      admissionsBySchool.set(unit.school_id, units)
+    }
+    if (data.length < admissionPageSize) break
+    lastUnitId = data[data.length - 1].id
+  }
+  for (const row of rows) {
+    row.admission_recruitment_units = admissionsBySchool.get(row.id) ?? []
+    for (const relationship of row.predecessor_relationships ?? []) {
+      if (relationship.predecessor) {
+        relationship.predecessor.admission_recruitment_units =
+          admissionsBySchool.get(relationship.predecessor.id) ?? []
+      }
     }
   }
+
+
+  return rows
 }
-for (const row of rows) {
-  compactUnitSources(row.admission_recruitment_units)
-  for (const relationship of row.predecessor_relationships ?? []) {
-    compactUnitSources(relationship.predecessor?.admission_recruitment_units)
-  }
-}
+const inputRows = await loadSchoolSource({ ...sourceOptions, fetchSupabase: fetchSupabaseRows })
+const payload = buildSchoolPayload(inputRows)
+const { schools: rows, sourceCatalog } = payload
 
 // official_url は公開 API の学校採用ゲートでもある。NULL を許容して生成は続けるが、
 // 県追加時の取りこぼしがビルドログで必ず見えるように全件数と県別件数を警告する。
@@ -224,7 +200,6 @@ const publicDir = join(webRoot, 'public')
 await mkdir(publicDir, { recursive: true })
 const generatedAt = new Date().toISOString()
 
-const payload = { formatVersion: 2, sourceCatalog, schools: rows }
 const body = `${JSON.stringify(payload)}\n`
 const hash = createHash('sha256').update(body).digest('hex').slice(0, 10)
 const filename = `schools-${hash}.json.gz`

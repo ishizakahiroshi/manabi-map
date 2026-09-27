@@ -1,0 +1,82 @@
+{
+  "format": "synthetic-school-core",
+  "input_version": 1,
+  "schema_version": 2,
+  "synthetic": true,
+  "dataset_version": "synthetic-core-001",
+  "tables": {
+    "course_type_master": [{
+      "code": "synthetic_general", "label_ja": "合成普通分類", "label_en": "Synthetic general",
+      "ui_group": "general", "sort_order": 10, "is_active": false,
+      "created_at": "2026-01-01T00:00:00+09:00", "mext_category": "普通",
+      "mext_category_detail": "", "classification_source": "合成分類資料", "notes": null
+    }],
+    "school_lifecycle_status_master": [
+      {"code": "active", "label_ja": "合成現行", "label_en": "Synthetic active",
+       "is_map_active": true, "forces_not_recruiting": false, "sort_order": 10,
+       "is_active": true, "notes": "", "created_at": "2026-01-01T00:00:00Z", "updated_at": "2026-01-02T00:00:00Z"},
+      {"code": "closed", "label_ja": "合成閉校", "label_en": "Synthetic closed",
+       "is_map_active": false, "forces_not_recruiting": true, "sort_order": 20,
+       "is_active": false, "notes": null, "created_at": "2026-01-01T00:00:00Z", "updated_at": "2026-01-02T00:00:00Z"}
+    ],
+    "school_recruitment_status_master": [
+      {"code": "recruiting", "label_ja": "合成募集中", "label_en": "Synthetic recruiting",
+       "is_recruiting_compat": true, "sort_order": 10, "is_active": true, "notes": null,
+       "created_at": "2026-01-01T00:00:00Z", "updated_at": "2026-01-02T00:00:00Z"},
+      {"code": "ended", "label_ja": "合成募集終了", "label_en": "Synthetic ended",
+       "is_recruiting_compat": false, "sort_order": 20, "is_active": true, "notes": "",
+       "created_at": "2026-01-01T00:00:00Z", "updated_at": "2026-01-02T00:00:00Z"}
+    ],
+    "school_field_source_field_master": [
+      {"code": "schools.latitude", "table_name": "schools", "column_name": "latitude",
+       "label_ja": "合成緯度", "sort_order": 10, "is_active": false, "notes": null,
+       "created_at": "2026-01-01T00:00:00Z"},
+      {"code": "schools.total_students", "table_name": "schools", "column_name": "total_students",
+       "label_ja": "合成人数", "sort_order": 20, "is_active": true, "notes": null,
+       "created_at": "2026-01-01T00:00:00Z"},
+      {"code": "school_departments.name", "table_name": "school_departments", "column_name": "name",
+       "label_ja": "合成学科名", "sort_order": 30, "is_active": true, "notes": null,
+       "created_at": "2026-01-01T00:00:00Z"},
+      {"code": "school_departments.course_type", "table_name": "school_departments", "column_name": "course_type",
+       "label_ja": "合成学科分類", "sort_order": 40, "is_active": true, "notes": null,
+       "created_at": "2026-01-01T00:00:00Z"}
+    ],
+    "schools": [
+      {"id": "11111111-1111-4111-8111-111111111111", "name": "合成第一学校", "name_kana": "",
+       "type": "high_school", "ownership": "private", "gender_type": "coed", "is_integrated": false,
+       "postal_code": null, "prefecture": "合成県", "city": null, "address": "合成所在地",
+       "latitude": "35.1234567", "longitude": "139.7654321", "official_url": "https://school.example/",
+       "is_active": true, "is_recruiting": true, "created_at": "2026-01-01T00:00:00+09:00",
+       "updated_at": "2026-01-02T03:04:05.123456+09:00", "course_times": ["parttime", "fulltime"],
+       "main_school_name": "", "campus_type": "main", "total_students": 0, "enrollment_year": 2026,
+       "male_ratio": null, "record_key": "school-aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+       "lifecycle_status_code": "active", "recruitment_status_code": "recruiting",
+       "legally_established_on": "1900-01-01", "opened_on": "1900-04-01", "recruitment_ended_on": null,
+       "closed_on": null, "status_official_url": "https://school.example/history", "status_note": "SYNTHETIC_PRIVATE_SCHOOL_NOTE",
+       "recruitment_ended_year": null, "status_description": "合成の公開説明"},
+      {"id": "22222222-2222-4222-8222-222222222222", "name": "合成閉校学校", "name_kana": null,
+       "type": "kosen", "ownership": "national", "gender_type": "girls", "is_integrated": true,
+       "postal_code": "", "prefecture": "合成県", "city": "", "address": "",
+       "latitude": null, "longitude": null, "official_url": null,
+       "is_active": false, "is_recruiting": false, "created_at": "2026-01-01T00:00:00Z",
+       "updated_at": "2026-01-02T00:00:00Z", "course_times": ["correspondence"],
+       "main_school_name": null, "campus_type": "support_school", "total_students": null,
+       "enrollment_year": null, "male_ratio": 0, "record_key": "school-bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+       "lifecycle_status_code": "closed", "recruitment_status_code": "ended",
+       "legally_established_on": null, "opened_on": "2000-02-29", "recruitment_ended_on": "2024-03-01",
+       "closed_on": "2025-03-31", "status_official_url": null, "status_note": "",
+       "recruitment_ended_year": 2024, "status_description": null}
+    ],
+    "school_departments": [{
+      "id": "33333333-3333-4333-8333-333333333333", "school_id": "11111111-1111-4111-8111-111111111111",
+      "name": "合成学科", "course_type": "synthetic_general", "created_at": "2026-01-01T00:00:00Z",
+      "ui_group": "general", "record_key": "department-cccccccc-cccc-4ccc-8ccc-cccccccccccc"
+    }],
+    "school_field_sources": [{
+      "school_id": "11111111-1111-4111-8111-111111111111", "field_name": "schools.total_students",
+      "official_url": "https://school.example/statistics", "doc_title": "合成学校資料", "published_at": "2024-02-29",
+      "source_page_or_table": "表1", "last_verified_at": "2026-01-02T00:00:00Z", "last_http_status": 404,
+      "is_official_source": true, "note": "SYNTHETIC_PRIVATE_SOURCE_NOTE", "created_at": "2026-01-01T00:00:00Z"
+    }]
+  }
+}

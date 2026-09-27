@@ -1,0 +1,45 @@
+{
+  "schema_version": 1,
+  "synthetic": true,
+  "dataset_version": "example-1",
+  "schools": [
+    {
+      "id": "11111111-1111-4111-8111-111111111111",
+      "record_key": "school-aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      "name": "合成サンプル高等学校",
+      "type": "high_school",
+      "ownership": "municipal",
+      "gender_type": "coed",
+      "prefecture": "架空県",
+      "address": "架空市サンプル町",
+      "official_url": "https://school.example.org/",
+      "is_integrated": false,
+      "is_active": true,
+      "updated_at": "2026-09-27T00:00:00+09:00",
+      "status_note": "合成の内部メモ。取込み・公開の対象外。"
+    },
+    {
+      "id": "22222222-2222-4222-8222-222222222222",
+      "record_key": "school-bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+      "name": "合成サンプル閉校",
+      "type": "kosen",
+      "ownership": "national",
+      "gender_type": "coed",
+      "prefecture": "架空県",
+      "address": "架空市サンプル町",
+      "official_url": null,
+      "is_integrated": false,
+      "is_active": false,
+      "updated_at": "2026-09-27T00:00:00Z"
+    }
+  ],
+  "school_departments": [
+    {
+      "id": "33333333-3333-4333-8333-333333333333",
+      "record_key": "department-cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+      "school_id": "11111111-1111-4111-8111-111111111111",
+      "name": "合成普通科",
+      "course_type": "general"
+    }
+  ]
+}
