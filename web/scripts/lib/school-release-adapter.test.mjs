@@ -95,7 +95,7 @@ function setup(options = {}) {
     uploadAssets: options.realUploader ? createPagesAssetUploader({ apiToken: 'synthetic-test-token', fetchImpl }) : async ({ files }) => {
       assert.equal(files.has('_routes.json'), false)
       if (options.uploadConflict) live.set('high-school', 'other-session')
-      if (options.operationTimeout) await new Promise((resolve) => setTimeout(resolve, 90))
+      if (options.operationTimeout) options.operationTimeout()
       return Object.fromEntries([...files].map(([path, bytes]) => [`/${path}`, schoolDigest(bytes)]))
     } })
   return { adapter, events, live, targets, input: { ...next, previous: { ...old, deployments: { apex: 'old-apex', 'high-school': 'old-high-school' } },
@@ -198,10 +198,16 @@ test('pinning a third redirect origin cannot expand adapter destination authorit
   assert.throws(() => setup({ phases: true, thirdOrigin: true }), /operation refused/)
 })
 
-test('operation deadline stops after delayed upload and never issues a deployment POST', async () => {
-  const s = setup({ operationTimeout: true }), result = await runSchoolRelease(s.input)
+test('operation deadline stops after delayed upload and never issues a deployment POST', async (t) => {
+  let now = 0, uploads = 0
+  t.mock.method(performance, 'now', () => now)
+  // Expire at the upload boundary, independent of timer rounding or CI load.
+  // A real setTimeout can fire just before the monotonic deadline, which is a
+  // different safe failure path and does not prove the post-upload guard ran.
+  const s = setup({ operationTimeout: () => { uploads += 1; now += 90 } })
+  const result = await runSchoolRelease(s.input)
   assert.equal(result.state, 'recovery-required')
-  await new Promise((resolve) => setTimeout(resolve, 100))
+  assert.equal(uploads, 1)
   assert.ok(s.adapter.recoveryState().uncertainProjects.includes('high-school'))
   assert.equal(s.events.some((event) => event.startsWith('POST:')), false)
 })
