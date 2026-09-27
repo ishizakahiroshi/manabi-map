@@ -29,6 +29,7 @@ import { useMaintenanceMode } from '../hooks/useMaintenanceMode'
 import { SchoolBookAd } from './SchoolBookAd'
 import { DataReportForm } from './DataReportForm'
 import { scaleBand } from '../lib/format'
+import { deviationIntake, intakeReceipt, schoolSubmissions, type SchoolRequestReceipt, type SchoolRequestState, type SchoolSubmission } from '../lib/schoolAdminIntake'
 
 /** 近隣校リストの 1 項目（school は表示に必要な最小形。School 全体でもよい）。 */
 interface NeighborEntry {
@@ -43,6 +44,8 @@ interface NeighborEntry {
  * 未指定時は全件キャッシュ（useSchoolsCache）から同じ共有ロジックで算出する。
  */
 export interface SchoolDetailExtras {
+  /** Full public payload hash carried by this detail response, not a later manifest fetch. */
+  publicGeneration?: string | null
   neighbors: NeighborEntry[]
   successors: SuccessorRef[]
   linkableSchoolIds: ReadonlySet<string>
@@ -74,6 +77,11 @@ interface Props {
  * index.css の .neighbor-block.collapsed 側の nth-child(n + 6) と対（変えるときは両方）。
  */
 const NEIGHBOR_PREVIEW_COUNT = 5
+const ADMIN_STATE_KEYS = {
+  received: 'detail.adminStateReceived', claimed: 'detail.adminStateClaimed', adopted: 'detail.adminStateAdopted',
+  generated: 'detail.adminStateGenerated', publication_confirmed: 'detail.adminStatePublicationConfirmed',
+  blocked: 'detail.adminStateBlocked', rejected: 'detail.adminStateRejected',
+} as const satisfies Record<SchoolRequestState, string>
 
 /**
  * 全国データ（`/schools-map-<hash>.json.gz`）は入試履歴の本体・沿革・前身校を持たない
@@ -125,29 +133,30 @@ function SchoolDetailSheetView({ school, onClose, userData, extras, standalone, 
   /** ユーザーが手編集したフィールドはサーバ再hydrateで上書きしない（保存によるデータ消失防止） */
   const dirtyRef = useRef({ memo: false, commute: false, mineNote: false, depts: false })
   const [saving, setSaving] = useState(false)
-  const [isAdmin, setIsAdmin] = useState(false)
+  const [adminUserId, setAdminUserId] = useState<string | null>(null)
   const [adminDraft, setAdminDraft] = useState<Record<string, string>>({})
-  const [adminOverride, setAdminOverride] = useState<Record<string, number>>({})
+  const [adminReceipt, setAdminReceipt] = useState<SchoolRequestReceipt | null>(null)
+  const [requestStatusFailed, setRequestStatusFailed] = useState(false)
+  const [reviewFailed, setReviewFailed] = useState(false)
   const [adminReason, setAdminReason] = useState('')
   const [adminPin, setAdminPin] = useState('')
   const [adminSavingDept, setAdminSavingDept] = useState<string | null>(null)
   const [adminRebuilding, setAdminRebuilding] = useState(false)
-  const [reviewRows, setReviewRows] = useState<
-    Array<{
-      department_id: string
-      department_name: string
-      official_value: number | null
-      submission_count: number
-      avg_value: number
-      median_value: number
-      min_value: number
-      max_value: number
-    }>
-  >([])
+  const [reviewRows, setReviewRows] = useState<SchoolSubmission[]>([])
+  const adminBusy = useRef(false)
+  const requestAttempt = useRef<{ key: string; id: string } | null>(null)
 
   const schoolId = school?.id ?? null
   const open = school != null
   const sessionUserId = session?.user.id ?? null
+  const isAdmin = !!sessionUserId && adminUserId === sessionUserId
+  const generation = extras?.publicGeneration ?? null
+  const adminContext = `${sessionUserId}:${schoolId}:${generation}`
+  const [adminStateContext, setAdminStateContext] = useState(adminContext)
+  const adminStateReady = adminStateContext === adminContext
+  const activeRequestId = adminStateReady ? adminReceipt?.request_id : null
+  const currentAdminContext = useRef(adminContext)
+  currentAdminContext.current = adminContext
   const personalDataReady = dataUserId === sessionUserId && personalDataUserId === sessionUserId
 
   useEffect(() => {
@@ -215,12 +224,22 @@ function SchoolDetailSheetView({ school, onClose, userData, extras, standalone, 
     const adminNext: Record<string, string> = {}
     for (const d of school?.departments ?? []) adminNext[d.id] = d.deviation == null ? '' : String(d.deviation)
     setAdminDraft(adminNext)
-    setAdminOverride({})
     setAdminReason('')
     setAdminPin('')
     // school 切替時のみ初期同期（以降の notes/mine 到着は下の rehydrate effect へ）
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [schoolId])
+
+  useEffect(() => {
+    setAdminStateContext(adminContext)
+    setAdminReceipt(null)
+    setAdminReason('')
+    setAdminPin('')
+    setRequestStatusFailed(false)
+    setAdminSavingDept(null)
+    setAdminRebuilding(false)
+    requestAttempt.current = null
+  }, [adminContext])
 
   // ログイン直後や userData 遅延到着で、未編集フィールドだけサーバ値に埋める。
   // 編集済み（dirty）は触らない。保存時の空上書きによるデータ消失を防ぐ。
@@ -241,13 +260,13 @@ function SchoolDetailSheetView({ school, onClose, userData, extras, standalone, 
 
   useEffect(() => {
     if (!session) {
-      setIsAdmin(false)
+      setAdminUserId(null)
       return
     }
     let cancelled = false
     void (async () => {
       const { data, error } = await supabase.rpc('is_admin')
-      if (!cancelled) setIsAdmin(!error && data === true)
+      if (!cancelled) setAdminUserId(!error && data === true ? session.user.id : null)
     })()
     return () => {
       cancelled = true
@@ -260,17 +279,40 @@ function SchoolDetailSheetView({ school, onClose, userData, extras, standalone, 
       return
     }
     let cancelled = false
+    setReviewFailed(false)
     void (async () => {
-      const { data, error } = await supabase.rpc('get_deviation_review_queue', {
+      const { data, error } = await supabase.rpc('get_school_deviation_submissions', {
         p_school_id: schoolId,
         p_threshold: 5,
       })
-      if (!cancelled) setReviewRows(error ? [] : (data ?? []))
+      if (cancelled) return
+      try {
+        if (error) throw error
+        setReviewRows(schoolSubmissions(data, schoolId, school?.departments ?? []))
+      } catch { setReviewRows([]); setReviewFailed(true) }
     })()
     return () => {
       cancelled = true
     }
-  }, [isAdmin, schoolId])
+  }, [isAdmin, schoolId, school?.departments, generation])
+
+  useEffect(() => {
+    if (!isAdmin || !activeRequestId) return
+    let cancelled = false
+    const requestId = activeRequestId
+    const poll = async () => {
+      const { data, error } = await supabase.from('school_change_requests').select('id,state').eq('id', requestId).maybeSingle()
+      if (cancelled) return
+      try {
+        if (error || !data) throw new Error('status unavailable')
+        const receipt = intakeReceipt([{ request_id: data.id, state: data.state }], requestId)
+        setAdminReceipt(receipt)
+        setRequestStatusFailed(false)
+      } catch { setRequestStatusFailed(true) }
+    }
+    const timer = window.setInterval(() => { void poll() }, 15000)
+    return () => { cancelled = true; window.clearInterval(timer) }
+  }, [isAdmin, activeRequestId, adminContext])
 
   if (!school) return null
 
@@ -594,65 +636,76 @@ function SchoolDetailSheetView({ school, onClose, userData, extras, standalone, 
     }
   }
 
-  const displayedDeviation = (departmentId: string, original: number | null): number | null =>
-    adminOverride[departmentId] ?? original
-
   const handleAdminCorrection = async (departmentId: string) => {
     if (requireLogin()) return
+    if (!isAdmin || !adminStateReady || adminBusy.current) return
     if (maintenanceMode) {
       toast(t('maintenance.toast'))
       return
     }
-    const raw = adminDraft[departmentId] ?? ''
-    const nextValue = parseInt(raw, 10)
-    if (Number.isNaN(nextValue) || nextValue < 20 || nextValue > 80) {
-      toast(t('detail.adminValueInvalid'))
+    const department = school.departments.find(d => d.id === departmentId)
+    if (!generation || !department) {
+      toast(t('detail.adminGenerationMissing'))
       return
     }
-    if (adminReason.trim().length < 4) {
-      toast(t('detail.adminReasonRequired'))
+    // Stable for transport retries of the same request. Never retain the PIN in this identity.
+    const key = JSON.stringify([adminContext, departmentId, adminDraft[departmentId], adminReason.trim(), department.deviation])
+    if (requestAttempt.current?.key !== key) requestAttempt.current = { key, id: crypto.randomUUID() }
+    let params: ReturnType<typeof deviationIntake>
+    try {
+      params = deviationIntake({ requestId: requestAttempt.current.id, departmentId, value: adminDraft[departmentId] ?? '',
+        reason: adminReason, pin: adminPin, generation, expectedValue: department.deviation })
+    } catch (error) {
+      const field = error instanceof Error ? error.message : ''
+      toast(t(field === 'pin' ? 'detail.adminPinRequired' : field === 'reason' ? 'detail.adminReasonRequired' : 'detail.adminValueInvalid'))
       return
     }
-    if (!adminPin) {
-      toast(t('detail.adminPinRequired'))
-      return
-    }
+    const context = adminContext
+    adminBusy.current = true
     setAdminSavingDept(departmentId)
     try {
-      const { data, error } = await supabase.rpc('correct_school_deviation', {
-        p_department_id: departmentId,
-        p_new_value: nextValue,
-        p_reason: adminReason,
-        p_pin: adminPin,
-      })
-      // PIN 失敗・一時ロックは DB が失敗回数を残すため 0 行で返す。
-      // Supabase の RPC 自体は成功扱いになるので、ここで UI 上の失敗に戻す。
-      if (error || !data?.length) throw error ?? new Error('admin pin verification failed')
-      setAdminOverride((cur) => ({ ...cur, [departmentId]: nextValue }))
-      setAdminPin('')
+      const { data, error } = await supabase.rpc('request_school_deviation', params)
+      if (error) throw new Error('intake unavailable')
+      const receipt = intakeReceipt(data, params.p_request_id)
+      if (currentAdminContext.current !== context) return
+      setAdminReceipt(receipt)
       toast(t('detail.adminCorrectionDone'))
     } catch {
-      toast(t('detail.adminCorrectionFail'))
+      if (currentAdminContext.current === context) toast(t('detail.adminCorrectionFail'))
     } finally {
-      setAdminSavingDept(null)
+      adminBusy.current = false
+      if (currentAdminContext.current === context) { setAdminSavingDept(null); setAdminPin('') }
     }
   }
 
   const handleSnapshotRebuild = async () => {
     if (requireLogin()) return
+    if (!isAdmin || !adminStateReady || adminBusy.current) return
     if (maintenanceMode) {
       toast(t('maintenance.toast'))
       return
     }
+    if (!generation) { toast(t('detail.adminGenerationMissing')); return }
+    const key = JSON.stringify([adminContext, 'publication'])
+    if (requestAttempt.current?.key !== key) requestAttempt.current = { key, id: crypto.randomUUID() }
+    const requestId = requestAttempt.current.id
+    const context = adminContext
+    adminBusy.current = true
     setAdminRebuilding(true)
     try {
-      const { error } = await supabase.functions.invoke('trigger-snapshot-rebuild', { body: {} })
+      const { data, error } = await supabase.functions.invoke('trigger-snapshot-rebuild', {
+        body: { request_id: requestId, expected_generation: generation },
+      })
       if (error) throw error
+      const receipt = intakeReceipt([data], requestId)
+      if (currentAdminContext.current !== context) return
+      setAdminReceipt(receipt)
       toast(t('detail.adminRebuildDone'))
     } catch {
-      toast(t('detail.adminRebuildFail'))
+      if (currentAdminContext.current === context) toast(t('detail.adminRebuildFail'))
     } finally {
-      setAdminRebuilding(false)
+      adminBusy.current = false
+      if (currentAdminContext.current === context) setAdminRebuilding(false)
     }
   }
 
@@ -1003,7 +1056,7 @@ function SchoolDetailSheetView({ school, onClose, userData, extras, standalone, 
           <div>
             {school.departments.map((d) => {
               const mv = mineRec?.depts[d.id]
-              const dev = displayedDeviation(d.id, d.deviation)
+              const dev = d.deviation
               return (
                 <div className="dep-row" key={d.id}>
                   <span className="dep-name">{d.name}</span>
@@ -1177,7 +1230,7 @@ function SchoolDetailSheetView({ school, onClose, userData, extras, standalone, 
               <div className="mine-row" key={d.id}>
                 <span className="n">{d.name}</span>
                 <span className="ref">
-                  {t('detail.refValue')} {displayedDeviation(d.id, d.deviation) ?? t('common.dash')}
+                  {t('detail.refValue')} {d.deviation ?? t('common.dash')}
                 </span>
                 <input
                   className="val"
@@ -1225,10 +1278,17 @@ function SchoolDetailSheetView({ school, onClose, userData, extras, standalone, 
           <div className="admin-block">
             <h4>{t('detail.adminTitle')}</h4>
             <p className="sub">{t('detail.adminSub')}</p>
+            {!generation && <p className="sub" role="status">{t('detail.adminGenerationMissing')}</p>}
+            {adminStateReady && adminReceipt && <div role="status">
+              <p className="sub">{t('detail.adminReceipt', { id: adminReceipt.request_id })}</p>
+              <p className="sub">{t(ADMIN_STATE_KEYS[adminReceipt.state])}</p>
+              {requestStatusFailed && <p className="sub">{t('detail.adminRequestStatusFailed')}</p>}
+            </div>}
             <label>
               {t('detail.adminReason')}
               <textarea
-                value={adminReason}
+                value={adminStateReady ? adminReason : ''}
+                maxLength={500}
                 onChange={(e) => setAdminReason(e.target.value)}
                 placeholder={t('detail.adminReasonPlaceholder')}
               />
@@ -1238,7 +1298,8 @@ function SchoolDetailSheetView({ school, onClose, userData, extras, standalone, 
               <input
                 type="password"
                 inputMode="numeric"
-                value={adminPin}
+                value={adminStateReady ? adminPin : ''}
+                maxLength={128}
                 onChange={(e) => setAdminPin(e.target.value)}
                 autoComplete="off"
               />
@@ -1249,7 +1310,7 @@ function SchoolDetailSheetView({ school, onClose, userData, extras, standalone, 
                   <span>
                     <b>{d.name}</b>
                     <small>
-                      {t('detail.refValue')} {displayedDeviation(d.id, d.deviation) ?? t('common.dash')}
+                      {t('detail.refValue')} {d.deviation ?? t('common.dash')}
                     </small>
                   </span>
                   <input
@@ -1263,7 +1324,7 @@ function SchoolDetailSheetView({ school, onClose, userData, extras, standalone, 
                   <button
                     type="button"
                     onClick={() => void handleAdminCorrection(d.id)}
-                    disabled={adminSavingDept === d.id}
+                    disabled={!generation || !adminStateReady || adminSavingDept !== null || adminRebuilding}
                   >
                     {adminSavingDept === d.id ? t('common.saving') : t('detail.adminApply')}
                   </button>
@@ -1272,7 +1333,7 @@ function SchoolDetailSheetView({ school, onClose, userData, extras, standalone, 
             </div>
             <div className="admin-review">
               <h5>{t('detail.adminReviewTitle')}</h5>
-              {reviewRows.length > 0 ? (
+              {reviewFailed ? <p className="sub">{t('detail.adminReviewFailed')}</p> : reviewRows.length > 0 ? (
                 reviewRows.map((r) => (
                   <div className="admin-review-row" key={r.department_id}>
                     <span>{r.department_name}</span>
@@ -1293,7 +1354,7 @@ function SchoolDetailSheetView({ school, onClose, userData, extras, standalone, 
               type="button"
               className="admin-rebuild"
               onClick={() => void handleSnapshotRebuild()}
-              disabled={adminRebuilding}
+              disabled={!generation || !adminStateReady || adminRebuilding || adminSavingDept !== null}
             >
               {adminRebuilding ? t('detail.adminRebuildRunning') : t('detail.adminRebuild')}
             </button>

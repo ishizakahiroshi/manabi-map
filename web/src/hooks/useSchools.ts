@@ -9,7 +9,6 @@ import type {
   SchoolRelationshipSummary,
 } from '../types/school'
 import { flattenRecruitmentUnits, type AdmissionRecruitmentUnitRow } from '../lib/admissionUnits'
-import { APP_SCHOOL_SELECT } from '../lib/school-select'
 
 const FETCH_ERROR_MESSAGE = '学校データの取得に失敗しました。時間をおいて再読み込みしてください。'
 
@@ -182,54 +181,8 @@ export function mapSchoolRows(rows: SchoolRow[]): School[] {
 }
 
 async function fetchSchoolRows(): Promise<SchoolRow[]> {
-  if (import.meta.env.VITE_SCHOOLS_SOURCE === 'supabase') {
-    const { supabase } = await import('../lib/supabase')
-    // PostgREST（Supabase）は既定で最大 1000 行しか返さないため、
-    // gen-schools-json.mjs と同様に range でページングして全校取得する。
-    const pageSize = 1000
-    const rows: SchoolRow[] = []
-    for (let from = 0; ; from += pageSize) {
-      const { data, error } = await supabase
-        .from('schools')
-        .select(APP_SCHOOL_SELECT)
-        .eq('is_active', true)
-        .order('id', { ascending: true })
-        .range(from, from + pageSize - 1)
-      if (error) throw error
-      const page = (data ?? []) as unknown as SchoolRow[]
-      rows.push(...page)
-      if (page.length < pageSize) break
-    }
-    const admissionsBySchool = new Map<string, AdmissionRecruitmentUnitRow[]>()
-    const admissionPageSize = 250
-    for (let from = 0; ; from += admissionPageSize) {
-      const { data, error } = await supabase
-        .from('admission_recruitment_units')
-        .select(
-          'school_id, id, unit_key, unit_kind_code, label, course_time, valid_from_year, valid_to_year, admission_recruitment_unit_departments(department_id), school_admission_selection_stats(id, year, selection_stage_code, selection_track_code, stage_label_raw, track_label_raw, selection_scope_raw, population_scope_raw, scope_key, map_role_code, is_ratio_comparable, capacity, applicants, examinees, admitted, exam_scope_raw, school_admission_stat_exam_components(component_code), school_admission_stat_quality_flags(metric_code, reason_code, note), school_admission_stat_sources(fact_kind_code, official_url, doc_title, published_at, source_page_or_table, quoted_evidence, last_verified_at, last_http_status))',
-        )
-        .order('id', { ascending: true })
-        .range(from, from + admissionPageSize - 1)
-      if (error) throw error
-      const page = (data ?? []) as unknown as Array<AdmissionRecruitmentUnitRow & { school_id: string }>
-      for (const unit of page) {
-        const units = admissionsBySchool.get(unit.school_id) ?? []
-        units.push(unit)
-        admissionsBySchool.set(unit.school_id, units)
-      }
-      if (page.length < admissionPageSize) break
-    }
-    for (const row of rows) {
-      row.admission_recruitment_units = admissionsBySchool.get(row.id) ?? []
-      for (const relationship of row.predecessor_relationships ?? []) {
-        if (relationship.predecessor) {
-          relationship.predecessor.admission_recruitment_units =
-            admissionsBySchool.get(relationship.predecessor.id) ?? []
-        }
-      }
-    }
-    return rows
-  }
+  // The browser consumes only the published projection. Source selection belongs
+  // to the offline generator; it must never redirect saved-ID lookups to a DB.
 
   // build hash 付き URL 化（docs/local/plan_schools-json-cache-strategy.md）:
   // まず `/schools-manifest.json` を no-store で fetch し、そこに書かれた

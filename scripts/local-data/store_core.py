@@ -49,7 +49,7 @@ TABLES = {
         "is_active": "bool", "is_recruiting": "bool", "created_at": "timestamp",
         "updated_at": "timestamp", "course_times": "courses", "main_school_name": "text?",
         "campus_type": "text", "total_students": "int?", "enrollment_year": "int?",
-        "male_ratio": "int?", "record_key": "school-key", "lifecycle_status_code": "text",
+        "male_ratio": "int?", "record_key": "text", "lifecycle_status_code": "text",
         "recruitment_status_code": "text", "legally_established_on": "date?",
         "opened_on": "date?", "recruitment_ended_on": "date?", "closed_on": "date?",
         "status_official_url": "text?", "status_note": "text?",
@@ -57,7 +57,7 @@ TABLES = {
     },
     "school_departments": {
         "id": "uuid", "school_id": "uuid", "name": "text", "course_type": "text?",
-        "created_at": "timestamp", "ui_group": "text?", "record_key": "department-key",
+        "created_at": "timestamp", "ui_group": "text?", "record_key": "text",
     },
     "school_field_sources": {
         "school_id": "uuid", "field_name": "text", "official_url": "url",
@@ -66,6 +66,8 @@ TABLES = {
         "is_official_source": "bool", "note": "nonempty?", "created_at": "timestamp",
     },
 }
+# record_key is PostgreSQL TEXT UNIQUE NOT NULL. The school-/department-UUID
+# expressions are generation defaults, not constraints on preserved source keys.
 KEYS = {table: ("code",) for table in TABLES}
 KEYS.update(schools=("id",), school_departments=("id",),
             school_field_sources=("school_id", "field_name", "official_url"))
@@ -117,10 +119,6 @@ def value_for_storage(value, kind):
         require(bool(value.strip(" ")), "nonempty text required")
     elif kind == "uuid":
         uuid_value(value, "id")
-    elif kind.endswith("-key"):
-        prefix = kind.removesuffix("key")
-        require(value.startswith(prefix), "invalid record key")
-        uuid_value(value[len(prefix):], "record key")
     elif kind == "url":
         require(http_url(value), "HTTP(S) URL required")
     elif kind == "identifier":

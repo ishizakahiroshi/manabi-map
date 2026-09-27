@@ -45,7 +45,7 @@ test('below asset limit passes while exact limit and one byte over fail closed',
 })
 
 test('portal allows its UI assets but refuses school payloads and Functions', () => {
-  const files = [entry('index.html'), entry('assets/entry-a1.js'), entry('assets/entry-a1.css'), entry('favicon.ico')]
+  const files = [entry('index.html'), entry('assets/entry-a1.js'), entry('assets/entry-a1.css'), entry('favicon.ico'), entry('llms.txt')]
   assert.equal(assessInventory(files, directory).valid, true)
   for (const path of ['school/abc/index.html', 'school-data/abc.json', 'schools-manifest.json', 'api/v1/schools.json', 'assets/schools.json', '_worker.js', 'functions/_middleware.ts']) {
     assert.equal(assessInventory([...files, entry(path)], directory).valid, false, path)

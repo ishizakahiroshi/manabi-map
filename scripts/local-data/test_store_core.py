@@ -199,7 +199,7 @@ class CoreTests(unittest.TestCase):
             "closed_on": ["1800-01-01"], "official_url": ["ftp://school.example", "https://school.example:bad"],
             "updated_at": ["2026-01-01T00:00:00", "2026-02-30T00:00:00Z", "2026-01-01T00:00:00+01:60"],
             "name": [None, 1, "nul\u0000text"], "id": ["bad-uuid"],
-            "record_key": ["school-bad", "department-aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"],
+            "record_key": [None, 1, "nul\u0000key"],
         }
         for field, values in cases.items():
             for value in values:
@@ -222,6 +222,26 @@ class CoreTests(unittest.TestCase):
         self.assertEqual(after["schools"][0]["total_students"], 2**31-1)
         p["tables"]["schools"][0].update(enrollment_year=2100, recruitment_ended_year=2100)
         self.ingest(p)
+
+    def test_record_keys_follow_text_contract_without_prefix_or_uuid_coercion(self):
+        for index, key in enumerate(("invented-school-key-A", "department-invented-school-key", "", " 合成学校 / キー ")):
+            with self.subTest(key=key):
+                db = self.db
+                self.db = self.root / f"key-{index}.sqlite"
+                try:
+                    payload = copy.deepcopy(self.payload)
+                    payload["tables"]["schools"][0]["record_key"] = key
+                    department_key = "合成学科-任意キー" if not key else key
+                    payload["tables"]["school_departments"][0]["record_key"] = department_key
+                    self.ingest(payload)
+                    after = self.state()
+                    self.assertEqual(after["schools"][0]["record_key"], key)
+                    self.assertEqual(after["school_departments"][0]["record_key"], department_key)
+                    changed = copy.deepcopy(payload)
+                    changed["tables"]["schools"][0]["record_key"] = "invented-replacement"
+                    self.rejected(changed)
+                finally:
+                    self.db = db
 
     def test_decimal_json_number_exactness_and_js_roundtrip(self):
         self.input.write_text(json.dumps(self.payload).replace('"35.1234567"', '35.1234567'), encoding="utf-8")

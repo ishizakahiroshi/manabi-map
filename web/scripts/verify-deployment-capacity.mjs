@@ -35,7 +35,7 @@ function forbiddenPath(path) {
 }
 
 function directoryAsset(path) {
-  return /^(?:index\.html|404\.html|robots\.txt|sitemap\.xml|_headers|_redirects|favicon\.ico|site\.webmanifest)$/.test(path)
+  return /^(?:index\.html|404\.html|robots\.txt|llms\.txt|sitemap\.xml|_headers|_redirects|favicon\.ico|site\.webmanifest)$/.test(path)
     || /^(?:[a-z0-9-]+\.(?:png|svg|ico|webmanifest))$/i.test(path)
     || /^assets\/(?:[a-z0-9_.-]+\/)*[a-z0-9_.-]+\.(?:css|js|svg|png|webp|jpg|woff2?)$/i.test(path)
 }

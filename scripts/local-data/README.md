@@ -1,4 +1,44 @@
-# 合成データ用のSQLite原本試作
+# ローカルSQLite原本とバックアップ
+
+## 実採取データから新規学校原本を作る
+
+`school_live_source.py` は明示された実採取ファイルを扱う別入口。採取側はPostgreSQLの読み取り専用REPEATABLE READ transactionで、学校25表の全列一覧と全行を取得する。接続先・認証情報・実採取ファイルはリポジトリに入れない。このCLI自体はネットワークへ接続せず、採取transactionの宣言を独立に証明するものではない。
+
+`import --input <capture.json> --input-sha256 <独立確認したSHA256> --db <新規絶対パス>` は既定dry-run。完全な列一覧、型、関連、制約と全25表の内容hashを検査する。`--apply` 時も既存DBは上書きせず、新規SQLiteをcommit後に開き直して照合してから確定する。入力は `school-live-source-capture` / format_version 1 / schema_version 3 / `synthetic: false`、DB purposeは `school-source-live`。未知列を落としたり、識別子を作り直したりしない。
+
+`export --db <原本> --expected-source-sha256 <import receiptのsource_content_sha256> --output <新規絶対ディレクトリ> --apply` は同一読み取りtransactionから許可された13表のsnapshot/manifestを生成する。全25表の原本hashを先に確認する。`verify --bundle <出力>` でペアを照合できる。容量は既定64MiB、明示 `--max-bytes` は最大256MiB、`--timeout-seconds` は最大300秒。OSレベルの強制停止は呼出側で別に管理する。
+
+実snapshotのJS入口は `gen-schools-json.mjs --school-source=sqlite-snapshot --snapshot=<snapshot.json> --snapshot-manifest=<manifest.json> --output-root=<新規リポ外出力> --generation-time=<ISO日時> --candidate-revision=<40桁commit>`。生成入力やprivate-sourceは公開対象ではなく、公開用として検証されたファイルだけを配信する。原本取込み・JSON生成の成功は、本番の認証・保存・画面や旧DB表撤去の完了を意味しない。以下の既存synthetic CLIの入力制限は維持する。
+
+大きな入力は `--max-decoded-bytes` を明示して最大256MiB、公開出力合計は `--max-total-bytes` を明示して最大1GiBまで指定できる。両者の既定は64MiBで、公開ファイル1件の25MiB上限は変えない。プロセスのheap上限と全体期限も別に設定する。
+
+現行originを保ったアプリ検査用の入口は `web/scripts/build-school-observed.mjs`。実snapshotの生成に続けて、隔離した既存Vite/SSR/SEOと静的検査を実行する。`--snapshot` / `--manifest` / `--output-root` / `--public-config` / `--generation-time` / `--candidate-revision` を必須とし、引数は `--name=value`。公開設定JSONは `VITE_SUPABASE_URL` と公開用 `VITE_SUPABASE_ANON_KEY` の2項目のみ。サービス鍵や環境変数からの認証情報探索を許さない。結果の `dist` だけが公開候補で、原本やprivate-sourceは外に残る。Functionsのコンパイル・配備、旧DB表撤去は別工程。
+
+通常の `pnpm build` もこの明示引数の入口を使う。`pnpm gen:schools-json` は `sqlite-snapshot` を固定し、無引数では停止する。Supabaseへ暗黙に接続して生成する通常コマンドはない。`--version` は先頭の `v` を付けずに渡す。コードだけをGitへpushしても、原本や検証済み公開物の転送を代替しない。
+
+## 実原本への訂正と公開
+
+`school_live_apply.py` は学校25表の内容hash、表示中の公開世代、変更前の値を照合し、訂正と永続receiptを同じSQLite transactionで確定する。利用者の私的な記録を原本へまとめてコピーしない。`school_live_controller.py` は所有者用RPCとの受付・採用・公開確認をつなぎ、SQLite確定後に通信が途切れた場合はreceiptから再照合する。採用と公開は別の明示要求である。
+
+この管理経路は既存学科の偏差値訂正だけを扱い、新しい学校・学科の追加は行わない。別途原本を更新する際は、所有者が `append_school_identity` / `append_department_identity` で新IDを登録して保存先との整合を確かめてから、新しい公開世代を作る。学校・学科のIDを原本へ直接足すだけでは、通常controllerの原本hash検査を通過しない。旧Supabase入力adapterや旧投入SQL生成スクリプトは、撤去後の学校更新には使用しない。
+
+`school_live_pg.py` は `verify-full` と明示CAを必須とする所有者接続。`school_live_publish.py` は明示した実行ファイル・出力先・配備先で生成、Functionsを含む転送、公開HTTPの照合を行う。通常の管理要求を処理する入口は `run-school-live.ps1` / `school_live_runner.py`。設定、原本、受付状態、公開証跡はすべてGitと同期フォルダの外に置く。PCが停止中の要求はDBに残り、ローカル処理が再開するまで採用・公開されない。
+
+SupabaseはID参照表2つと管理受付・履歴表2つを追加し、利用者の保存先とRLSを維持する。migrationは `202609280101` → `202609280102` → `202609280103` の順。旧学校表を消す `202609280104` は通常の一括適用対象にしない。原本・バックアップ・公開・管理要求・利用者保存の実検収後に、実行者が同一接続の `manabi.school_source_removal='verified'` を明示した場合だけ動く。25表の明示リストに対する `RESTRICT` が未知の依存を検出したら全体を戻す。
+
+## 原本別の暗号化バックアップ
+
+`backup_live.py` は明示した設定と認証情報だけを使う実運用向けの追加経路。学校原本は `backup_school_live.py` で読み取り専用のSQLite online backupを作り、整合性・既存schema 2/3を検査してgzip圧縮・age暗号化する。`backup_r2_live.py` は学校暗号文を `school-sqlite-backups/<sha256>.age` へ新規保存し、既存の `nightly/YYYY-MM-DD.dump.gz.age` は読取りだけ行う。利用者データはSupabaseを原本とし、既存R2の暗号化PostgreSQL dumpをそのまま複製する。利用者データをSQLiteへ変換する処理ではない。
+
+`backup_local_store.py` は種類ごとの最新暗号文と検査用JSONをローカル・Drive同期フォルダへ保存し、別媒体にはJSTの当日を含む7日・月曜始まり4週・3か月の各枠で最後の正常コピーを保持する。同じ暗号文は実体を共有する。`--prune` がなければ世代削除しない。新コピーの検証後だけ管理対象の古い世代を削除し、既存R2オブジェクトは削除しない。学校R2の新規prefixに自動削除規則はない。
+
+Windowsの入口は `run-backup-live.ps1 -Config <private-config.json>`。既定はdry-runで、書込み・ネットワーク・認証情報の取得はない。`-Apply -Prune` で実行する。設定はリポ外に置き、`version: 1`、絶対パスの `local_root` / `drive_root` / 任意の `archive_root`、任意の `school_source`、`age_executable`、公開鍵 `recipient`、`python_executable`、`credential_file`、`secret_helper` を指定する。`max_bytes` は圧縮済みデータ/暗号文の最大64MiB。学校SQLiteの `source_max_bytes` は既定64MiB、明示指定で最大256MiB。`timeout_seconds` は操作期限。RDP世代先には `rdp_drive: true` の明示も必要。学校原本が未設定なら空DBを作らず `pending_source` とし、利用者バックアップを独立して続行する。
+
+学校用 `restore_school_backup` APIは信頼できる保存receiptのhash/sizeとage認証を検査し、旧非圧縮形式・新gzip形式を展開してSQLiteの全体hash・整合性・FK・schema・件数を照合する。既定dry-runでも完全検証し、apply時は新規ローカルファイルにだけ復元する。既存原本を上書きせず、過大展開・gzip末尾の余分なデータ・複数memberを拒否する。`source_sha256` は圧縮前SQLiteバイト列のhashであり、25表を正規化した内容hashとは別。
+
+launcherは秘密取得helperからR2の4キーだけを取得し、子プロセスの標準入力へ渡す。引数・環境変数・レポートへ秘密を入れない。Pythonの直接実行時も `--apply` だけ標準入力JSONが必要。1回全体の上限はlauncherで10分。レポート `local_root/last-run.json` で各保存先とR2の成否を分ける。Driveフォルダへのコピー照合はクラウド同期完了の証明ではない。学校取込み・公開生成・DB移行・本番画面の切替はこのCLIの対象外。
+
+通常例外では最新ペアの置換を戻すが、電源断時の暗号文とJSONの同時確定は保証しない。不一致は次回読取りで拒否する。実データの復号・復元検収は別に行う。合成試験は `python -B -m unittest discover -s scripts/local-data -p "test_backup*.py"`。以下の原本取込み・公開候補の既存CLIには引き続き合成データ制限がある。
 
 ## 明示接続のPostgreSQL復元アダプター
 
@@ -63,7 +103,7 @@ read-only transactionで原本を整合検査・抽出し、候補の一時デ�
 
 `web/scripts/lib/school-source.mjs` はsnapshotの版/hash/列/基本型/FKを検証し、学校・学科・出典・沿革・前身校・募集単位・入試子表の既存取得形を復元する。学校と子は決定的に並べ、course_times順序は保持する。学校のactive判定と、既存 `public-api.mjs` の公式URL/出典/品質ゲートを分ける。catalog化、アプリ変換、地図倍率、公開APIは既存の純粋処理を再利用する。
 
-生成器は `--school-source=snapshot --snapshot=<file> --snapshot-manifest=<file>` または `--school-source=supabase` の明示選択を要求する。env/認証読取とSupabase importは後者を選んだ後だけ。ローカル入力の失敗でSupabaseへfallbackしない。既存packageコマンドには明示supabaseを付け、運用の既定を切り替えていない。生成器全体の実行は今回行っておらず、この説明を実生成/公開の指示とは扱わない。
+この合成試作の生成器は `--school-source=snapshot --snapshot=<file> --snapshot-manifest=<file>` を使う。旧Supabase入力の明示adapterも比較検査用として残すが、通常packageコマンドの既定は冒頭の `sqlite-snapshot` である。ローカル入力の失敗でSupabaseへfallbackしない。合成CLIの成功は実原本・本番配備の検収を意味しない。
 
 ```text
 python -B -m unittest discover -s scripts/local-data -p "test_*.py" -v

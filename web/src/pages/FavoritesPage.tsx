@@ -13,6 +13,8 @@ import { countMyData, downloadMyData } from '../lib/export'
 import { useApp } from '../contexts/AppContext'
 import { useI18n } from '../contexts/I18nContext'
 import { useFormat } from '../hooks/useFormat'
+import { savedSchoolEntries } from '../lib/saved-school-references'
+import { SavedSchoolReference } from '../components/SavedSchoolReference'
 
 interface Props {
   userData: ReturnType<typeof useUserData>
@@ -20,7 +22,7 @@ interface Props {
 
 export function FavoritesPage({ userData }: Props) {
   const navigate = useNavigate()
-  const { schools } = useSchools()
+  const { schools, loading: schoolsLoading, error: schoolsError } = useSchools()
   const { toast } = useApp()
   const { t } = useI18n()
   const fmt = useFormat()
@@ -55,8 +57,7 @@ export function FavoritesPage({ userData }: Props) {
   }
 
   const favList = useMemo(() => {
-    return schools
-      .filter((s) => favorites[s.id])
+    return savedSchoolEntries(schools, favorites)
       .sort((a, b) => (favorites[b.id]?.priority ?? 0) - (favorites[a.id]?.priority ?? 0))
   }, [schools, favorites])
 
@@ -73,7 +74,7 @@ export function FavoritesPage({ userData }: Props) {
         <div className="favs-toolbar">
           <span className="sort">{t('favorites.sort')}</span>
           <span style={{ display: 'flex', gap: 10 }}>
-            {favList.length >= 2 && (
+            {favList.filter(({ school }) => school).length >= 2 && (
               <button className="compare-link" onClick={() => navigate('/compare')}>
                 ⚖ {t('favorites.compare')}
               </button>
@@ -99,9 +100,28 @@ export function FavoritesPage({ userData }: Props) {
           </div>
         )}
 
-        {favList.map((s, i) => {
-          const pri = favorites[s.id]?.priority ?? 0
+        {favList.map(({ id, school: s }, i) => {
+          const pri = favorites[id]?.priority ?? 0
           const stars = '★'.repeat(pri) + '☆'.repeat(Math.max(0, 5 - pri))
+          if (!s) {
+            const schoolName = `${t('savedSchool.unavailable')} (${id})`
+            return (
+              <article className="fav-card" key={id}>
+                <div className="fav-card-main saved-school-unavailable">
+                  <span className="rank">{t('favorites.rank', { n: i + 1 })}</span>
+                  <span className="stars-inline" aria-hidden="true">{stars}</span>
+                  <span className="fav-card-title">{t('savedSchool.unavailable')}</span>
+                  <SavedSchoolReference id={id} loading={schoolsLoading} error={schoolsError} />
+                  <span className="memo saved-school-content">{[notes[id]?.note, notes[id]?.commute_note].filter(Boolean).join('\n') || t('common.noMemo')}</span>
+                </div>
+                <button type="button" className="fav-card-delete"
+                  aria-label={t('favorites.removeFavorite', { school: schoolName })}
+                  onClick={() => void handleRemoveFavorite(id, schoolName)}>
+                  <span aria-hidden="true">🗑️</span>
+                </button>
+              </article>
+            )
+          }
           const memo = (notes[s.id]?.note ?? '').split('\n')[0] || t('common.noMemo')
           const schoolName = shortSchoolName(s.name, s)
           return (

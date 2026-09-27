@@ -6,6 +6,7 @@ import { useSchools } from '../hooks/useSchools'
 import { shortSchoolName } from '../lib/format'
 import { useFocusTrap } from '../hooks/useFocusTrap'
 import { useEscapeKey } from '../hooks/useEscapeKey'
+import { SavedSchoolReference } from './SavedSchoolReference'
 import {
   useFamilyShare,
   type FamilyGroupView,
@@ -22,7 +23,7 @@ export function FamilyShareSheet({ open, onClose }: Props) {
   const { toast, setLoginOpen } = useApp()
   const { kind } = useAuth()
   const { t } = useI18n()
-  const { schools } = useSchools()
+  const { schools, loading: schoolsLoading, error: schoolsError } = useSchools()
   const family = useFamilyShare()
   const sheetRef = useRef<HTMLDivElement>(null)
   const [busy, setBusy] = useState(false)
@@ -46,7 +47,10 @@ export function FamilyShareSheet({ open, onClose }: Props) {
 
   const schoolName = (id: string) => {
     const s = schools.find((x) => x.id === id)
-    return s ? shortSchoolName(s.name, s) : t('common.schoolUnknown')
+    return s ? shortSchoolName(s.name, s) : <span>
+      {t('savedSchool.unavailable')}
+      <SavedSchoolReference id={id} loading={schoolsLoading} error={schoolsError} />
+    </span>
   }
 
   const lineShareUrl = (inviteUrl: string): string => {
@@ -302,8 +306,10 @@ export function FamilyShareSheet({ open, onClose }: Props) {
                               .map((n, i) => (
                                 <li key={`n-${i}`} style={{ ...memberRow, display: 'block' }}>
                                   <div>📝 {schoolName(n.school_id)}</div>
-                                  <div className="mydata-note" style={{ margin: '2px 0 0' }}>
-                                    {(n.note || n.commute_note).split('\n')[0]}
+                                  <div className="mydata-note saved-school-content" style={{ margin: '2px 0 0' }}>
+                                    {schools.some((school) => school.id === n.school_id)
+                                      ? (n.note || n.commute_note).split('\n')[0]
+                                      : [n.note, n.commute_note].filter(Boolean).join('\n')}
                                   </div>
                                 </li>
                               ))}

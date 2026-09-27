@@ -8,7 +8,7 @@ export function schoolResourceBudget(input = {}) {
   if (!input || typeof input !== 'object' || Array.isArray(input) ||
       Object.keys(input).some((key) => !Object.hasOwn(SCHOOL_DEFAULT_BUDGET, key))) throw new Error('School resource budget rejected')
   const value = { ...SCHOOL_DEFAULT_BUDGET, ...input }
-  const limits = { ...SCHOOL_DEFAULT_BUDGET, maxTotalBytes: 1024 * MiB }
+  const limits = { ...SCHOOL_DEFAULT_BUDGET, maxTotalBytes: 1024 * MiB, maxDecodedBytes: 256 * MiB }
   for (const key of Object.keys(value)) {
     if (!Number.isSafeInteger(value[key]) || value[key] <= 0 || value[key] > limits[key]) throw new Error('School resource budget rejected')
   }

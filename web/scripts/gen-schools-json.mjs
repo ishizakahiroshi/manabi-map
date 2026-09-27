@@ -4,7 +4,7 @@ import { mkdir, readdir, readFile, rm, unlink, writeFile, lstat, open } from 'no
 import { dirname, join, resolve, relative, sep } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { gzipSync, gunzipSync } from 'node:zlib'
-import { buildSchoolPayload, loadSchoolSource, parseSchoolSourceArgs, parseSchoolSnapshot, snapshotToGeneratorRows, canonicalSchoolSourceJSON } from './lib/school-source.mjs'
+import { buildSchoolPayload, loadSchoolSource, parseSchoolSourceArgs, parseSchoolSnapshot, parseObservedSchoolSnapshot, snapshotToGeneratorRows, canonicalSchoolSourceJSON } from './lib/school-source.mjs'
 import { stageSchoolCandidate, checkedFile, checkedOutput, checkedPath } from './lib/school-candidate.mjs'
 import { schoolResourceBudget } from './lib/school-resource-budget.mjs'
 import { verifySchoolProjection } from './lib/school-release-producer.mjs'
@@ -245,7 +245,8 @@ async function writeSchoolFiles(inputRows, publicDir, generatedAt, logger = cons
   await mkdir(publicDir, { recursive: true })
 
   const body = `${JSON.stringify(payload)}\n`
-  const hash = createHash('sha256').update(body).digest('hex').slice(0, 10)
+  const contentSha256 = createHash('sha256').update(body).digest('hex')
+  const hash = contentSha256.slice(0, 10)
   const filename = `schools-${hash}.json.gz`
   const outputPath = join(publicDir, filename)
 
@@ -484,6 +485,8 @@ async function writeSchoolFiles(inputRows, publicDir, generatedAt, logger = cons
 
   for (const row of detailRows) {
     const single = subsetPayload([row])
+    // Keep the generation with the values, including SSR and CDN-cached detail responses.
+    single.contentSha256 = contentSha256
     // 近隣校（距離は raw の double のまま持つ。丸めると静的 HTML の toFixed(1) 表示と
     // 端数の丸め方向がずれうるため、丸めは表示側だけで行う）。
     single.neighbors = selectNeighbors(subjectById.get(row.id), neighborUniverse).map(
@@ -591,6 +594,7 @@ async function writeSchoolFiles(inputRows, publicDir, generatedAt, logger = cons
   const manifest = {
     url: `/${filename}`,
     hash,
+    contentSha256,
     count: rows.length,
     formatVersion: payload.formatVersion,
     compression: 'gzip',
@@ -665,6 +669,25 @@ async function generatorIdentity() {
 // required; this identity is not a complete transitive dependency attestation.
 const loadedGeneratorIdentity = await generatorIdentity()
 
+async function boundedSnapshotFile(path, maximum) {
+  const handle = await open(await checkedFile(path), 'r')
+  try {
+    const before = await handle.stat()
+    if (!before.isFile() || before.size <= 0 || before.size > maximum) throw new Error('Observed snapshot size refused')
+    const bytes = Buffer.alloc(before.size + 1)
+    let used = 0
+    while (used < bytes.length) {
+      const { bytesRead } = await handle.read(bytes, used, bytes.length - used, null)
+      if (!bytesRead) break
+      used += bytesRead
+    }
+    const after = await lstat(await checkedFile(path))
+    if (used !== before.size || after.size !== before.size || after.mtimeMs !== before.mtimeMs ||
+        after.ino !== before.ino || after.dev !== before.dev) throw new Error('Observed snapshot changed')
+    return bytes.subarray(0, used)
+  } finally { await handle.close() }
+}
+
 // Used only by the new external observed writer. Never removes anything and
 // never adopts existing directories except its explicitly owned output root.
 // Node path checks detect ordinary competing writers, not hostile OS-level races.
@@ -723,21 +746,27 @@ function createOnlySchoolIO(root, identity, limits) {
 
 /** Explicit observed source -> private external JSON generation. This does not
  * build HTML/JS, deploy, or turn an observed row capture into a DB transaction.
- * Caller must hold sourceLease across ALL paginated source reads. fetchRows is
- * invoked once; the captured rows and public payload are never fetched again.
+ * Supabase callers must hold sourceLease across ALL paginated source reads.
+ * SQLite snapshot callers provide a verified false-labelled pair instead; that
+ * path never loads credentials or calls fetchRows. Source hashes are rechecked
+ * before completion. Neither source label authenticates who supplied the data.
  * Incomplete output is retained without a completion receipt for diagnosis.
  */
 export async function generateObservedSchoolJSON({ source, fetchRows, outputRoot, generatedAt,
-  sourceLease, candidateRevision, resourceBudget, sourceTimeoutMs = 300000 }) {
+  sourceLease, snapshotPath, manifestPath, candidateRevision, resourceBudget, sourceTimeoutMs = 300000 }) {
   const check = (ok) => { if (!ok) throw new Error('Observed school generation refused') }
-  check(source === 'supabase' && typeof fetchRows === 'function' &&
-    typeof sourceLease === 'string' && /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$/.test(sourceLease) &&
+  const sqlite = source === 'sqlite-snapshot'
+  check((sqlite ? snapshotPath && manifestPath && fetchRows === undefined && sourceLease === undefined :
+    source === 'supabase' && typeof fetchRows === 'function' && snapshotPath === undefined && manifestPath === undefined &&
+    typeof sourceLease === 'string' && /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$/.test(sourceLease)) &&
     /^[a-f0-9]{40}$/.test(candidateRevision) && typeof generatedAt === 'string' &&
     /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?(?:Z|[+-]\d\d:\d\d)$/.test(generatedAt) && Number.isFinite(Date.parse(generatedAt)))
   check(Number.isSafeInteger(sourceTimeoutMs) && sourceTimeoutMs > 0 && sourceTimeoutMs <= 3600000)
   const limits = schoolResourceBudget(resourceBudget)
   // Destination and code checks precede credentials/source access.
-  const output = await checkedOutput(outputRoot, [], repoRoot)
+  const inputs = sqlite ? await Promise.all([snapshotPath, manifestPath].map(checkedFile)) : []
+  check(!sqlite || inputs[0] !== inputs[1])
+  const output = await checkedOutput(outputRoot, inputs, repoRoot)
   check((await generatorIdentity()).sha256 === loadedGeneratorIdentity.sha256)
   await mkdir(output)
   await checkedPath(output)
@@ -753,6 +782,19 @@ export async function generateObservedSchoolJSON({ source, fetchRows, outputRoot
     await io.writeFile(path, bytes)
   }
   try {
+    let sourceIdentity
+    async function selectedRows(signal) {
+      if (!sqlite) return loadSchoolSource({ source, fetchSupabase: () => fetchRows({ signal }) })
+      const [snapshotBytes, manifestBytes] = await Promise.all([
+        boundedSnapshotFile(inputs[0], limits.maxDecodedBytes), boundedSnapshotFile(inputs[1], 65536),
+      ])
+      const snapshot = parseObservedSchoolSnapshot(snapshotBytes, manifestBytes)
+      check(snapshot.tables.schools.every((row) => /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/.test(row.id)))
+      const manifest = JSON.parse(manifestBytes)
+      sourceIdentity = { snapshotSha256: digest(snapshotBytes), manifestSha256: digest(manifestBytes),
+        contentSha256: manifest.content_sha256, datasetVersion: snapshot.dataset_version, sourceVersion: snapshot.source_version }
+      return snapshotToGeneratorRows(snapshot)
+    }
     const controller = new AbortController()
     const sourceDeadline = performance.now() + sourceTimeoutMs
     let timer
@@ -760,7 +802,7 @@ export async function generateObservedSchoolJSON({ source, fetchRows, outputRoot
     try {
       rows = await Promise.race([
         new Promise((_, reject) => { timer = setTimeout(() => { controller.abort(); reject(new Error('Observed source timeout')) }, sourceTimeoutMs) }),
-        Promise.resolve().then(() => loadSchoolSource({ source, fetchSupabase: () => fetchRows({ signal: controller.signal }) })),
+        Promise.resolve().then(() => selectedRows(controller.signal)),
       ])
       check(performance.now() < sourceDeadline && !controller.signal.aborted)
     } finally { clearTimeout(timer); controller.abort() }
@@ -805,9 +847,13 @@ export async function generateObservedSchoolJSON({ source, fetchRows, outputRoot
     // Check every saved byte again before the sole completion marker is written.
     for (const [path, bytes] of files) check((await readFile(await checkedFile(join(publicDir, path)))).equals(bytes))
     check((await readFile(await checkedFile(join(privateDir, 'rows.json')))).equals(captured))
+    if (sqlite) {
+      const current = await Promise.all([boundedSnapshotFile(inputs[0], limits.maxDecodedBytes), boundedSnapshotFile(inputs[1], 65536)])
+      check(digest(current[0]) === sourceIdentity.snapshotSha256 && digest(current[1]) === sourceIdentity.manifestSha256)
+    }
     const artifacts = [...files].map(([path, bytes]) => ({ path, size: bytes.length, sha256: digest(bytes) })).sort((a, b) => a.path.localeCompare(b.path, 'en'))
     const receipt = { format: 'observed-school-json', version: 1, evidence: 'observed', scope: 'school-json-only',
-      generatedAt, candidateRevision, source: { type: source, lease: sourceLease, rowsSha256: digest(captured), rowCount: rows.length },
+      generatedAt, candidateRevision, source: { type: source, ...(sqlite ? sourceIdentity : { lease: sourceLease }), rowsSha256: digest(captured), rowCount: rows.length },
       generatorSnapshotSha256: digest(generatorSnapshot), generator: loadedGeneratorIdentity,
       resourceBudget: limits, artifacts, artifactsSha256: digest(canonicalSchoolSourceJSON(artifacts)), projection }
     await exclusiveFile(join(privateDir, 'generator-payload.json'), generatorSnapshot)
@@ -860,7 +906,7 @@ export async function main(args = process.argv.slice(2)) {
   const explicitSupabase = args.includes('--school-source=supabase')
   const observedFlags = {}
   args = args.filter((arg) => {
-    const match = /^--(generation-time|source-lease|candidate-revision|max-total-bytes)=(.+)$/.exec(arg)
+    const match = /^--(generation-time|source-lease|candidate-revision|max-total-bytes|max-decoded-bytes)=(.+)$/.exec(arg)
     if (!match) return true
     if (Object.hasOwn(observedFlags, match[1])) throw new Error('Duplicate observed generation option')
     observedFlags[match[1]] = match[2]
@@ -869,6 +915,20 @@ export async function main(args = process.argv.slice(2)) {
   const outputArgs = args.filter((arg) => arg.startsWith('--output-root='))
   if (outputArgs.length > 1) throw new Error('Only one output root is allowed')
   const options = parseSchoolSourceArgs(args.filter((arg) => !arg.startsWith('--output-root=')))
+  const resourceBudget = {
+    ...(observedFlags['max-total-bytes'] === undefined ? {} : { maxTotalBytes: Number(observedFlags['max-total-bytes']) }),
+    ...(observedFlags['max-decoded-bytes'] === undefined ? {} : { maxDecodedBytes: Number(observedFlags['max-decoded-bytes']) }),
+  }
+  if (options.source === 'sqlite-snapshot') {
+    if (!outputArgs.length || Object.hasOwn(observedFlags, 'source-lease')) throw new Error('SQLite snapshot generation requires isolated output and no database lease')
+    const receipt = await generateObservedSchoolJSON({ ...options,
+      outputRoot: outputArgs[0].slice('--output-root='.length), generatedAt: observedFlags['generation-time'],
+      candidateRevision: observedFlags['candidate-revision'],
+      resourceBudget })
+    console.log(JSON.stringify({ status: 'generated', scope: receipt.scope, evidence: receipt.evidence,
+      artifactsSha256: receipt.artifactsSha256, artifacts: receipt.artifacts.length }))
+    return receipt
+  }
   if (options.source === 'snapshot') {
     if (Object.keys(observedFlags).length) throw new Error('Observed options cannot relabel a synthetic snapshot')
     const outputRoot = outputArgs[0]?.slice('--output-root='.length)
@@ -882,7 +942,7 @@ export async function main(args = process.argv.slice(2)) {
     const receipt = await generateObservedSchoolJSON({ source: 'supabase', fetchRows: ({ signal }) => fetchSupabaseRows({ signal, quiet: true }),
       outputRoot: outputArgs[0].slice('--output-root='.length), generatedAt: observedFlags['generation-time'],
       sourceLease: observedFlags['source-lease'], candidateRevision: observedFlags['candidate-revision'],
-      resourceBudget: observedFlags['max-total-bytes'] === undefined ? undefined : { maxTotalBytes: Number(observedFlags['max-total-bytes']) } })
+      resourceBudget })
     console.log(JSON.stringify({ status: 'generated', scope: receipt.scope, evidence: receipt.evidence,
       artifactsSha256: receipt.artifactsSha256, artifacts: receipt.artifacts.length }))
     return receipt

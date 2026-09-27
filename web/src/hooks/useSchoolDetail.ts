@@ -8,6 +8,7 @@ import {
   useSchoolsCache,
 } from './useSchools'
 import { getInitialData, type SingleSchoolPayload } from '../lib/initialData'
+import { publicGeneration } from '../lib/schoolAdminIntake'
 
 // 学校詳細の単体データ取得。
 //
@@ -24,8 +25,8 @@ import { getInitialData, type SingleSchoolPayload } from '../lib/initialData'
 // URL は固定パス + `?v=<schoolDataVersion>`（manifest 経由）でキャッシュバストする
 // （public/_headers の /school-data/* immutable とセット）。
 //
-// フォールバック: 単体 JSON が取れない環境（gen 前の dev サーバー・旧デプロイ・
-// VITE_SCHOOLS_SOURCE=supabase）では全件ロード（useSchools と同一キャッシュ）へ落ちる。
+// フォールバック: 単体 JSON が取れない場合は公開の全件 JSON を読む
+// （useSchools と同一キャッシュ）。学校原本の DB へは接続しない。
 
 /** DB の学校 id（UUID 等）以外の文字列を school-data パスへ通さない。 */
 const SCHOOL_ID_PATTERN = /^[0-9a-zA-Z-]+$/
@@ -57,6 +58,7 @@ function toDetail(payload: SingleSchoolPayload, id: string): FetchedDetail {
   }
 
   const extras: SchoolDetailExtras = {
+    publicGeneration: publicGeneration(payload),
     neighbors: (payload.neighbors ?? []).map((neighbor) => ({
       school: {
         id: neighbor.id,
@@ -123,6 +125,7 @@ async function fetchSingleSchool(id: string): Promise<FetchedDetail> {
   // 存在しないファイルが SPA fallback で HTML 200 になる環境でも、
   // JSON.parse 失敗 → throw → 全件フォールバックで拾える。
   const payload = (await response.json()) as SingleSchoolPayload
+  // A cached detail carries its own generation. Never label old values with a newer manifest.
   return toDetail(payload, id)
 }
 

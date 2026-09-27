@@ -7,8 +7,8 @@ import { fileURLToPath } from 'node:url'
 import { spawnSync } from 'node:child_process'
 import test from 'node:test'
 import {
-  SNAPSHOT_COLUMNS, SOURCE_TABLES, REQUIRED_CODE_FILES, buildSchoolPayload, canonicalizeGeneratorRows,
-  canonicalSchoolSourceJSON, loadSchoolSource, parseSchoolSnapshot,
+  SNAPSHOT_COLUMNS, SOURCE_TABLES, REQUIRED_CODE_FILES, LIVE_CODE_FILES, buildSchoolPayload, canonicalizeGeneratorRows,
+  canonicalSchoolSourceJSON, loadSchoolSource, parseSchoolSnapshot, parseObservedSchoolSnapshot,
   parseSchoolSourceArgs, snapshotToGeneratorRows,
 } from './school-source.mjs'
 import { buildPublicSchoolRecords } from './public-api.mjs'
@@ -50,11 +50,11 @@ function fixture() {
   tables.school_admission_stat_sources = [1, 3].flatMap((n) => ['capacity', 'applicants'].map((metric) => row('school_admission_stat_sources', { stat_id: id(60 + n), fact_kind_code: metric, official_url: 'https://school.example.test/admission', quoted_evidence: '合成引用', last_http_status: 200 })))
   return { format: 'school-source-snapshot', format_version: 1, schema_version: 3, synthetic: true, dataset_version: 'synthetic-v1', source_version: 'synthetic-source-v1', tables }
 }
-function pair(snapshot) {
+function pair(snapshot, observed = false) {
   const bytes = Buffer.from(`${JSON.stringify(snapshot, null, 2)}\n`)
-  const files = REQUIRED_CODE_FILES.map((path) => ({ path, sha256: hash('synthetic-code') }))
+  const files = (observed ? LIVE_CODE_FILES : REQUIRED_CODE_FILES).map((path) => ({ path, sha256: hash('synthetic-code') }))
   const manifest = {
-    format: 'school-source-manifest', format_version: 1, schema_version: 3, synthetic: true,
+    format: 'school-source-manifest', format_version: 1, schema_version: 3, synthetic: !observed,
     dataset_version: snapshot.dataset_version, source_version: snapshot.source_version,
     created_at: '2026-09-27T00:00:00+00:00',
     table_counts: Object.fromEntries(SOURCE_TABLES.map((table) => [table, snapshot.tables[table]?.length ?? 0])),
@@ -122,6 +122,34 @@ test('explicit source parsing rejects ambiguity, missing pair, duplicates and un
   for (const args of [[], ['--school-source=other'], ['--school-source=snapshot'], ['--school-source=supabase', '--snapshot=a'], ['--school-source=supabase', '--school-source=supabase'], ['--school-source=supabase', '--unknown=x']]) assert.throws(() => parseSchoolSourceArgs(args))
   assert.equal(parseSchoolSourceArgs(['--school-source=supabase']).source, 'supabase')
   assert.equal(parseSchoolSourceArgs(['--school-source=snapshot', '--snapshot=a', '--snapshot-manifest=b']).snapshotPath, 'a')
+  assert.equal(parseSchoolSourceArgs(['--school-source=sqlite-snapshot', '--snapshot=a', '--snapshot-manifest=b']).source, 'sqlite-snapshot')
+  assert.throws(() => parseSchoolSourceArgs(['--school-source=sqlite-snapshot']))
+})
+
+test('observed parser accepts only the explicit false-labelled contract using invented synthetic rows', () => {
+  // Invented fixture values exercise the live wire format; no real source data.
+  const snapshot = fixture()
+  snapshot.synthetic = false
+  const observed = pair(snapshot, true)
+  assert.equal(LIVE_CODE_FILES.length, 16)
+  assert.deepEqual(parseObservedSchoolSnapshot(observed.bytes, observed.manifestBytes), snapshot)
+  assert.throws(() => parseSchoolSnapshot(observed.bytes, observed.manifestBytes), /synthetic scope/)
+  const original = pair(fixture())
+  assert.throws(() => parseObservedSchoolSnapshot(original.bytes, original.manifestBytes), /synthetic scope/)
+  for (const change of [
+    (m) => { m.synthetic = true },
+    (m) => { m.code.files.pop(); m.code.sha256 = hash(canonicalSchoolSourceJSON(m.code.files)) },
+    (m) => { m.code.files.push({ path: 'scripts/unknown.py', sha256: hash('invented') }); m.code.sha256 = hash(canonicalSchoolSourceJSON(m.code.files)) },
+    (m) => { m.snapshot_sha256 = '0'.repeat(64) },
+    (m) => { m.table_counts.schools++ },
+  ]) {
+    const manifest = structuredClone(observed.manifest); change(manifest)
+    assert.throws(() => parseObservedSchoolSnapshot(observed.bytes, Buffer.from(JSON.stringify(manifest))))
+  }
+  const privateSnapshot = structuredClone(snapshot)
+  privateSnapshot.tables.schools[0].status_note = 'invented private note'
+  const invalid = pair(privateSnapshot, true)
+  assert.throws(() => parseObservedSchoolSnapshot(invalid.bytes, invalid.manifestBytes), /columns differ/)
 })
 
 test('local input and failed local input never invoke a network/env loader', async () => {

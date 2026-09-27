@@ -4,13 +4,14 @@ import { shortSchoolName } from '../lib/format'
 import { formatHomeCoordinates, useApp } from '../contexts/AppContext'
 import { useAuth } from '../contexts/AuthContext'
 import { useI18n } from '../contexts/I18nContext'
-import { useFormat } from '../hooks/useFormat'
 import { useSchools } from '../hooks/useSchools'
 import type { useUserData } from '../hooks/useUserData'
 import { FamilyShareSheet } from '../components/FamilyShareSheet'
 import { SiteMoveGuestNotice } from '../components/SiteMoveNotice'
 import { countMyData } from '../lib/export'
 import './MyPage.css'
+import { savedSchoolEntries, savedDepartmentValues } from '../lib/saved-school-references'
+import { SavedSchoolReference } from '../components/SavedSchoolReference'
 
 interface Props {
   userData: ReturnType<typeof useUserData>
@@ -20,30 +21,26 @@ interface Props {
 
 export function MyPage({ userData, favCount, noteCount }: Props) {
   const navigate = useNavigate()
-  const { schools } = useSchools()
+  const { schools, loading: schoolsLoading, error: schoolsError } = useSchools()
   const { home, homeLoadState, setLoginOpen, toast } = useApp()
   const { session, kind, displayName, signOut } = useAuth()
   const { t } = useI18n()
-  const fmt = useFormat()
   const { notes, mine, deleteNote, deleteMine } = userData
   const [familyOpen, setFamilyOpen] = useState(false)
 
   const noteSchools = useMemo(
     () =>
-      schools
-        .filter((s) => notes[s.id]?.note || notes[s.id]?.commute_note)
-        .sort((a, b) => shortSchoolName(a.name, a).localeCompare(shortSchoolName(b.name, b), 'ja')),
+      savedSchoolEntries(schools, notes)
+        .filter(({ record }) => record.note || record.commute_note)
+        .sort((a, b) => (a.school ? shortSchoolName(a.school.name, a.school) : a.id).localeCompare(b.school ? shortSchoolName(b.school.name, b.school) : b.id, 'ja')),
     [schools, notes],
   )
 
   const mineSchools = useMemo(
     () =>
-      schools
-        .filter((s) => {
-          const record = mine[s.id]
-          return !!record && (record.note.trim() !== '' || Object.values(record.depts).some((v) => v != null))
-        })
-        .sort((a, b) => shortSchoolName(a.name, a).localeCompare(shortSchoolName(b.name, b), 'ja')),
+      savedSchoolEntries(schools, mine)
+        .filter(({ record }) => record.note.trim() !== '' || Object.values(record.depts).some((v) => v != null))
+        .sort((a, b) => (a.school ? shortSchoolName(a.school.name, a.school) : a.id).localeCompare(b.school ? shortSchoolName(b.school.name, b.school) : b.id, 'ja')),
     [schools, mine],
   )
 
@@ -183,25 +180,28 @@ export function MyPage({ userData, favCount, noteCount }: Props) {
           ) : noteSchools.length === 0 ? (
             <p className="mypage-empty">{t('mypage.notesEmpty')}</p>
           ) : (
-            noteSchools.map((s) => {
-              const note = notes[s.id]
-              const text = (note?.note || note?.commute_note || '').split('\n')[0]
-              const schoolName = shortSchoolName(s.name, s)
+            noteSchools.map(({ id, school: s, record: note }) => {
+              const text = s ? (note.note || note.commute_note || '').split('\n')[0] : [note.note, note.commute_note].filter(Boolean).join('\n')
+              const schoolName = s ? shortSchoolName(s.name, s) : t('savedSchool.unavailable')
               return (
-                <article className="mypage-card mypage-note-card" key={s.id}>
-                  <button
+                <article className="mypage-card mypage-note-card" key={id}>
+                  {s ? <button
                     type="button"
                     className="mypage-card-main"
                     onClick={() => navigate(`/school/${s.id}`)}
                   >
                     <b>{schoolName}</b>
                     <small>{text}</small>
-                  </button>
+                  </button> : <div className="mypage-card-main saved-school-unavailable">
+                    <b>{schoolName}</b>
+                    <SavedSchoolReference id={id} loading={schoolsLoading} error={schoolsError} />
+                    <small className="saved-school-content">{text}</small>
+                  </div>}
                   <button
                     type="button"
                     className="mypage-card-delete"
-                    aria-label={t('mypage.deleteNote', { school: schoolName })}
-                    onClick={() => void handleDeleteNote(s.id, schoolName)}
+                    aria-label={t('mypage.deleteNote', { school: s ? schoolName : `${schoolName} (${id})` })}
+                    onClick={() => void handleDeleteNote(id, s ? schoolName : `${schoolName} (${id})`)}
                   >
                     <span aria-hidden="true">🗑️</span>
                   </button>
@@ -218,29 +218,34 @@ export function MyPage({ userData, favCount, noteCount }: Props) {
           ) : mineSchools.length === 0 ? (
             <p className="mypage-empty">{t('mypage.mineEmpty')}</p>
           ) : (
-            mineSchools.map((s) => {
-              const record = mine[s.id]
-              const values = s.departments
-                .map((d) => [d.name, record?.depts[d.id]] as const)
-                .filter(([, value]) => value != null)
-                .map(([name, value]) => `${name}: ${value}`)
+            mineSchools.map(({ id, school: s, record }) => {
+              const departmentValues = savedDepartmentValues(s, record)
+              const hasUnavailableDepartment = departmentValues.some(({ name }) => name === undefined)
+              const values = departmentValues
+                .map(({ id: departmentId, name, value }) => `${name ?? t('savedSchool.department', { id: departmentId })}: ${value}`)
                 .join(' / ')
-              const schoolName = shortSchoolName(s.name, s)
+              const schoolName = s ? shortSchoolName(s.name, s) : t('savedSchool.unavailable')
               return (
-                <article className="mypage-card mypage-mine-card" key={s.id}>
-                  <button
+                <article className="mypage-card mypage-mine-card" key={id}>
+                  {s ? <button
                     type="button"
                     className="mypage-card-main"
                     onClick={() => navigate(`/school/${s.id}`)}
                   >
                     <b>{schoolName}</b>
-                    <small>{values || record?.note || fmt.displayCode(s)}</small>
-                  </button>
+                    <small className={hasUnavailableDepartment ? 'saved-school-content' : undefined}>{values || record.note}</small>
+                    {hasUnavailableDepartment && record.note && <small className="saved-school-content">{record.note}</small>}
+                  </button> : <div className="mypage-card-main saved-school-unavailable">
+                    <b>{schoolName}</b>
+                    <SavedSchoolReference id={id} loading={schoolsLoading} error={schoolsError} />
+                    {values && <small className="saved-school-content">{values}</small>}
+                    {record.note && <small className="saved-school-content">{record.note}</small>}
+                  </div>}
                   <button
                     type="button"
                     className="mypage-card-delete"
-                    aria-label={t('mypage.deleteMine', { school: schoolName })}
-                    onClick={() => void handleDeleteMine(s.id, schoolName)}
+                    aria-label={t('mypage.deleteMine', { school: s ? schoolName : `${schoolName} (${id})` })}
+                    onClick={() => void handleDeleteMine(id, s ? schoolName : `${schoolName} (${id})`)}
                   >
                     <span aria-hidden="true">🗑️</span>
                   </button>

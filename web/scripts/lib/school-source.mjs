@@ -37,6 +37,9 @@ export const REQUIRED_CODE_FILES = [
   'web/src/lib/school-select.ts', 'web/scripts/lib/public-api.mjs',
   'web/src/lib/mapPayload.ts', 'web/src/lib/admissionUnits.ts', 'web/src/lib/admission.ts',
 ]
+// The live exporter is an explicit additional code identity, never a reason to
+// relax the original synthetic parser or its exact manifest inventory.
+export const LIVE_CODE_FILES = [...REQUIRED_CODE_FILES, 'scripts/local-data/school_live_source.py'].sort()
 
 function requireValue(condition, message) {
   if (!condition) throw new Error(`Invalid school source: ${message}`)
@@ -108,13 +111,22 @@ function validateProjectedValue(column, value) {
 
 /** Validate the complete pair before exposing any rows. No fallback on failure. */
 export function parseSchoolSnapshot(snapshotBytes, manifestBytes) {
+  return parseSnapshotPair(snapshotBytes, manifestBytes, true, REQUIRED_CODE_FILES)
+}
+
+/** Explicit live-source contract. This label is not proof of production origin. */
+export function parseObservedSchoolSnapshot(snapshotBytes, manifestBytes) {
+  return parseSnapshotPair(snapshotBytes, manifestBytes, false, LIVE_CODE_FILES)
+}
+
+function parseSnapshotPair(snapshotBytes, manifestBytes, synthetic, requiredCodeFiles) {
   const snapshot = parseStrictJSON(snapshotBytes)
   const manifest = parseStrictJSON(manifestBytes)
   exactKeys(snapshot, ['format', 'format_version', 'schema_version', 'synthetic', 'dataset_version', 'source_version', 'tables'], 'snapshot')
   exactKeys(manifest, ['format', 'format_version', 'schema_version', 'synthetic', 'dataset_version', 'source_version', 'created_at', 'table_counts', 'content_sha256', 'snapshot_sha256', 'code'], 'manifest')
   requireValue(snapshot.format === 'school-source-snapshot' && manifest.format === 'school-source-manifest', 'format')
   for (const object of [snapshot, manifest]) {
-    requireValue(object.format_version === 1 && object.schema_version === 3 && object.synthetic === true, 'version or synthetic scope')
+    requireValue(object.format_version === 1 && object.schema_version === 3 && object.synthetic === synthetic, 'version or synthetic scope')
     for (const key of ['dataset_version', 'source_version']) {
       requireValue(typeof object[key] === 'string' && object[key].trim().length > 0, key)
       requireValue(object[key] === snapshot[key], `${key} mismatch`)
@@ -132,7 +144,7 @@ export function parseSchoolSnapshot(snapshotBytes, manifestBytes) {
     requireValue(!codePaths.has(file.path), 'duplicate code file')
     codePaths.add(file.path)
   }
-  requireValue(codePaths.size === REQUIRED_CODE_FILES.length && REQUIRED_CODE_FILES.every((path) => codePaths.has(path)), 'code files differ')
+  requireValue(codePaths.size === requiredCodeFiles.length && requiredCodeFiles.every((path) => codePaths.has(path)), 'code files differ')
   requireValue(isHash(manifest.code.sha256) && digest(canonicalSchoolSourceJSON(manifest.code.files)) === manifest.code.sha256, 'code hash')
   exactKeys(manifest.table_counts, SOURCE_TABLES, 'table_counts')
   for (const count of Object.values(manifest.table_counts)) requireValue(Number.isSafeInteger(count) && count >= 0, 'table count')
@@ -248,8 +260,8 @@ export function parseSchoolSourceArgs(args) {
     options[match[1]] = match[2]
   }
   const source = options['school-source']
-  requireValue(source === 'snapshot' || source === 'supabase', 'explicit --school-source required')
-  if (source === 'snapshot') requireValue(options.snapshot && options['snapshot-manifest'], 'snapshot pair required')
+  requireValue(['snapshot', 'sqlite-snapshot', 'supabase'].includes(source), 'explicit --school-source required')
+  if (source !== 'supabase') requireValue(options.snapshot && options['snapshot-manifest'], 'snapshot pair required')
   else requireValue(!options.snapshot && !options['snapshot-manifest'], 'snapshot paths with supabase')
   return { source, snapshotPath: options.snapshot, manifestPath: options['snapshot-manifest'] }
 }

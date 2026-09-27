@@ -14,11 +14,15 @@ test('complete large generations require an explicit finite budget; no per-file 
   assert.throws(() => checkSchoolFileBudget(files, { ...budget, maxFileBytes: MiB }))
   assert.throws(() => checkSchoolFileBudget(files, { ...budget, maxTotalBytes: 256 * MiB }))
 })
-test('budgets reject unbounded, unknown or widened non-total limits', () => {
+test('budgets reject unbounded, unknown or excessive limits', () => {
   for (const value of [{ maxTotalBytes: Infinity }, { maxTotalBytes: 1024 * MiB + 1 }, { maxFiles: 20001 },
-    { maxFileBytes: 26 * MiB }, { maxDecodedBytes: 65 * MiB }, { maxTotalBytes: -1 }, { unknown: 1 }, null]) {
+    { maxFileBytes: 26 * MiB }, { maxDecodedBytes: 256 * MiB + 1 }, { maxDecodedBytes: Infinity }, { maxTotalBytes: -1 }, { unknown: 1 }, null]) {
     assert.throws(() => schoolResourceBudget(value))
   }
   assert.equal(sameSchoolBudget({}, schoolResourceBudget()), true)
   assert.equal(sameSchoolBudget({}, { maxTotalBytes: 768 * MiB }), false)
+  assert.equal(schoolResourceBudget().maxDecodedBytes, 64 * MiB)
+  assert.equal(schoolResourceBudget({ maxDecodedBytes: 256 * MiB }).maxDecodedBytes, 256 * MiB)
+  assert.equal(schoolResourceBudget({ maxTotalBytes: 1024 * MiB }).maxDecodedBytes, 64 * MiB)
+  assert.equal(sameSchoolBudget({}, { maxDecodedBytes: 128 * MiB }), false)
 })

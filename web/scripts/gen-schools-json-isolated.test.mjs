@@ -10,23 +10,24 @@ import { gunzipSync } from 'node:zlib'
 import test from 'node:test'
 import { generateSchoolCandidate, generateObservedSchoolJSON, observedSourceFetch, main } from './gen-schools-json.mjs'
 import { checkedPath, stageSchoolCandidate, verifySchoolCandidate } from './lib/school-candidate.mjs'
-import { SNAPSHOT_COLUMNS, SOURCE_TABLES, REQUIRED_CODE_FILES, canonicalSchoolSourceJSON, snapshotToGeneratorRows, buildSchoolPayload } from './lib/school-source.mjs'
+import { SNAPSHOT_COLUMNS, SOURCE_TABLES, REQUIRED_CODE_FILES, LIVE_CODE_FILES, canonicalSchoolSourceJSON, parseObservedSchoolSnapshot, snapshotToGeneratorRows, buildSchoolPayload } from './lib/school-source.mjs'
 import { buildMapPayload } from '../src/lib/mapPayload.ts'
 const webRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..'), repoRoot = dirname(webRoot)
 const hash = (bytes) => createHash('sha256').update(bytes).digest('hex')
 const fixedDate = '2026-09-27T00:00:00+00:00'
-async function fixture(root, change = () => {}) {
+async function fixture(root, change = () => {}, observed = false) {
   const source = JSON.parse(await fs.readFile(join(repoRoot, 'scripts/local-data/example.school.synthetic.json'), 'utf8'))
   const tables = Object.fromEntries(Object.entries(SNAPSHOT_COLUMNS).map(([table, columns]) => [table, source.tables[table].map((row) => Object.fromEntries(columns.map((column) => [column, row[column] ?? null])))]))
   for (const school of tables.schools) {
     school.prefecture = '東京都'; school.city = '千代田区'; school.address = '東京都千代田区 合成住所'
     for (const field of ['latitude', 'longitude']) if (school[field] !== null) school[field] = Number(school[field])
   }
-  const snapshot = { format: 'school-source-snapshot', format_version: 1, schema_version: 3, synthetic: true, dataset_version: source.dataset_version, source_version: source.source_version, tables }
+  // All rows remain invented synthetic data, even when exercising the live wire format.
+  const snapshot = { format: 'school-source-snapshot', format_version: 1, schema_version: 3, synthetic: !observed, dataset_version: source.dataset_version, source_version: source.source_version, tables }
   change(snapshot)
   const bytes = Buffer.from(`${JSON.stringify(snapshot, null, 2)}\n`)
-  const files = REQUIRED_CODE_FILES.map((path) => ({ path, sha256: hash('explicitly synthetic exporter identity') }))
-  const manifest = { format: 'school-source-manifest', format_version: 1, schema_version: 3, synthetic: true,
+  const files = (observed ? LIVE_CODE_FILES : REQUIRED_CODE_FILES).map((path) => ({ path, sha256: hash('explicitly synthetic exporter identity') }))
+  const manifest = { format: 'school-source-manifest', format_version: 1, schema_version: 3, synthetic: !observed,
     dataset_version: snapshot.dataset_version, source_version: snapshot.source_version, created_at: fixedDate,
     table_counts: Object.fromEntries(SOURCE_TABLES.map((table) => [table, snapshot.tables[table]?.length ?? source.tables[table]?.length ?? 0])),
     content_sha256: hash(canonicalSchoolSourceJSON(snapshot)), snapshot_sha256: hash(bytes), code: { identity: 'sha256', files, sha256: hash(canonicalSchoolSourceJSON(files)) } }
@@ -182,6 +183,136 @@ test('case-variant UUIDs and uppercase inactive predecessors are rejected before
 const observedOptions = (outputRoot, fetchRows) => ({ source: 'supabase', fetchRows, outputRoot,
   generatedAt: fixedDate, sourceLease: 'synthetic-exclusive-source-lease', candidateRevision: 'c'.repeat(40) })
 
+const sqliteOptions = (outputRoot, input) => ({ source: 'sqlite-snapshot', snapshotPath: input.snapshotPath,
+  manifestPath: input.manifestPath, outputRoot, generatedAt: fixedDate, candidateRevision: 'c'.repeat(40) })
+
+test('real Python import/export interoperates with JavaScript observed generation using only invented source rows', async (t) => {
+  const root = await temporary(t)
+  const code = `
+import hashlib, sqlite3, sys
+from decimal import Decimal
+from pathlib import Path
+sys.path.insert(0, sys.argv[1])
+import school_live_source as live
+import store_school
+from test_school_live_source import invented_capture
+root = Path(sys.argv[2]).resolve()
+capture = invented_capture()
+for row in capture['tables']['schools']:
+    row['prefecture'] = '東京都'
+    row['city'] = '千代田区'
+    row['address'] = '東京都千代田区 合成住所'
+capture['tables']['schools'][0]['latitude'] = Decimal('35.1234567')
+capture['tables']['schools'][0]['record_key'] = 'fixture-school-key-A'
+capture['tables']['school_departments'][0]['record_key'] = 'fixture-department-key-A'
+raw = (store_school.canonical_json(capture) + '\\n').encode('utf-8')
+input_path = root / 'invented-capture.json'
+input_path.write_bytes(raw)
+receipt = live.import_capture(input_path, root / 'invented-source.sqlite', input_sha256=hashlib.sha256(raw).hexdigest(), apply=True)
+with sqlite3.connect(root / 'invented-source.sqlite') as db:
+    assert db.execute("SELECT count(*) FROM school_departments WHERE record_key='fixture-department-key-A'").fetchone()[0] == 1
+live.export_snapshot(root / 'invented-source.sqlite', root / 'bundle', expected_source_sha256=receipt['source_content_sha256'], apply=True)
+live.verify_bundle(root / 'bundle')
+print('invented-python-roundtrip-complete')
+`
+  const result = spawnSync(process.env.PYTHON || 'python', ['-B', '-c', code, join(repoRoot, 'scripts/local-data'), root],
+    { cwd: repoRoot, encoding: 'utf8', timeout: 30000 })
+  assert.equal(result.status, 0, result.stderr || result.error?.message)
+  assert.equal(result.stdout.trim(), 'invented-python-roundtrip-complete')
+  const input = { snapshotPath: join(root, 'bundle/snapshot.json'), manifestPath: join(root, 'bundle/manifest.json') }
+  const snapshot = parseObservedSchoolSnapshot(await fs.readFile(input.snapshotPath), await fs.readFile(input.manifestPath))
+  assert.equal(snapshot.synthetic, false)
+  assert.equal(Object.keys(snapshot.tables).length, 13)
+  assert.ok(snapshot.tables.schools.some((row) => row.latitude === 35.1234567))
+  assert.ok(snapshot.tables.schools.some((row) => row.record_key === 'fixture-school-key-A'))
+  assert.ok(snapshot.tables.school_departments.every((row) => !Object.hasOwn(row, 'record_key')))
+  assert.ok(snapshot.tables.schools.every((row) => !Object.hasOwn(row, 'status_note')))
+  t.mock.method(globalThis, 'fetch', () => { throw new Error('network forbidden') })
+  const output = join(root, 'generated')
+  const receipt = await generateObservedSchoolJSON(sqliteOptions(output, input))
+  assert.equal(receipt.source.type, 'sqlite-snapshot')
+  assert.equal(receipt.source.rowCount, snapshot.tables.schools.filter((row) => row.is_active).length)
+  assert.equal(receipt.generatorSnapshotSha256,
+    hash(Buffer.from(`${JSON.stringify(buildSchoolPayload(snapshotToGeneratorRows(snapshot)))}\n`)))
+  const payload = JSON.parse(await fs.readFile(join(output, 'private-source/generator-payload.json')))
+  assert.ok(payload.schools.some((row) => row.record_key === 'fixture-school-key-A'))
+  assert.equal(receipt.evidence, 'observed') // Format exercised by synthetic data, not real acceptance.
+})
+
+test('invented false-labelled SQLite pair emits the exact same public files as the frozen row input without env or fetch', async (t) => {
+  const root = await temporary(t), input = await fixture(root, () => {}, true)
+  const output = join(root, 'sqlite'), reference = join(root, 'reference')
+  const originalRead = fs.readFile
+  t.mock.method(fs, 'readFile', async (path, ...args) => {
+    assert.ok(!/(?:^|[\\/])\.env(?:\.|$)/.test(String(path)), 'env must not be read')
+    return originalRead(path, ...args)
+  })
+  syncBuiltinESMExports()
+  t.after(() => { t.mock.restoreAll(); syncBuiltinESMExports() })
+  t.mock.method(globalThis, 'fetch', () => { throw new Error('network forbidden') })
+  const receipt = await generateObservedSchoolJSON(sqliteOptions(output, input))
+  const rows = snapshotToGeneratorRows(input.snapshot)
+  const other = await generateObservedSchoolJSON(observedOptions(reference, async () => rows))
+  assert.equal(receipt.source.type, 'sqlite-snapshot')
+  assert.ok(!Object.hasOwn(receipt.source, 'lease'))
+  assert.equal(receipt.source.snapshotSha256, hash(await fs.readFile(input.snapshotPath)))
+  assert.equal(receipt.source.manifestSha256, hash(await fs.readFile(input.manifestPath)))
+  assert.equal(receipt.source.rowsSha256, other.source.rowsSha256)
+  assert.equal(receipt.generatorSnapshotSha256, other.generatorSnapshotSha256)
+  assert.deepEqual(receipt.artifacts, other.artifacts)
+  for (const { path } of receipt.artifacts) assert.deepEqual(await fs.readFile(join(output, 'public-data', path)), await fs.readFile(join(reference, 'public-data', path)))
+  await assert.rejects(generateSchoolCandidate({ ...input, outputRoot: join(root, 'not-synthetic') }))
+  await missing(join(root, 'not-synthetic'))
+})
+
+test('SQLite observed input scope, mode mixing, containment and byte limits fail closed', async (t) => {
+  const root = await temporary(t), input = await fixture(root, () => {}, true)
+  t.mock.method(globalThis, 'fetch', () => { throw new Error('network forbidden') })
+  for (const extra of [{ fetchRows: async () => [] }, { sourceLease: 'not-a-db-lease' },
+    { snapshotPath: undefined }, { manifestPath: input.snapshotPath },
+    { outputRoot: join(dirname(input.snapshotPath), 'nested-output') }, { outputRoot: join(webRoot, 'forbidden') }]) {
+    await assert.rejects(generateObservedSchoolJSON({ ...sqliteOptions(join(root, 'fresh'), input), ...extra }))
+  }
+  await missing(join(root, 'fresh'))
+  const small = join(root, 'small')
+  await assert.rejects(generateObservedSchoolJSON({ ...sqliteOptions(small, input), resourceBudget: { maxDecodedBytes: 1 } }))
+  await missing(join(small, 'observed-generation.json'))
+  const manifest = JSON.parse(await fs.readFile(input.manifestPath)); manifest.synthetic = true
+  await fs.writeFile(input.manifestPath, JSON.stringify(manifest))
+  const mismatch = join(root, 'mismatch')
+  await assert.rejects(generateObservedSchoolJSON(sqliteOptions(mismatch, input)))
+  await missing(join(mismatch, 'observed-generation.json'))
+})
+
+test('SQLite input mutation during writing leaves no completion receipt', async (t) => {
+  const root = await temporary(t), input = await fixture(root, () => {}, true), output = join(root, 'changed')
+  const originalOpen = fs.open
+  t.mock.method(fs, 'open', async (path, ...args) => {
+    if (path === join(output, 'private-source/rows.json')) await fs.appendFile(input.snapshotPath, ' ')
+    return originalOpen(path, ...args)
+  })
+  syncBuiltinESMExports()
+  t.after(() => { t.mock.restoreAll(); syncBuiltinESMExports() })
+  await assert.rejects(generateObservedSchoolJSON(sqliteOptions(output, input)))
+  await missing(join(output, 'observed-generation.json'))
+})
+
+test('SQLite CLI requires external output and explicit generation identity', async (t) => {
+  const root = await temporary(t), input = await fixture(root, () => {}, true), output = join(root, 'cli')
+  const args = ['--school-source=sqlite-snapshot', `--snapshot=${input.snapshotPath}`, `--snapshot-manifest=${input.manifestPath}`]
+  for (const options of [args, [...args, `--output-root=${output}`], [...args, `--output-root=${output}`, '--source-lease=forbidden']]) {
+    const result = cli(...options)
+    assert.equal(result.status, 1); assert.equal(result.stdout, ''); assert.ok(!result.stderr.includes(root))
+    await missing(output)
+  }
+  const result = cli(...args, `--output-root=${output}`, `--generation-time=${fixedDate}`, `--candidate-revision=${'c'.repeat(40)}`,
+    '--max-decoded-bytes=268435456')
+  assert.equal(result.status, 0, result.stderr)
+  assert.equal(JSON.parse(result.stdout).evidence, 'observed')
+  assert.equal(JSON.parse(await fs.readFile(join(output, 'observed-generation.json'))).source.type, 'sqlite-snapshot')
+  assert.equal(JSON.parse(await fs.readFile(join(output, 'observed-generation.json'))).resourceBudget.maxDecodedBytes, 268435456)
+})
+
 test('observed generation captures once into external private/public siblings and proves the public projection', async (t) => {
   const root = await temporary(t), input = await fixture(root), output = join(root, 'observed')
   const publicBefore = await fs.stat(join(webRoot, 'public')), names = await fs.readdir(join(webRoot, 'public'))
@@ -193,6 +324,15 @@ test('observed generation captures once into external private/public siblings an
   assert.equal(receipt.generatorSnapshotSha256, hash(await fs.readFile(join(output, 'private-source/generator-payload.json'))))
   const manifest = JSON.parse(await fs.readFile(join(output, 'public-data/schools-manifest.json')))
   assert.equal(manifest.generatedAt, fixedDate)
+  assert.equal(manifest.contentSha256, receipt.generatorSnapshotSha256)
+  assert.equal(manifest.hash, manifest.contentSha256.slice(0, 10))
+  assert.equal(manifest.schoolDataVersion, manifest.hash)
+  const detailFiles = receipt.artifacts.filter(entry => /^school-data\/[0-9a-f-]{36}\.json$/.test(entry.path))
+  assert.ok(detailFiles.length > 0)
+  for (const entry of detailFiles) {
+    const detail = JSON.parse(await fs.readFile(join(output, 'public-data', entry.path)))
+    assert.equal(detail.contentSha256, manifest.contentSha256)
+  }
   assert.equal(receipt.projection.publicRecords, rows.filter((row) => row.official_url).length)
   assert.ok(receipt.artifacts.every((entry) => !entry.path.startsWith('private-source') && !entry.path.includes('rows.json')))
   for (const entry of receipt.artifacts) assert.equal(hash(await fs.readFile(join(output, 'public-data', entry.path))), entry.sha256)

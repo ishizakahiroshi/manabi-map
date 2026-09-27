@@ -1,0 +1,5 @@
+.saved-school-reference { display: block; font-size: .82rem; color: var(--ink-soft); }
+.saved-school-reference > span { display: block; }
+.saved-school-reference, .saved-school-content { overflow-wrap: anywhere; white-space: pre-wrap; }
+.fav-card-main.saved-school-unavailable, .mypage-card-main.saved-school-unavailable { cursor: default; }
+.mypage-card small.saved-school-content { overflow: visible; white-space: pre-wrap; }

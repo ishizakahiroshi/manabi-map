@@ -5,6 +5,9 @@ import { LineChart } from '../components/dashboard/LineChart'
 import { HBarList } from '../components/dashboard/HBarList'
 import { supabase } from '../lib/supabase'
 import { useMaintenanceMode } from '../hooks/useMaintenanceMode'
+import { useSchools } from '../hooks/useSchools'
+import { useI18n } from '../contexts/I18nContext'
+import { SavedSchoolReference } from '../components/SavedSchoolReference'
 import type { AdminCoverage, AdminDims, AdminReferer, MaintenanceState, Ranked, Report, ReportStatus, Summary } from '../types/admin'
 
 const fmt = (value: number | null) => value == null ? '—' : value.toLocaleString('ja-JP')
@@ -44,6 +47,8 @@ function ReportsPanel() {
   const { session } = useAuth()
   const { toast } = useApp()
   const { isOn: maintenanceMode } = useMaintenanceMode()
+  const { schools, loading: schoolsLoading, error: schoolsError } = useSchools()
+  const { t } = useI18n()
   const [reports, setReports] = useState<Report[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(false)
@@ -64,27 +69,8 @@ function ReportsPanel() {
         .limit(200)
       if (reportError) throw reportError
       const rows = (data ?? []) as Report[]
-      const schoolIds = [...new Set(rows.map((row) => row.school_id))]
-      const departmentIds = [...new Set(rows.map((row) => row.department_id).filter((id): id is string => Boolean(id)))]
-      const [schools, departments] = await Promise.all([
-        schoolIds.length > 0
-          ? supabase.from('schools').select('id, name').in('id', schoolIds)
-          : Promise.resolve({ data: [], error: null }),
-        departmentIds.length > 0
-          ? supabase.from('school_departments').select('id, name').in('id', departmentIds)
-          : Promise.resolve({ data: [], error: null }),
-      ])
-      if (schools.error) throw schools.error
-      if (departments.error) throw departments.error
-      const schoolNames = new Map((schools.data ?? []).map((row) => [row.id, row.name]))
-      const departmentNames = new Map((departments.data ?? []).map((row) => [row.id, row.name]))
-      const enriched = rows.map((row) => ({
-        ...row,
-        school_name: schoolNames.get(row.school_id),
-        department_name: row.department_id ? departmentNames.get(row.department_id) : undefined,
-      }))
       if (!cancelled) {
-        setReports(enriched)
+        setReports(rows)
         setError(false)
       }
     })().catch(() => {
@@ -132,12 +118,16 @@ function ReportsPanel() {
               <tr><th>受付日時</th><th>学校 / 項目</th><th>提供値</th><th>出典・補足</th><th>状態</th><th>操作</th></tr>
             </thead>
             <tbody>
-              {reports.map((report) => (
+              {reports.map((report) => {
+                const school = schools.find((entry) => entry.id === report.school_id)
+                const department = school?.departments.find((entry) => entry.id === report.department_id)
+                return (
                 <tr key={report.id}>
                   <td>{new Date(report.created_at).toLocaleString('ja-JP')}</td>
                   <td>
-                    <b>{report.school_name ?? report.school_id}</b>
-                    <small>{report.department_name ? `${report.department_name} / ` : ''}{reportFieldLabel(report.field)}</small>
+                    <b>{school?.name ?? t('savedSchool.unavailable')}</b>
+                    {!school && <SavedSchoolReference id={report.school_id} loading={schoolsLoading} error={schoolsError} />}
+                    <small>{report.department_id ? `${department?.name ?? t('savedSchool.department', { id: report.department_id })} / ` : ''}{reportFieldLabel(report.field)}</small>
                   </td>
                   <td className="dashboard-report-value">{report.proposed_value}</td>
                   <td>
@@ -161,7 +151,8 @@ function ReportsPanel() {
                     </div>
                   </td>
                 </tr>
-              ))}
+                )
+              })}
             </tbody>
           </table>
         </div>
