@@ -3,7 +3,7 @@ import type { MessageTree } from './types'
 export const en: MessageTree = {
   common: {
     // 仮名表記は日本語 UI でのみ意味を持つため、英語では英字名のみ。
-    brand: 'Manabi Map',
+    brand: '{serviceDisplayName}',
     close: 'Close',
     menu: 'Menu',
     back: 'Back',
@@ -108,7 +108,7 @@ export const en: MessageTree = {
     pickCandidate: 'Pick a place from the search results',
     adCategory: 'Find nearby cram schools',
     qrCaption: 'Open on your phone',
-    qrAlt: 'QR code to open Manabi Map on your phone',
+    qrAlt: `QR code to open {serviceBrand} on your phone`,
   },
   regions: {
     'hokkaido-tohoku': 'Hokkaido & Tohoku',
@@ -356,7 +356,7 @@ export const en: MessageTree = {
     swipeHint: '← Swipe sideways to compare →',
     course: 'Schedule',
     deviation: 'Reference deviation',
-    deviationNote: ' Manabi Map editorial estimate (indicative)',
+    deviationNote: ` {serviceBrand} editorial estimate (indicative)`,
     fromHome: 'From home',
     straight: 'Straight line',
     fromHomeEst: '🚲 ~{bike} min / 🚗 ~{car} min / 🚃 ~{transit} min (est.)',
@@ -365,7 +365,7 @@ export const en: MessageTree = {
     detail: 'View details ›',
   },
   login: {
-    title: 'Log in to Manabi Map',
+    title: `Log in to {serviceBrand}`,
     note: 'LINE or Google login is required to save favorites and share with family.',
     noteAnon: 'Or tap “Try as guest” to explore first.',
     lineLink: 'Log in with LINE',
@@ -445,7 +445,7 @@ export const en: MessageTree = {
     kanaEmpty: 'Reading (kana) — help wanted',
     refValue: 'Ref.',
     myRecord: 'My record',
-    sourceNote: 'Source: Manabi Map editorial estimate',
+    sourceNote: `Source: {serviceBrand} editorial estimate`,
     methodologyLink: '(methodology and limitations)',
     disclaimer: 'Indicative only. Confirm with official school and board sources.',
     admissionTitle: 'Primary admission applications and selection details',
@@ -526,12 +526,12 @@ export const en: MessageTree = {
     admissionNote: 'Note: {note}',
     myBlockTitle: 'My record (visible only to you)',
     myBlockSub: 'Keep values from cram school or practice tests for your family.',
-    myBlockSub2: 'Shown only to you, separate from Manabi Map estimates.',
+    myBlockSub2: `Shown only to you, separate from {serviceBrand} estimates.`,
     mineSelfLabel: '[self]',
     myRecordAria: 'My record for {name}',
     myNoteAria: 'My record memo',
     myNotePlaceholder: 'e.g. Cram school said 55 / mock exam band 55–58',
-    consent: 'Anonymously share these values to improve Manabi Map estimates (aggregate only)',
+    consent: `Anonymously share these values to improve {serviceBrand} estimates (aggregate only)`,
     consentDone: 'Thanks — your stats will help improve estimates',
     commute: 'Commute (from home)',
     straightDist: 'Straight-line distance',
@@ -649,7 +649,7 @@ export const en: MessageTree = {
     copyFail: 'Could not copy. Long-press to select the link.',
     lineSend: 'Send via LINE',
     lineShareMessage:
-      'You are invited to a Manabi Map family group.\nOpen the link below and log in to share favorites and memos.\n{url}',
+      `You are invited to a {serviceBrand} family group.\nOpen the link below and log in to share favorites and memos.\n{url}`,
     viewShared: 'View family favorites & memos',
     closeShared: 'Close family view',
     sharedEmpty: 'No shared data yet.',

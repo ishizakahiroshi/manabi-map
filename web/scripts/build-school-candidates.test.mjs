@@ -4,7 +4,7 @@ import { allowedCandidateSource, candidateEnvironment, parseCandidateArgs } from
 
 test('candidate source allowlist excludes env, generated datasets, private config and dependencies', () => {
   for (const path of ['web/.env', 'web/.env.local', '.git/config', 'web/src/.secret.ts', 'web/data/credential.json', 'web/public/schools.json', 'web/node_modules/a/index.js', 'docs/local/plan.md']) assert.equal(allowedCandidateSource(path), false, path)
-  for (const path of ['web/src/App.tsx', 'web/src/index.css', 'web/scripts/gen-schools-json.mjs', 'web/data/site.json', 'functions/_middleware.ts']) assert.equal(allowedCandidateSource(path), true, path)
+  for (const path of ['web/src/App.tsx', 'web/src/index.css', 'web/scripts/gen-schools-json.mjs', 'web/data/site.json', 'web/data/brands.json', 'functions/_middleware.ts']) assert.equal(allowedCandidateSource(path), true, path)
 })
 
 test('candidate environment cannot inherit real Vite values, env directory or Node preload', () => {

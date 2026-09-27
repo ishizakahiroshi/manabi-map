@@ -1,3 +1,4 @@
+import { schoolBrand } from '../lib/brand'
 import { useNavigate } from 'react-router-dom'
 import datasetClaims from '../../data/dataset-claims.json'
 import site from '../../data/site.json'
@@ -120,7 +121,7 @@ export function PressPage() {
   )
 
   const basics: Array<[string, React.ReactNode]> = [
-    ['サービス名', 'Manabi Map（まなびマップ）'],
+    ['サービス名', schoolBrand.displayName.ja],
     ['URL', <a key="u" href={site.origin} target="_blank" rel="noopener noreferrer">{site.origin}</a>],
     ['現行バージョン', <span key="v">v{__APP_VERSION__}</span>],
     // 校数はデータ追加で変わるのでここには書かない（トップの og:description が
@@ -135,7 +136,7 @@ export function PressPage() {
   const faqs: Array<{ q: string; a: React.ReactNode }> = [
     {
       q: '商用サイトの偏差値を転載していますか？',
-      a: <>いいえ。公的資料を参考にした Manabi Map の編集推計であり、公式偏差値や合格判定ではありません。現在の掲載範囲・方法・限界は <a href="/legal/deviation-methodology" onClick={(e) => { e.preventDefault(); navigate('/legal/deviation-methodology') }}>「推計の方法と限界」</a> で公開しています。商用偏差値サイトからの数値転載は行いません。</>,
+      a: <>いいえ。公的資料を参考にした {schoolBrand.name} の編集推計であり、公式偏差値や合格判定ではありません。現在の掲載範囲・方法・限界は <a href="/legal/deviation-methodology" onClick={(e) => { e.preventDefault(); navigate('/legal/deviation-methodology') }}>「推計の方法と限界」</a> で公開しています。商用偏差値サイトからの数値転載は行いません。</>,
     },
     {
       q: '学校側から掲載情報の修正を依頼できますか？',
@@ -171,7 +172,7 @@ export function PressPage() {
       >
         <h1 style={{ marginTop: 0 }}>メディア関係者・教育関係者の方へ</h1>
         <p>
-          Manabi Map（まなびマップ）は、<b>親子で使う「学校選びの地図ノート」</b>です。
+          {schoolBrand.displayName.ja}は、<b>親子で使う「学校選びの地図ノート」</b>です。
           住所を入れると通える高校が地図に表示され、気になる学校をお気に入り保存し、
           文化祭・説明会・通学経路・親子の感想を学校ごとに家族でメモできます。
         </p>
@@ -248,7 +249,7 @@ export function PressPage() {
 
         <h2>開発者プロフィール</h2>
         <p>
-          ishizakahiroshi — 個人 OSS 開発者。Manabi Map を含む複数の教育・生活向け Web サービスを
+          ishizakahiroshi — 個人 OSS 開発者。{schoolBrand.name} を含む複数の教育・生活向け Web サービスを
           個人で企画・実装・運営しています。取材・登壇のご相談は
           <a href="mailto:hello@manabi-map.app">hello@manabi-map.app</a> までお願いします。
         </p>

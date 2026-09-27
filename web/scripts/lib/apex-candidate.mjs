@@ -50,7 +50,7 @@ export async function retainLegacyAssets(source, destination) {
 }
 
 /** No old SEO HTML is duplicated. Retain current candidate chunks/data for the legacy shell. */
-export async function createApexCandidate({ highSchoolOutput, apexOutput, portalRoot, schoolShell }) {
+export async function createApexCandidate({ highSchoolOutput, apexOutput, portalRoot, schoolShell, portalConfig }) {
   await fs.mkdir(apexOutput)
   async function copyTree(path = '') {
     for (const item of await fs.readdir(join(highSchoolOutput, path), { withFileTypes: true })) {
@@ -68,7 +68,7 @@ export async function createApexCandidate({ highSchoolOutput, apexOutput, portal
   const shell = schoolShell ?? await fs.readFile(join(highSchoolOutput, 'index.html'), 'utf8')
   await fs.mkdir(join(apexOutput, 'legacy-school'))
   await fs.writeFile(join(apexOutput, 'legacy-school/index.html'), shell.replace('<head>', '<head><meta name="legacy-school-shell" content="1"><meta name="robots" content="noindex"><meta name="referrer" content="no-referrer">'), { flag: 'wx' })
-  await fs.writeFile(join(apexOutput, 'index.html'), renderEntryPage(await fs.readFile(join(portalRoot, 'index.html'), 'utf8')), { flag: 'wx' })
+  await fs.writeFile(join(apexOutput, 'index.html'), renderEntryPage(await fs.readFile(join(portalRoot, 'index.html'), 'utf8'), portalConfig), { flag: 'wx' })
   await fs.copyFile(join(portalRoot, 'portal.css'), join(apexOutput, 'portal.css'), fs.constants.COPYFILE_EXCL)
   await fs.writeFile(join(apexOutput, 'robots.txt'), 'User-agent: *\nDisallow: /legacy-school/\nDisallow: /auth/\nDisallow: /family/\n', { flag: 'wx' })
   // The callback shell and all dependent routes are handled by separately deployed Functions.

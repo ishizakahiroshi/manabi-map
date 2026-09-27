@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { defineConfig } from 'vite'
+import { renderBrandHtml, escapeBrandHtml, brands } from './scripts/lib/brands.mjs'
 
 const targets = JSON.parse(readFileSync(new URL('./data/deployment-targets.json', import.meta.url), 'utf8')).targets
 
@@ -13,13 +14,15 @@ export default defineConfig({
     name: 'school-portal-targets',
     transformIndexHtml: {
       order: 'pre',
-      handler: (html) => html.replaceAll('__SCHOOL_ORIGIN__', targets.school.origin)
-        .replaceAll('__HIGH_SCHOOL_ORIGIN__', targets['high-school'].origin),
+      handler: (html) => renderBrandHtml(html, 'school', undefined, {
+        SCHOOL_ORIGIN: targets.school.origin,
+        HIGH_SCHOOL_ORIGIN: targets['high-school'].origin,
+      }),
     },
     generateBundle() {
       this.emitFile({ type: 'asset', fileName: 'robots.txt', source: `User-agent: *\nAllow: /\nSitemap: ${targets.school.origin}/sitemap.xml\n` })
       this.emitFile({ type: 'asset', fileName: 'sitemap.xml', source: `<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>${targets.school.origin}/</loc></url></urlset>\n` })
-      this.emitFile({ type: 'asset', fileName: '404.html', source: '<!doctype html><html lang="ja"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>ページが見つかりません | Manabi Map</title><body style="font-family:system-ui,sans-serif;background:#f7f3ea;color:#241f1a;padding:40px 24px;line-height:1.8"><main><h1>ページが見つかりません</h1><p>学校探しの入口から、もう一度お探しください。</p><a href="/">学校探しの入口へ</a></main></body></html>' })
+      this.emitFile({ type: 'asset', fileName: '404.html', source: `<!doctype html><html lang="ja"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>ページが見つかりません | ${escapeBrandHtml(brands.school.name)}</title><body style="font-family:system-ui,sans-serif;background:#f7f3ea;color:#241f1a;padding:40px 24px;line-height:1.8"><main><h1>ページが見つかりません</h1><p>学校探しの入口から、もう一度お探しください。</p><a href="/">学校探しの入口へ</a></main></body></html>` })
     },
   }],
   build: {

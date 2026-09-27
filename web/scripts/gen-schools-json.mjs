@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto'
+import { schoolBrand } from './lib/brands.mjs'
 import { mkdir, readdir, readFile, rm, unlink, writeFile } from 'node:fs/promises'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
@@ -273,7 +274,7 @@ async function writeSchoolFiles(inputRows, publicDir, generatedAt, logger = cons
   await writeFile(
     join(publicApiRoot, 'dataset.json'),
     `${JSON.stringify({
-      name: 'Manabi Map 学校基本情報データセット',
+      name: `${schoolBrand.name} 学校基本情報データセット`,
       version: packageJson.version,
       api_version: 'v1',
       generated_at: generatedAt,
@@ -603,7 +604,7 @@ const GENERATOR_FILES = [
   'web/src/lib/school-select.ts', 'web/src/lib/mapPayload.ts',
   'web/src/lib/admissionUnits.ts', 'web/src/lib/admission.ts',
   'web/data/prefectures.json', 'web/data/municipalities.json',
-  'web/data/site.json', 'web/data/dataset-claims.json', 'web/package.json',
+  'web/data/site.json', 'web/data/brands.json', 'web/scripts/lib/brands.mjs', 'web/scripts/lib/json-ld.mjs', 'web/data/dataset-claims.json', 'web/package.json',
 ].sort()
 const repoRoot = resolve(webRoot, '..')
 const digest = (bytes) => createHash('sha256').update(bytes).digest('hex')

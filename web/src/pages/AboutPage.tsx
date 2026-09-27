@@ -1,3 +1,4 @@
+import { schoolBrand } from '../lib/brand'
 import { useNavigate } from 'react-router-dom'
 import datasetClaims from '../../data/dataset-claims.json'
 import siteFooterLinks from '../../data/site-footer-links.json'
@@ -37,9 +38,9 @@ export function AboutPage() {
         tabIndex={-1}
         style={{ paddingBottom: 24 }}
       >
-        <h1 style={{ marginTop: 0 }}>Manabi Map（まなびマップ）について</h1>
+        <h1 style={{ marginTop: 0 }}>{schoolBrand.displayName.ja}について</h1>
         <p>
-          Manabi Map は、<b>親子で使う「学校選びの地図ノート」</b>です。
+          {schoolBrand.name} は、<b>親子で使う「学校選びの地図ノート」</b>です。
           中学生と保護者が、話し合いながら納得して進路を選べるように作っています。
         </p>
         {/* 初めての人向けの要点だけを置く。ライセンス・バージョン等の技術的な基礎情報は /press の表に任せる */}
@@ -75,7 +76,7 @@ export function AboutPage() {
         <ul>
           <li>学校を偏差値で順位づけするランキングサイトにはしません。</li>
           <li>
-            偏差値の目安は、公的資料を参考にした Manabi Map の編集推計です。公式の偏差値や合格判定ではありません。
+            偏差値の目安は、公的資料を参考にした {schoolBrand.name} の編集推計です。公式の偏差値や合格判定ではありません。
             根拠と限界は {internalLink('/legal/deviation-methodology')} で公開しています。
           </li>
           <li>

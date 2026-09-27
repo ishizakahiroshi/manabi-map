@@ -17,7 +17,7 @@ ai_author_model_id: unknown
 ai_author_model_display: unknown
 ai_author_reasoning: unknown
 ai_author_model_source: unavailable
-ai_execution_refs: [AIX-20260927T012339619-802f5465, AIX-20260927T013035154-418add22, AIX-20260927T014245084-b8ed6267, AIX-20260927T020842634-377a5976, AIX-20260927T022021395-e4091a1f, AIX-20260927T023525215-afd3f979, AIX-20260927T025536733-91e225ce, AIX-20260927T033306106-5d29fec0, AIX-20260927T042101147-61a75c66, AIX-20260927T043840191-2ce59749, AIX-20260927T045329626-7282b173, AIX-20260927T045915321-c91c2c5c, AIX-20260927T133203809-1be98664, AIX-20260927T134321078-340d3dfa, AIX-20260927T224037255-d31ce0ae, AIX-20260927T233259210-a4511260]
+ai_execution_refs: [AIX-20260927T012339619-802f5465, AIX-20260927T013035154-418add22, AIX-20260927T014245084-b8ed6267, AIX-20260927T020842634-377a5976, AIX-20260927T022021395-e4091a1f, AIX-20260927T023525215-afd3f979, AIX-20260927T025536733-91e225ce, AIX-20260927T033306106-5d29fec0, AIX-20260927T042101147-61a75c66, AIX-20260927T043840191-2ce59749, AIX-20260927T045329626-7282b173, AIX-20260927T045915321-c91c2c5c, AIX-20260927T133203809-1be98664, AIX-20260927T134321078-340d3dfa, AIX-20260927T224037255-d31ce0ae, AIX-20260927T233259210-a4511260, AIX-20260928T011802664-b8f39eda]
 ---
 
 # [計画] 総合入口と学校サブドメインへの移行
@@ -27,8 +27,8 @@ ai_execution_refs: [AIX-20260927T012339619-802f5465, AIX-20260927T013035154-418a
 | C | 種別 | 内容 | 子 plan | 備考/注意点 | AI実行 | 実行モデル |
 |---|---|---|---|---|---|---|
 | C1 | planned | URL対応表・配信単位・容量を確定する | [SQLite原本・静的生成](plan_subdomain-entry-school-migration_c1_sqlite-static-source.md) | ホストと別Pages方針は採用済み。経路ごとの互換動作・実Pages割当・容量・利用者引継ぎの未検収を詰める | AIX-20260927T025536733-91e225ce; AIX-20260927T033306106-5d29fec0; AIX-20260927T042101147-61a75c66; AIX-20260927T043840191-2ce59749; AIX-20260927T045329626-7282b173; AIX-20260927T045915321-c91c2c5c; AIX-20260927T133203809-1be98664; AIX-20260927T134321078-340d3dfa; AIX-20260927T233259210-a4511260 | implementation: openai / unknown / unknown; implementation: openai / unknown / unknown; implementation: openai / unknown / unknown; implementation: openai / unknown / unknown; implementation: openai / unknown / unknown; implementation: openai / unknown / unknown; implementation: openai / gpt-6-sol / high; review: openai / unknown / unknown; implementation: openai / unknown / unknown |
-| C2 | planned | 学校入口と高校版の経路・認証・SEOを整える | — | C1の確定表を画面・静的生成・Functionsへ同時反映 |  |  |
-| C3 | planned | 総合入口と旧URL互換配信を作る | — | C2のURL・公開API成果物を使用。独立した配信先で検収 |  |  |
+| C2 | planned | 学校入口と高校版の経路・認証・SEOを整える | — | C1の確定表を画面・静的生成・Functionsへ同時反映 | AIX-20260928T011802664-b8f39eda | verification: openai / unknown / unknown |
+| C3 | planned | 総合入口と旧URL互換配信を作る | — | C2のURL・公開API成果物を使用。独立した配信先で検収 | AIX-20260928T011802664-b8f39eda | verification: openai / unknown / unknown |
 | C4 | planned | 並行公開・予告・切替・観察を行う | — | 本番反映は別途明示指示。失敗時は公開先と転送を戻す |  |  |
 
 実行順序: 総合入口のグランドデザイン確認済み → `C1 → C2 → C3 → C4`。C1全体は未完了だが、2026-09-27に学校入口 `school.manabi-map.app` と高校入口 `high-school.manabi-map.app` の別Pages・別出力を採用した。高校をschool配下のサブディレクトリへ集約する案は不採用。同じリポ内で入口を管理するA2と、将来の全学校種別への対応予定を明記する方針は維持する。最新承認では候補のローカル実装・合成ビルド・検証・commitに着手し、C2の準備を先行する。本番配備・DNS・実認証・公開日は未承認/未検収であり、C2〜C4の完了とは扱わない。
@@ -427,3 +427,9 @@ HTMLの新初期値は共通・運用予算100MB＋累計保存1,000人×60KB＝
 C/D/Eが別の物理ディスクか、空き容量、別媒体への分散、Google Driveの残容量を配置前に確認する。文字だけ別の同一ディスクを独立した故障対策として数えない。同期だけで誤削除から戻れるとは仮定せず、過去世代を残す。保持世代数とPC側の同期コピーを含め、各保存先の使用量を計算する。現HTMLの3本・20GBは容量比較用の仮定であり、実配置/空き容量の確認ではない。ローカル原本には未公開項目が入り得るため、同期先も公開リンクにせず、公開用生成物との分離を維持する。MariaDB等の採用時はその方式に適したバックアップ/復元手順へ置き換える。
 
 2026-09-27、ユーザーがSQLite採用と実装計画作成を指示。[SQLite原本・静的生成・利用者DB分離の子計画](plan_subdomain-entry-school-migration_c1_sqlite-static-source.md)をC1へ紐付けた。SQLiteはサービス単位、正本1か所、整合した世代バックアップを別媒体とGoogle Driveへ複製する方針。作成時は全C未着手だったが、現在は子計画の[第6区間の到達点](plan_subdomain-entry-school-migration_c1_sqlite-static-source.md#sqlite-wave6-current)まで合成実装・検証が進んでいる。実認証・画面・実原本・クラウド同期等の検収は残り、ドメイン切替とは別工程として実施する。
+
+### 2026-09-28 ブランド設定のローカル検証
+
+C2/C3の表示設定を `web/data/brands.json` へ集約し、学校・学校入口・総合入口の現名称を維持した。React/i18n、初期HTML、OGP/JSON-LD、PWA名称、データセット名と出典へ接続し、置換構文を含む合成名称でも文字列を再解釈しない。画像内文字・装飾ロゴ・外部掲載・メール等は手動管理の範囲として残す。
+
+型検査・lint（既存警告10件、errorなし）・Vitest575件・static117件、合成候補の3出力と容量/混入gate、PC/390pxのローカル表示を確認。独立レビューで見つかった再帰置換とJSON-LD画像固定を修正した。origin/認証許可URL/公開flag/ID/保存キーの変更や本番公開は行っていない。公開/救済期間、実認証/配備/実原本の検収は継続し、H1/docsweep_stateを終端変更しない。差替え・旧設定への復元は[運用規約](reference_manabi-map-operating-rules.md#brand-portability)を参照。

@@ -5,10 +5,11 @@ import { useI18n } from '../contexts/I18nContext'
 import { useGoBack } from '../hooks/useGoBack'
 import { getInitialData } from '../lib/initialData'
 import { PREFECTURES } from '../lib/prefecture'
+import { schoolBrand } from '../lib/brand'
 
 // 出典表記の住所は web/data/site.json から入れる（dataset-claims.json には {origin} と書いてある。
 // scripts/lib/public-api.mjs の DATASET_ATTRIBUTION と同じ組み立て）。
-const DATASET_ATTRIBUTION = datasetClaims.attribution.replaceAll('{origin}', site.origin)
+const DATASET_ATTRIBUTION = datasetClaims.attribution.replace(/\{(origin|brand)\}/g, (_, key) => key === 'origin' ? site.origin : schoolBrand.displayName.ja)
 
 type DatasetMetadata = {
   school_count: number

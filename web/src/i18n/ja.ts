@@ -3,7 +3,7 @@ import type { MessageTree } from './types'
 export const ja: MessageTree = {
   common: {
     // 画面ヘッダー / サイドバーのブランド表記。head メタの <title> と同じ正式表記に揃える。
-    brand: 'Manabi Map（まなびマップ）',
+    brand: '{serviceDisplayName}',
     close: '閉じる',
     menu: 'メニュー',
     back: '戻る',
@@ -109,7 +109,7 @@ export const ja: MessageTree = {
     pickCandidate: '検索候補から場所を選んでください',
     adCategory: '近くの塾を探す',
     qrCaption: 'スマホで続きを見る',
-    qrAlt: 'Manabi Map をスマホで開く QR コード',
+    qrAlt: `{serviceBrand} をスマホで開く QR コード`,
   },
   regions: {
     'hokkaido-tohoku': '北海道・東北',
@@ -358,7 +358,7 @@ export const ja: MessageTree = {
     swipeHint: '← 横にスワイプして見くらべ →',
     course: '課程',
     deviation: '参考偏差値',
-    deviationNote: ' Manabi Map 編集推計・目安',
+    deviationNote: ` {serviceBrand} 編集推計・目安`,
     fromHome: '自宅から',
     straight: '直線',
     fromHomeEst: '🚲 約{bike}分 ／ 🚗 約{car}分 ／ 🚃 約{transit}分（推定）',
@@ -367,7 +367,7 @@ export const ja: MessageTree = {
     detail: 'くわしく見る ›',
   },
   login: {
-    title: 'Manabi Map にログイン',
+    title: `{serviceBrand} にログイン`,
     note: '志望校の保存・家族への共有には LINE または Google ログインが必要です。',
     noteAnon: 'まず試したいだけなら「とりあえず試す」で始められます。',
     lineLink: 'LINEでログイン',
@@ -447,7 +447,7 @@ export const ja: MessageTree = {
     kanaEmpty: 'かな 情報提供募集中',
     refValue: '参考値',
     myRecord: '私の記録',
-    sourceNote: '出典: Manabi Map 編集推計',
+    sourceNote: `出典: {serviceBrand} 編集推計`,
     methodologyLink: '（方法と限界）',
     disclaimer: '※ あくまで目安です。正確な情報は学校公式・県教委資料で確認してください。',
     admissionTitle: '一次募集の志願状況と選抜情報',
@@ -528,12 +528,12 @@ export const ja: MessageTree = {
     admissionNote: '注記: {note}',
     myBlockTitle: '私の記録（あなただけに見える）',
     myBlockSub: '塾で聞いた値・模試の判定など、家庭の情報をここに残せます。',
-    myBlockSub2: 'Manabi Map の参考値とは別に本人だけに表示されます。',
+    myBlockSub2: `{serviceBrand} の参考値とは別に本人だけに表示されます。`,
     mineSelfLabel: '[自署]',
     myRecordAria: '{name} の私の記録',
     myNoteAria: '私の記録メモ',
     myNotePlaceholder: '例: 塾で55と聞いた / 模試A判定 55-58',
-    consent: 'この値を Manabi Map 参考値の改善に匿名で提供する（統計集計のみ・個別データは公開されません）',
+    consent: `この値を {serviceBrand} 参考値の改善に匿名で提供する（統計集計のみ・個別データは公開されません）`,
     consentDone: '統計提供に同意しました',
     commute: '通学（自宅から）',
     straightDist: '直線距離',
@@ -651,7 +651,7 @@ export const ja: MessageTree = {
     copyFail: 'コピーできませんでした。リンクを長押しで選択してください',
     lineSend: 'LINE で送る',
     lineShareMessage:
-      'Manabi Map の家族グループに招待します。\n下のリンクを開いてログインすると、お気に入りやメモを一緒に見られます。\n{url}',
+      `{serviceBrand} の家族グループに招待します。\n下のリンクを開いてログインすると、お気に入りやメモを一緒に見られます。\n{url}`,
     viewShared: '家族の志望校・メモを見る',
     closeShared: '家族の共有を閉じる',
     sharedEmpty: '共有されているデータはまだありません。',

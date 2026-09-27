@@ -7,6 +7,8 @@ import { checkedFile, checkedOutput } from './lib/school-candidate.mjs'
 import { parseSchoolSnapshot } from './lib/school-source.mjs'
 import { verifyDeploymentCapacity } from './verify-deployment-capacity.mjs'
 import { createApexCandidate, retainLegacyAssets, verifyCompatibilityGeneration } from './lib/apex-candidate.mjs'
+import { validateBrands } from './lib/brands.mjs'
+import { portalWithBrands } from '../apex-portal/portal.mjs'
 
 const webRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const repoRoot = dirname(webRoot)
@@ -22,7 +24,7 @@ const staticFiles = [
 ]
 const topFiles = new Set(['web/package.json', 'web/index.html', 'web/vite.config.ts',
   'web/tsconfig.json', 'web/tsconfig.app.json', 'web/tsconfig.node.json', 'web/tsconfig.functions.json'])
-const dataFiles = new Set(['site.json', 'site-footer-links.json', 'prefectures.json', 'municipalities.json', 'dataset-claims.json', 'book-ads-source.json'])
+const dataFiles = new Set(['site.json', 'brands.json', 'site-footer-links.json', 'prefectures.json', 'municipalities.json', 'dataset-claims.json', 'book-ads-source.json'])
 
 export function allowedCandidateSource(path) {
   if (path.split('/').some((part) => part.startsWith('.')) || path.includes('\\')) return false
@@ -45,7 +47,7 @@ export function candidateEnvironment(source = process.env) {
 export function parseCandidateArgs(args) {
   const result = {}
   for (const arg of args) {
-    const match = /^--(snapshot|manifest|output-root|legacy-assets)=(.+)$/.exec(arg)
+    const match = /^--(snapshot|manifest|output-root|legacy-assets|brands)=(.+)$/.exec(arg)
     if (!match || result[match[1]]) throw new Error('Explicit unique snapshot, manifest and output-root arguments are required')
     result[match[1]] = match[2]
   }
@@ -60,7 +62,7 @@ async function copy(source, destination) {
 }
 
 export async function buildSchoolCandidates(options) {
-  const inputs = await Promise.all([options.snapshot, options.manifest].map(checkedFile))
+  const inputs = await Promise.all([options.snapshot, options.manifest, ...(options.brands ? [options.brands] : [])].map(checkedFile))
   if (inputs[0] === inputs[1]) throw new Error('Separate source files are required')
   parseSchoolSnapshot(await fs.readFile(inputs[0]), await fs.readFile(inputs[1]))
   const output = await checkedOutput(options['output-root'], inputs, repoRoot)
@@ -77,6 +79,9 @@ export async function buildSchoolCandidates(options) {
   const workspace = join(output, 'source')
   const isolatedWeb = join(workspace, 'web')
   for (const path of sources) await copy(join(repoRoot, path), join(workspace, path))
+  // A synthetic brand trial changes only the isolated source; the checkout stays unchanged.
+  const brandConfig = validateBrands(JSON.parse(await fs.readFile(options.brands ? inputs[2] : join(isolatedWeb, 'data/brands.json'), 'utf8')))
+  await fs.writeFile(join(isolatedWeb, 'data/brands.json'), JSON.stringify(brandConfig, null, 2) + '\n')
   for (const path of ['data/deployment-targets.json', 'vite.school-portal.config.ts', 'vite.high-school-candidate.config.ts', 'school-portal/index.html', 'school-portal/style.css']) {
     await copy(join(webRoot, path), join(isolatedWeb, path))
   }
@@ -106,7 +111,7 @@ export async function buildSchoolCandidates(options) {
   run(vite, ['build', '--config', 'vite.high-school-candidate.config.ts', '--ssr', 'src/entry-server.tsx', '--outDir', 'dist-ssr'])
   run(tsx, ['scripts/gen-seo-pages.mjs', '--dist', highSchoolOutput, `--synthetic-candidate=${dataCandidate}`])
   run(join(isolatedWeb, 'scripts/verify-static-output.mjs'), ['--dist', highSchoolOutput, '--max-file-mib', '25'])
-  await createApexCandidate({ highSchoolOutput, apexOutput, portalRoot: join(webRoot, 'apex-portal'), schoolShell })
+  await createApexCandidate({ highSchoolOutput, apexOutput, portalRoot: join(webRoot, 'apex-portal'), schoolShell, portalConfig: portalWithBrands(brandConfig) })
   const legacyAssets = options['legacy-assets'] ? await retainLegacyAssets(options['legacy-assets'], apexOutput) : { synthetic: true, retained: 0 }
   const compatibility = await verifyCompatibilityGeneration(dataCandidate, [apexOutput, highSchoolOutput])
   const capacity = {}

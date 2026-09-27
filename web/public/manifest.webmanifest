@@ -1,6 +1,6 @@
 {
-  "name": "Manabi Map",
-  "short_name": "Manabi Map",
+  "name": "__BRAND_NAME__",
+  "short_name": "__BRAND_SHORT_NAME__",
   "description": "親子で使う、学校選びの地図ノート。",
   "lang": "ja",
   "start_url": "/",
