@@ -2,7 +2,7 @@
 // HTTP timeout is not server cancellation: uncertain mutations permanently block
 // this adapter's rollback and require independent operational reconciliation.
 import { canonicalSchoolSourceJSON } from './school-source.mjs'
-import { schoolDataPath, schoolDigest } from './school-functions-package.mjs'
+import { schoolDataPath, schoolDigest, snapshotSchoolFunctionsPackage } from './school-functions-package.mjs'
 export { schoolPublicPath } from './school-functions-package.mjs'
 
 const check = (ok) => { if (!ok) throw new Error('School Pages adapter: operation refused') }
@@ -27,14 +27,23 @@ export function createSchoolPagesAdapter({ accountId, token, projects, fetchImpl
   check(typeof fetchImpl === 'function' && typeof uploadAssets === 'function' && projects instanceof Map && projects.size === 2)
   const apiBase = 'https://api.cloudflare.com/client/v4'
   for (const n of [requestTimeoutMs, settlementTimeoutMs, pollIntervalMs, operationTimeoutMs]) check(Number.isSafeInteger(n) && n > 0 && n <= 3600000)
-  const configs = new Map()
+  const configs = new Map(), snapshots = new Map()
+  function pinned(value) {
+    // The same immutable generation may serve both origins. Share the adapter's
+    // private snapshot, never a caller buffer, and still verify every supplied pin.
+    const cached = snapshots.get(value.package)
+    if (cached) { check(cached.pin === value.pin); return cached.snapshot }
+    const snapshot = snapshotSchoolFunctionsPackage(value.package, value.pin)
+    snapshots.set(value.package, { pin: value.pin, snapshot })
+    return snapshot
+  }
   for (const [project, config] of projects) {
     check(typeof project === 'string' && /^[a-z0-9][a-z0-9-]{0,62}$/.test(project) && id(config.branch) && id(config.previous.deploymentId))
     const origin = new URL(config.origin)
     check(config.origin === origin.origin && origin.protocol === 'https:')
     configs.set(project, { origin: config.origin, branch: config.branch,
-      next: config.next.package.snapshot(config.next.pin),
-      previous: { ...config.previous.package.snapshot(config.previous.pin), deploymentId: config.previous.deploymentId } })
+      next: pinned(config.next),
+      previous: { ...pinned(config.previous), deploymentId: config.previous.deploymentId } })
   }
   const targetOrigins = new Set([...configs.values()].map((c) => c.origin))
   check(targetOrigins.size === 2)
@@ -195,9 +204,10 @@ export function createSchoolPagesAdapter({ accountId, token, projects, fetchImpl
         }
         await verifyDistribution(target, c.previous, c.previous.deploymentId)
         await configuration(target, distribution)
-        const files = new Map([...distribution.files].filter(([path]) => !controls.has(path)).map(([path, bytes]) => [path, Buffer.from(bytes)]))
+        const files = new Map([...distribution.files].filter(([path]) => !controls.has(path)))
         const manifest = await bounded((signal) => uploadAssets({ accountId, project: target.project,
-          files: new Map([...files].map(([path, bytes]) => [path, Buffer.from(bytes)])), signal }), budget(target.project, settlementTimeoutMs))
+          files: new Map([...files].map(([path, bytes]) => [path, Buffer.from(bytes)])),
+          resourceBudget: distribution.resourceBudget, signal }), budget(target.project, settlementTimeoutMs))
         budget(target.project, requestTimeoutMs)
         check(manifest && typeof manifest === 'object' && !Array.isArray(manifest) &&
           Object.keys(manifest).length === files.size && [...files.keys()].every((path) =>

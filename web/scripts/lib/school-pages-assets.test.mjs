@@ -110,3 +110,17 @@ test('oversize streaming response is cancelled without trusting Content-Length',
   await assert.rejects(run(fetchImpl, { maxResponseBytes: 128 })({ accountId, project, files: files() }))
   assert.equal(cancelled, true)
 })
+
+test('explicit pinned budgets permit complete inventory beyond defaults and reject mismatch before network', async () => {
+  const resourceBudget = { maxTotalBytes: 768 * 1024 * 1024 }
+  const { calls, fetchImpl } = mock({ cached: true })
+  const upload = run(fetchImpl, { resourceBudget, timeoutMs: 60000 })
+  await assert.rejects(upload({ accountId, project, files: files(), resourceBudget: { maxTotalBytes: 64 * 1024 * 1024 } }))
+  assert.equal(calls.length, 0)
+  const bytes = Buffer.alloc(14 * 1024 * 1024, 42)
+  const inventory = new Map(Array.from({ length: 5 }, (_, i) => [`synthetic-${i}.txt`, bytes]))
+  await assert.rejects(run(fetchImpl)({ accountId, project, files: inventory }))
+  assert.equal(calls.length, 0)
+  assert.equal(Object.keys(await upload({ accountId, project, files: inventory, resourceBudget })).length, 5)
+  assert.equal(calls.length, 4)
+})

@@ -9,7 +9,8 @@ import { checkedFile, checkedPath } from './school-candidate.mjs'
 import { canonicalSchoolSourceJSON } from './school-source.mjs'
 import { buildPublicSchoolRecords } from './public-api.mjs'
 import { createSchoolReleaseReceipt } from './school-release.mjs'
-import { copySchoolFiles, schoolDataPath, schoolDigest, schoolInventory } from './school-functions-package.mjs'
+import { publicDistributionPath, schoolDataPath, schoolDigest, schoolInventory } from './school-functions-package.mjs'
+import { checkSchoolFileBudget, schoolResourceBudget } from './school-resource-budget.mjs'
 
 const check = (ok) => { if (!ok) throw new Error('School producer: projection or generation mismatch') }
 const codeURLs = [new URL('../verify-static-output.mjs', import.meta.url), new URL('./public-api.mjs', import.meta.url)]
@@ -19,17 +20,19 @@ async function checkLoadedCode() {
   check(current.every((pin, index) => pin === loadedCodePins[index]))
 }
 const same = (a, b) => canonicalSchoolSourceJSON(a) === canonicalSchoolSourceJSON(b)
-const json = (bytes) => {
-  check(Buffer.isBuffer(bytes) && bytes.length <= 64 * 1024 * 1024)
+const decodeJSON = (bytes, limit) => {
+  check(Buffer.isBuffer(bytes) && bytes.length <= limit)
   return JSON.parse((bytes[0] === 0x1f && bytes[1] === 0x8b ?
-    gunzipSync(bytes, { maxOutputLength: 64 * 1024 * 1024 }) : bytes).toString('utf8'))
+    gunzipSync(bytes, { maxOutputLength: limit }) : bytes).toString('utf8'))
 }
 
 /** Runs the existing public allowlist projection, then checks every API partition
  * against it. Extra fields (including nested fields), omitted rows and cross-
  * generation inputs fail exact structural comparisons.
  */
-export function verifySchoolProjection({ generatorSnapshot, files }) {
+export function verifySchoolProjection({ generatorSnapshot, files, resourceBudget }) {
+  const { maxDecodedBytes } = schoolResourceBudget(resourceBudget)
+  const json = (bytes) => decodeJSON(bytes, maxDecodedBytes)
   check(Buffer.isBuffer(generatorSnapshot))
   const payload = json(generatorSnapshot)
   check(payload && same(Object.keys(payload).sort(), ['formatVersion', 'schools', 'sourceCatalog']) &&
@@ -56,16 +59,16 @@ export function verifySchoolProjection({ generatorSnapshot, files }) {
   return { generatedAt: manifest.generatedAt, publicRecords: records.length }
 }
 
-async function readDistribution(root, prefix = '', budget = { bytes: 0, count: 0 }) {
+async function readDistribution(root, prefix = '', limits = schoolResourceBudget(), budget = { bytes: 0, count: 0 }) {
   const files = new Map()
   for (const item of await fs.readdir(await checkedPath(join(root, prefix)), { withFileTypes: true })) {
     const path = prefix ? `${prefix}/${item.name}` : item.name
     if (item.isDirectory()) {
-      for (const entry of await readDistribution(root, path, budget)) files.set(...entry)
+      for (const entry of await readDistribution(root, path, limits, budget)) files.set(...entry)
     } else {
       const input = await checkedFile(join(root, path)), info = await fs.stat(input)
       budget.bytes += info.size; budget.count += 1
-      check(info.size > 0 && info.size < 25 * 1024 * 1024 && budget.bytes <= 64 * 1024 * 1024 && budget.count <= 20000)
+      check(publicDistributionPath(path) && info.size > 0 && info.size <= limits.maxFileBytes && budget.bytes <= limits.maxTotalBytes && budget.count <= limits.maxFiles)
       const file = await fs.open(input, 'r')
       try {
         const bytes = Buffer.alloc(info.size + 1)
@@ -91,15 +94,19 @@ async function readDistribution(root, prefix = '', budget = { bytes: 0, count: 0
  * pins detect later edits to these gate entrypoints; they are not a signature of
  * the entire transitive JavaScript dependency graph or a source-code sandbox.
  */
-export async function produceSchoolRelease({ distDir, generatorSnapshot, generation, candidateRevision, evidence }) {
+export async function produceSchoolRelease({ distDir, generatorSnapshot, generation, candidateRevision, evidence, resourceBudget }) {
   let phase = 'inventory'
   try {
-    check(Buffer.isBuffer(generatorSnapshot) && generatorSnapshot.length <= 64 * 1024 * 1024)
+    resourceBudget = schoolResourceBudget(resourceBudget)
+    check(Buffer.isBuffer(generatorSnapshot) && generatorSnapshot.length <= resourceBudget.maxDecodedBytes)
     await checkLoadedCode()
     generatorSnapshot = Buffer.from(generatorSnapshot)
-    const files = copySchoolFiles(await readDistribution(distDir))
+    // The reader owns these fresh buffers; a second complete copy is unnecessary.
+    const files = await readDistribution(distDir, '', resourceBudget)
+    checkSchoolFileBudget(files, resourceBudget)
+    check([...files.keys()].every(publicDistributionPath))
     phase = 'projection'
-    const projection = verifySchoolProjection({ generatorSnapshot, files })
+    const projection = verifySchoolProjection({ generatorSnapshot, files, resourceBudget })
     phase = 'static-output'
     const stage = await fs.mkdtemp(join(tmpdir(), 'school-release-gate-'))
     try {
@@ -114,11 +121,11 @@ export async function produceSchoolRelease({ distDir, generatorSnapshot, generat
     const artifacts = new Map([...files].filter(([path]) => schoolDataPath(path)))
     const [gateCodeSha256, projectionCodeSha256] = loadedCodePins
     const gate = Buffer.from(`${canonicalSchoolSourceJSON({ format: 'school-release-field-gate', version: 1,
-      sourceSnapshotSha256: schoolDigest(generatorSnapshot), gateCodeSha256, projectionCodeSha256,
+      sourceSnapshotSha256: schoolDigest(generatorSnapshot), gateCodeSha256, projectionCodeSha256, resourceBudget,
       artifacts: schoolInventory(artifacts), ...projection })}\n`)
     const projectionGateSha256 = schoolDigest(gate)
     const raw = createSchoolReleaseReceipt({ generation, sourceSnapshotSha256: schoolDigest(generatorSnapshot),
       projectionGateSha256, candidateRevision, evidence }, artifacts)
-    return { raw, pin: { generation, receiptSha256: schoolDigest(raw), projectionGateSha256 }, artifacts, gate, files }
+    return { raw, pin: { generation, receiptSha256: schoolDigest(raw), projectionGateSha256 }, artifacts, gate, files, resourceBudget }
   } catch { throw new Error(`School producer: release refused; generation or field gate failed (${phase})`) }
 }

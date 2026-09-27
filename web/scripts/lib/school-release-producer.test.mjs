@@ -33,6 +33,10 @@ test('producer field projection invokes shared allowlist and validates all API p
   }
 })
 
+test('projection also honors an explicitly narrowed decoded JSON budget', () => {
+  assert.throws(() => verifySchoolProjection({ ...fixture(), resourceBudget: { maxDecodedBytes: 16 } }), /mismatch/)
+})
+
 test('source generation mismatch, absent partition and cross generation timestamps fail', () => {
   const changed = fixture(); changed.generatorSnapshot = Buffer.from(changed.generatorSnapshot.toString().replace('Synthetic School', 'Changed School'))
   assert.throws(() => verifySchoolProjection(changed), /mismatch/)

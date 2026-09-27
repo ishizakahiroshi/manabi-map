@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { createSchoolFunctionsPackage } from './school-functions-package.mjs'
+import { createSchoolFunctionsPackage, verifySchoolFunctionsSnapshot, snapshotSchoolFunctionsPackage } from './school-functions-package.mjs'
 
 function input() { return { files: new Map([
   ['index.html', Buffer.from('<!doctype html><title>Synthetic</title>')],
@@ -38,13 +38,33 @@ test('HTTP observation status, path, redirect origins and expected Location are 
   ])
   value.redirectOrigins = ['https://school.example.invalid']
   const pkg = createSchoolFunctionsPackage(value), frozen = pkg.snapshot(pkg.pin)
-  assert.equal(JSON.parse(frozen.raw).version, 2)
+  assert.equal(JSON.parse(frozen.raw).version, 3)
   assert.equal(frozen.observations['index.html'].body, 'artifact')
   assert.equal(frozen.observations['legacy.html'].body, 'redirect')
   value.observations.get('index.html').status = 404
   frozen.observations['legacy.html'].location = 'https://other.example.invalid/'
   assert.equal(pkg.snapshot(pkg.pin).observations['index.html'].status, 410)
   assert.notEqual(createSchoolFunctionsPackage(value).pin, pkg.pin)
+})
+
+test('resource budgets are pinned and received snapshots reject out-of-pin widening or changed bytes', () => {
+  const value = input(), pkg = createSchoolFunctionsPackage({ ...value, resourceBudget: { maxTotalBytes: 768 * 1024 * 1024 } })
+  const snapshot = pkg.snapshot(pkg.pin)
+  assert.equal(verifySchoolFunctionsSnapshot(snapshot, pkg.pin), snapshot)
+  assert.equal(snapshot.resourceBudget.maxTotalBytes, 768 * 1024 * 1024)
+  assert.notEqual(pkg.pin, createSchoolFunctionsPackage(value).pin)
+  snapshot.resourceBudget = { ...snapshot.resourceBudget, maxTotalBytes: 1024 * 1024 * 1024 }
+  assert.throws(() => verifySchoolFunctionsSnapshot(snapshot, pkg.pin))
+  const changed = pkg.snapshot(pkg.pin); changed.files.get('index.html').fill(0)
+  assert.throws(() => verifySchoolFunctionsSnapshot(changed, pkg.pin))
+})
+
+test('package ownership cannot be forged with a mutable caller snapshot method', () => {
+  const pkg = createSchoolFunctionsPackage(input()), snapshot = pkg.snapshot(pkg.pin)
+  assert.throws(() => snapshotSchoolFunctionsPackage({ snapshot: () => snapshot }, pkg.pin))
+  const privateCopy = snapshotSchoolFunctionsPackage(pkg, pkg.pin)
+  snapshot.files.get('index.html').fill(0)
+  assert.match(privateCopy.files.get('index.html').toString(), /Synthetic/)
 })
 
 test('HTTP observation rejects unknown paths, duplicate URLs, unsafe redirects and school-data contract changes', () => {

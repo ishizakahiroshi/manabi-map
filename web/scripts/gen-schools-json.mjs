@@ -1,11 +1,14 @@
 import { createHash } from 'node:crypto'
 import { schoolBrand } from './lib/brands.mjs'
-import { mkdir, readdir, readFile, rm, unlink, writeFile } from 'node:fs/promises'
-import { dirname, join, resolve } from 'node:path'
+import { mkdir, readdir, readFile, rm, unlink, writeFile, lstat, open } from 'node:fs/promises'
+import { dirname, join, resolve, relative, sep } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
-import { gzipSync } from 'node:zlib'
+import { gzipSync, gunzipSync } from 'node:zlib'
 import { buildSchoolPayload, loadSchoolSource, parseSchoolSourceArgs, parseSchoolSnapshot, snapshotToGeneratorRows, canonicalSchoolSourceJSON } from './lib/school-source.mjs'
-import { stageSchoolCandidate, checkedFile, checkedOutput } from './lib/school-candidate.mjs'
+import { stageSchoolCandidate, checkedFile, checkedOutput, checkedPath } from './lib/school-candidate.mjs'
+import { schoolResourceBudget } from './lib/school-resource-budget.mjs'
+import { verifySchoolProjection } from './lib/school-release-producer.mjs'
+import { assertNoInternalSchoolFields } from './verify-static-output.mjs'
 import { loadCivicData, resolveCityGroup, UNRESOLVED_CITY_LABEL } from './lib/municipalities.mjs'
 
 // 近隣校の選定と後継校の逆引きは React 側・gen-seo-pages.mjs と同一実装を共有する
@@ -41,7 +44,43 @@ async function readEnvFile(path) {
   }
 }
 
-async function fetchSupabaseRows() {
+/** Bounded read-only transport for the observed path. A failed/redirected source
+ * response cannot move credentials to another origin or continue unbounded JSON.
+ */
+export function observedSourceFetch({ origin, signal, fetchImpl = fetch, maxResponseBytes = 8 * 1024 * 1024,
+  maxTotalBytes = 128 * 1024 * 1024 }) {
+  if (new URL(origin).origin !== origin || !origin.startsWith('https://') || !signal ||
+      !Number.isSafeInteger(maxResponseBytes) || maxResponseBytes <= 0 || maxResponseBytes > 8 * 1024 * 1024 ||
+      !Number.isSafeInteger(maxTotalBytes) || maxTotalBytes <= 0 || maxTotalBytes > 128 * 1024 * 1024) throw new Error('Observed source transport refused')
+  let total = 0
+  return async (input, options = {}) => {
+    const url = new URL(typeof input === 'string' || input instanceof URL ? input : input.url)
+    if (signal.aborted || url.origin !== origin || (options.method ?? input.method ?? 'GET').toUpperCase() !== 'GET') throw new Error('Observed source transport refused')
+    const response = await fetchImpl(input, { ...options, signal, redirect: 'error' })
+    let reader
+    try {
+      if (response.redirected || response.headers.get('content-type')?.split(';')[0].trim() !== 'application/json') throw new Error('Observed source response refused')
+      const length = response.headers.get('content-length')
+      if (length !== null && (!/^\d+$/.test(length) || Number(length) > maxResponseBytes)) throw new Error('Observed source response refused')
+      reader = response.body?.getReader()
+      if (!reader) throw new Error('Observed source response refused')
+      let size = 0; const parts = []
+      while (true) {
+        if (signal.aborted) throw new Error('Observed source stopped')
+        const { done, value } = await reader.read()
+        if (done) break
+        size += value.byteLength; total += value.byteLength
+        if (size > maxResponseBytes || total > maxTotalBytes) throw new Error('Observed source response refused')
+        parts.push(Buffer.from(value))
+      }
+      const headers = new Headers(response.headers)
+      headers.delete('content-encoding'); headers.set('content-length', String(size))
+      return new Response(Buffer.concat(parts), { status: response.status, headers })
+    } finally { if (reader) void reader.cancel().catch(() => {}); else if (response.body) void response.body.cancel().catch(() => {}) }
+  }
+}
+
+async function fetchSupabaseRows({ signal, quiet = false } = {}) {
   // .env の探索先。既定は web/（従来どおり）。MANABI_MAP_ENV_DIR を設定するとリポジトリ外を見る
   // （秘密をリポジトリ配下に置かないための仕組み。vite.config.ts の envDir と同じ変数を使う）。
   const { createClient } = await import('@supabase/supabase-js')
@@ -63,6 +102,7 @@ async function fetchSupabaseRows() {
   }
 
   const supabase = createClient(url, anonKey, {
+    ...(signal ? { global: { fetch: observedSourceFetch({ origin: new URL(url).origin, signal }) } } : {}),
     auth: {
       persistSession: false,
       autoRefreshToken: false,
@@ -81,14 +121,16 @@ async function fetchSupabaseRows() {
   async function runWithRetry(label, run, attempts = 4) {
     let lastMessage = ''
     for (let i = 1; i <= attempts; i += 1) {
+      signal?.throwIfAborted()
       const { data, error } = await run()
       if (!error) return data ?? []
       lastMessage = error.message
       const retriable = /timeout|timed out|57014|fetch failed|ECONNRESET|502|503|504/i.test(error.message)
       if (!retriable || i === attempts) break
       const waitMs = 1500 * i
-      console.error(`${label}: ${error.message} — ${waitMs}ms 待って再試行 (${i}/${attempts - 1})`)
-      await new Promise((resolve) => setTimeout(resolve, waitMs))
+      if (!quiet) console.error(`${label}: ${error.message} — ${waitMs}ms 待って再試行 (${i}/${attempts - 1})`)
+      if (signal) await (await import('node:timers/promises')).setTimeout(waitMs, undefined, { signal })
+      else await new Promise((resolve) => setTimeout(resolve, waitMs))
     }
     throw new Error(`${label}に失敗しました: ${lastMessage}`)
   }
@@ -112,6 +154,7 @@ async function fetchSupabaseRows() {
         .eq('is_active', true)
         .order('prefecture', { ascending: true })
         .order('name', { ascending: true })
+        .order('id', { ascending: true })
         .range(from, to),
     )
 
@@ -166,7 +209,9 @@ async function fetchSupabaseRows() {
 
   return rows
 }
-async function writeSchoolFiles(inputRows, publicDir, generatedAt, logger = console) {
+const productionSchoolIO = { mkdir, readdir, writeFile, rm, unlink }
+async function writeSchoolFiles(inputRows, publicDir, generatedAt, logger = console, io = productionSchoolIO) {
+  const { mkdir, readdir, writeFile, rm, unlink } = io
   const {
   buildOpenApiDocument,
   buildPublicSchoolRecords,
@@ -598,6 +643,8 @@ async function writeSchoolFiles(inputRows, publicDir, generatedAt, logger = cons
 const GENERATOR_FILES = [
   'web/scripts/gen-schools-json.mjs', 'web/scripts/lib/school-candidate.mjs',
   'web/scripts/lib/school-source.mjs', 'web/scripts/lib/municipalities.mjs',
+  'web/scripts/lib/school-resource-budget.mjs', 'web/scripts/lib/school-release-producer.mjs',
+  'web/scripts/lib/school-functions-package.mjs', 'web/scripts/lib/school-release.mjs', 'web/scripts/verify-static-output.mjs',
   'web/scripts/lib/public-api.mjs', 'web/scripts/lib/dept-groups-shared.mjs',
   'web/scripts/lib/city-index-shared.mjs', 'web/scripts/lib/site.mjs',
   'web/src/lib/neighbors.ts', 'web/src/lib/haversine.ts', 'web/src/lib/successors.ts',
@@ -611,6 +658,165 @@ const digest = (bytes) => createHash('sha256').update(bytes).digest('hex')
 async function generatorIdentity() {
   const files = await Promise.all(GENERATOR_FILES.map(async (path) => ({ path, sha256: digest(await readFile(await checkedFile(join(repoRoot, path)))) })))
   return { files, sha256: digest(canonicalSchoolSourceJSON(files)) }
+}
+
+// Pin before accepting input so a modified disk file is not labelled as the
+// code already imported in this process. An immutable reviewed checkout remains
+// required; this identity is not a complete transitive dependency attestation.
+const loadedGeneratorIdentity = await generatorIdentity()
+
+// Used only by the new external observed writer. Never removes anything and
+// never adopts existing directories except its explicitly owned output root.
+// Node path checks detect ordinary competing writers, not hostile OS-level races.
+function createOnlySchoolIO(root, identity, limits) {
+  const directories = new Map([[root, identity]])
+  let publicBytes = 0, publicFiles = 0
+  const check = (ok) => { if (!ok) throw new Error('Observed generation output identity changed') }
+  function inside(path) { const part = relative(root, path); check(part && !part.startsWith('..') && !part.includes(':')); return part }
+  async function confirm() {
+    for (const [path, expected] of directories) {
+      await checkedPath(path)
+      const info = await lstat(path)
+      check(info.isDirectory() && info.dev === expected.dev && info.ino === expected.ino)
+    }
+  }
+  async function make(path) {
+    path = resolve(path)
+    if (path === root) { await confirm(); return }
+    const parts = inside(path).split(sep)
+    let current = root
+    for (const part of parts) {
+      current = join(current, part)
+      await confirm()
+      if (!directories.has(current)) {
+        await mkdir(current) // Exclusive, including when callers request recursive.
+        await checkedPath(current)
+        const info = await lstat(current)
+        check(info.isDirectory() && !info.isSymbolicLink())
+        directories.set(current, info)
+      }
+    }
+    await confirm()
+  }
+  async function absent(path) {
+    inside(resolve(path)); await confirm()
+    try { await lstat(path) } catch (error) { if (error.code === 'ENOENT') return; throw error }
+    throw new Error('Observed generation refuses to remove an existing path')
+  }
+  return {
+    mkdir: make, rm: absent, unlink: absent,
+    async readdir(path, options) { await confirm(); await checkedPath(path); return readdir(path, options) },
+    async writeFile(path, bytes) {
+      path = resolve(path); inside(path); await confirm()
+      const size = Buffer.byteLength(bytes)
+      if (relative(root, path).split(sep)[0] === 'public-data') {
+        check(size > 0 && size <= limits.maxFileBytes &&
+          (publicBytes += size) <= limits.maxTotalBytes && ++publicFiles <= limits.maxFiles)
+      } else check(size <= limits.maxDecodedBytes)
+      check(directories.has(dirname(path)))
+      await checkedPath(path, { missing: true })
+      const handle = await open(path, 'wx')
+      try { await confirm(); await handle.writeFile(bytes); await handle.sync() } finally { await handle.close() }
+    },
+  }
+}
+
+/** Explicit observed source -> private external JSON generation. This does not
+ * build HTML/JS, deploy, or turn an observed row capture into a DB transaction.
+ * Caller must hold sourceLease across ALL paginated source reads. fetchRows is
+ * invoked once; the captured rows and public payload are never fetched again.
+ * Incomplete output is retained without a completion receipt for diagnosis.
+ */
+export async function generateObservedSchoolJSON({ source, fetchRows, outputRoot, generatedAt,
+  sourceLease, candidateRevision, resourceBudget, sourceTimeoutMs = 300000 }) {
+  const check = (ok) => { if (!ok) throw new Error('Observed school generation refused') }
+  check(source === 'supabase' && typeof fetchRows === 'function' &&
+    typeof sourceLease === 'string' && /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$/.test(sourceLease) &&
+    /^[a-f0-9]{40}$/.test(candidateRevision) && typeof generatedAt === 'string' &&
+    /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?(?:Z|[+-]\d\d:\d\d)$/.test(generatedAt) && Number.isFinite(Date.parse(generatedAt)))
+  check(Number.isSafeInteger(sourceTimeoutMs) && sourceTimeoutMs > 0 && sourceTimeoutMs <= 3600000)
+  const limits = schoolResourceBudget(resourceBudget)
+  // Destination and code checks precede credentials/source access.
+  const output = await checkedOutput(outputRoot, [], repoRoot)
+  check((await generatorIdentity()).sha256 === loadedGeneratorIdentity.sha256)
+  await mkdir(output)
+  await checkedPath(output)
+  const identity = await lstat(output)
+  const io = createOnlySchoolIO(output, identity, limits)
+  async function ownOutput() {
+    await checkedPath(output)
+    const current = await lstat(output)
+    check(current.dev === identity.dev && current.ino === identity.ino && current.isDirectory())
+  }
+  async function exclusiveFile(path, bytes) {
+    await ownOutput()
+    await io.writeFile(path, bytes)
+  }
+  try {
+    const controller = new AbortController()
+    const sourceDeadline = performance.now() + sourceTimeoutMs
+    let timer
+    let rows
+    try {
+      rows = await Promise.race([
+        new Promise((_, reject) => { timer = setTimeout(() => { controller.abort(); reject(new Error('Observed source timeout')) }, sourceTimeoutMs) }),
+        Promise.resolve().then(() => loadSchoolSource({ source, fetchSupabase: () => fetchRows({ signal: controller.signal }) })),
+      ])
+      check(performance.now() < sourceDeadline && !controller.signal.aborted)
+    } finally { clearTimeout(timer); controller.abort() }
+    const captured = Buffer.from(`${canonicalSchoolSourceJSON(rows)}\n`)
+    check(captured.length <= limits.maxDecodedBytes)
+    const { prefectures } = await loadCivicData(webRoot)
+    check(rows.length > 0 && rows.every((row) => /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/.test(row.id) &&
+      prefectures.some((pref) => pref.name === row.prefecture)))
+    check(new Set(rows.map((row) => row.id)).size === rows.length)
+    const privateDir = join(output, 'private-source'), publicDir = join(output, 'public-data')
+    await ownOutput(); await io.mkdir(privateDir); await io.mkdir(publicDir)
+    // A source capture is deliberately outside the directory handed to Vite or
+    // any public packager. The row JSON may contain non-public provenance fields.
+    await exclusiveFile(join(privateDir, 'rows.json'), captured)
+    await writeSchoolFiles(rows, publicDir, generatedAt, { log() {}, warn() {} }, io)
+    const files = new Map()
+    let total = 0
+    async function inventory(prefix = '') {
+      for (const entry of await readdir(await checkedPath(join(publicDir, prefix)), { withFileTypes: true })) {
+        const path = prefix ? `${prefix}/${entry.name}` : entry.name
+        if (entry.isDirectory()) await inventory(path)
+        else {
+          const file = await checkedFile(join(publicDir, path)), info = await lstat(file)
+          check(info.size > 0 && info.size <= limits.maxFileBytes && (total += info.size) <= limits.maxTotalBytes && files.size < limits.maxFiles)
+          const bytes = await readFile(file)
+          check(bytes.length === info.size)
+          // Reuse the existing recursive private-field gate for every emitted
+          // JSON representation, including compressed full/map payloads.
+          const decoded = path.endsWith('.gz') ? gunzipSync(bytes, { maxOutputLength: limits.maxDecodedBytes }) : bytes
+          check(decoded.length <= limits.maxDecodedBytes)
+          assertNoInternalSchoolFields(JSON.parse(decoded), path)
+          files.set(path, bytes)
+        }
+      }
+    }
+    await inventory()
+    const generatorSnapshot = Buffer.from(`${JSON.stringify(buildSchoolPayload(rows))}\n`)
+    check(generatorSnapshot.length <= limits.maxDecodedBytes)
+    const projection = verifySchoolProjection({ generatorSnapshot, files, resourceBudget: limits })
+    check((await generatorIdentity()).sha256 === loadedGeneratorIdentity.sha256)
+    await ownOutput()
+    // Check every saved byte again before the sole completion marker is written.
+    for (const [path, bytes] of files) check((await readFile(await checkedFile(join(publicDir, path)))).equals(bytes))
+    check((await readFile(await checkedFile(join(privateDir, 'rows.json')))).equals(captured))
+    const artifacts = [...files].map(([path, bytes]) => ({ path, size: bytes.length, sha256: digest(bytes) })).sort((a, b) => a.path.localeCompare(b.path, 'en'))
+    const receipt = { format: 'observed-school-json', version: 1, evidence: 'observed', scope: 'school-json-only',
+      generatedAt, candidateRevision, source: { type: source, lease: sourceLease, rowsSha256: digest(captured), rowCount: rows.length },
+      generatorSnapshotSha256: digest(generatorSnapshot), generator: loadedGeneratorIdentity,
+      resourceBudget: limits, artifacts, artifactsSha256: digest(canonicalSchoolSourceJSON(artifacts)), projection }
+    await exclusiveFile(join(privateDir, 'generator-payload.json'), generatorSnapshot)
+    await exclusiveFile(join(output, 'observed-generation.json'), `${canonicalSchoolSourceJSON(receipt)}\n`)
+    return receipt
+  } catch {
+    // Do not print rows, paths, upstream diagnostics or credentials.
+    throw new Error('Observed school generation failed; no completed generation confirmed')
+  }
 }
 
 /** Generate only school JSON into a fresh external directory from a synthetic pair.
@@ -651,17 +857,37 @@ export async function generateSchoolCandidate({ snapshotPath, manifestPath, outp
 }
 
 export async function main(args = process.argv.slice(2)) {
+  const explicitSupabase = args.includes('--school-source=supabase')
+  const observedFlags = {}
+  args = args.filter((arg) => {
+    const match = /^--(generation-time|source-lease|candidate-revision|max-total-bytes)=(.+)$/.exec(arg)
+    if (!match) return true
+    if (Object.hasOwn(observedFlags, match[1])) throw new Error('Duplicate observed generation option')
+    observedFlags[match[1]] = match[2]
+    return false
+  })
   const outputArgs = args.filter((arg) => arg.startsWith('--output-root='))
   if (outputArgs.length > 1) throw new Error('Only one output root is allowed')
   const options = parseSchoolSourceArgs(args.filter((arg) => !arg.startsWith('--output-root=')))
   if (options.source === 'snapshot') {
+    if (Object.keys(observedFlags).length) throw new Error('Observed options cannot relabel a synthetic snapshot')
     const outputRoot = outputArgs[0]?.slice('--output-root='.length)
     if (!outputRoot) throw new Error('Snapshot generation requires an explicit external --output-root')
     const receipt = await generateSchoolCandidate({ snapshotPath: options.snapshotPath, manifestPath: options.manifestPath, outputRoot })
     console.log(JSON.stringify({ status: 'generated', scope: receipt.scope, artifactsSha256: receipt.artifactsSha256, artifacts: receipt.artifacts.length }))
     return receipt
   }
-  if (outputArgs.length) throw new Error('An output root is supported only for synthetic snapshot candidates')
+  if (outputArgs.length) {
+    if (!explicitSupabase) throw new Error('Observed generation requires explicit --school-source=supabase')
+    const receipt = await generateObservedSchoolJSON({ source: 'supabase', fetchRows: ({ signal }) => fetchSupabaseRows({ signal, quiet: true }),
+      outputRoot: outputArgs[0].slice('--output-root='.length), generatedAt: observedFlags['generation-time'],
+      sourceLease: observedFlags['source-lease'], candidateRevision: observedFlags['candidate-revision'],
+      resourceBudget: observedFlags['max-total-bytes'] === undefined ? undefined : { maxTotalBytes: Number(observedFlags['max-total-bytes']) } })
+    console.log(JSON.stringify({ status: 'generated', scope: receipt.scope, evidence: receipt.evidence,
+      artifactsSha256: receipt.artifactsSha256, artifacts: receipt.artifacts.length }))
+    return receipt
+  }
+  if (Object.keys(observedFlags).length) throw new Error('Observed generation requires an external output root')
   // Existing production generation remains explicitly selected and unchanged.
   const rows = await loadSchoolSource({ ...options, fetchSupabase: fetchSupabaseRows })
   return writeSchoolFiles(rows, join(webRoot, 'public'), new Date().toISOString())

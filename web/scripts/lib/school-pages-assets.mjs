@@ -3,6 +3,7 @@
 // Hash convention: cloudflare/workers-sdk packages/deploy-helpers/src/deploy/helpers/hash.ts
 import { extname } from 'node:path'
 import { blake3 } from '@noble/hashes/blake3.js'
+import { schoolResourceBudget, sameSchoolBudget } from './school-resource-budget.mjs'
 
 const API = 'https://api.cloudflare.com/client/v4'
 const MiB = 1024 * 1024
@@ -33,19 +34,25 @@ export function pagesAssetHash(path, bytes) {
  * No retries, deployment changes, or claim of live publication occur here.
  */
 export function createPagesAssetUploader({ apiToken, fetchImpl = fetch, timeoutMs = 60_000,
-  maxTotalBytes = 64 * MiB, maxFileBytes = 25 * MiB, maxResponseBytes = MiB } = {}) {
+  resourceBudget, maxTotalBytes, maxFileBytes, maxResponseBytes = MiB } = {}) {
+  const limits = schoolResourceBudget({ ...resourceBudget,
+    ...(maxTotalBytes === undefined ? {} : { maxTotalBytes }), ...(maxFileBytes === undefined ? {} : { maxFileBytes }) })
+  maxTotalBytes = limits.maxTotalBytes; maxFileBytes = limits.maxFileBytes
   ensure(typeof apiToken === 'string' && apiToken.length > 0 && !/[\s]/.test(apiToken) &&
     typeof fetchImpl === 'function')
   ensure([timeoutMs, maxTotalBytes, maxFileBytes, maxResponseBytes].every((n) => Number.isSafeInteger(n) && n > 0))
-  ensure(timeoutMs <= 3_600_000 && maxFileBytes <= 25 * MiB && maxTotalBytes <= 256 * MiB && maxResponseBytes <= 8 * MiB)
-  return async function uploadAssets({ accountId, project, files, signal } = {}) {
+  ensure(timeoutMs <= 3_600_000 && maxResponseBytes <= 8 * MiB)
+  return async function uploadAssets({ accountId, project, files, signal, resourceBudget: pinnedBudget } = {}) {
+    ensure(pinnedBudget === undefined || sameSchoolBudget(limits, pinnedBudget))
     ensure(typeof accountId === 'string' && /^[a-f0-9]{32}$/.test(accountId) &&
       typeof project === 'string' && /^[a-z0-9][a-z0-9-]{0,62}$/.test(project))
-    ensure(files instanceof Map && files.size > 0 && files.size <= 20_000)
+    ensure(files instanceof Map && files.size > 0 && files.size <= limits.maxFiles)
+    const deadline = performance.now() + timeoutMs
     // Take ownership before the first await; the caller cannot replace uploaded bytes.
     let total = 0
     const entries = [], manifest = Object.create(null), byHash = new Map()
     for (const [path, original] of files) {
+      ensure(performance.now() < deadline && !signal?.aborted)
       ensure(isPath(path) && Buffer.isBuffer(original) && original.length <= maxFileBytes)
       total += original.length
       ensure(total <= maxTotalBytes)
@@ -58,16 +65,17 @@ export function createPagesAssetUploader({ apiToken, fetchImpl = fetch, timeoutM
     }
     const controller = new AbortController()
     const combined = signal ? AbortSignal.any([signal, controller.signal]) : controller.signal
-    const timer = setTimeout(() => controller.abort(), timeoutMs)
+    ensure(performance.now() < deadline)
+    const timer = setTimeout(() => controller.abort(), Math.max(1, deadline - performance.now()))
     let abortListener
     const stopped = new Promise((_, reject) => {
       abortListener = () => reject(new Error('Pages asset upload stopped'))
       combined.addEventListener('abort', abortListener, { once: true })
     })
     const bounded = async (operation) => {
-      ensure(!combined.aborted)
+      ensure(!combined.aborted && performance.now() < deadline)
       const result = await Promise.race([Promise.resolve().then(operation), stopped])
-      ensure(!combined.aborted)
+      ensure(!combined.aborted && performance.now() < deadline)
       return result
     }
     async function request(path, token, payload) {
@@ -109,6 +117,8 @@ export function createPagesAssetUploader({ apiToken, fetchImpl = fetch, timeoutM
       const jwt = authorization.jwt, hashes = entries.map((item) => item.key)
       const missing = await request('/pages/assets/check-missing', jwt, { hashes })
       ensure(Array.isArray(missing) && new Set(missing).size === missing.length && missing.every((key) => byHash.has(key)))
+      const needed = new Set(missing)
+      for (const item of entries) if (!needed.has(item.key)) item.bytes = null
       // Small serial batches bound memory and API request size. No automatic retry.
       let batch = [], batchSize = 2
       async function flush() {
@@ -118,6 +128,7 @@ export function createPagesAssetUploader({ apiToken, fetchImpl = fetch, timeoutM
       for (const key of missing) {
         const item = byHash.get(key)
         const upload = { key, value: item.bytes.toString('base64'), metadata: { contentType: item.contentType }, base64: true }
+        item.bytes = null
         const size = Buffer.byteLength(JSON.stringify(upload)) + 1
         if (batchSize + size > 40 * MiB || batch.length >= 1000) await flush()
         batch.push(upload); batchSize += size

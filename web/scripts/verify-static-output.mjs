@@ -488,7 +488,7 @@ function findForbiddenKey(value, forbiddenKeys, path = '$') {
   return null
 }
 
-function assertNoInternalSchoolFields(value, relativePath) {
+export function assertNoInternalSchoolFields(value, relativePath) {
   const leakPath = findForbiddenKey(value, INTERNAL_SCHOOL_FIELDS)
   if (leakPath) {
     throw new Error(`internal school field found in ${relativePath} at ${leakPath}`)

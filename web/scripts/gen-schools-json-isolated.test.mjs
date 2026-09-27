@@ -5,9 +5,10 @@ import { tmpdir } from 'node:os'
 import { join, dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { spawnSync } from 'node:child_process'
+import { syncBuiltinESMExports } from 'node:module'
 import { gunzipSync } from 'node:zlib'
 import test from 'node:test'
-import { generateSchoolCandidate, main } from './gen-schools-json.mjs'
+import { generateSchoolCandidate, generateObservedSchoolJSON, observedSourceFetch, main } from './gen-schools-json.mjs'
 import { checkedPath, stageSchoolCandidate, verifySchoolCandidate } from './lib/school-candidate.mjs'
 import { SNAPSHOT_COLUMNS, SOURCE_TABLES, REQUIRED_CODE_FILES, canonicalSchoolSourceJSON, snapshotToGeneratorRows, buildSchoolPayload } from './lib/school-source.mjs'
 import { buildMapPayload } from '../src/lib/mapPayload.ts'
@@ -176,4 +177,122 @@ test('case-variant UUIDs and uppercase inactive predecessors are rejected before
     await assert.rejects(generateSchoolCandidate({ ...input, outputRoot: join(root, 'candidate') }), /canonical lowercase UUID/)
     await missing(join(root, 'candidate'))
   }
+})
+
+const observedOptions = (outputRoot, fetchRows) => ({ source: 'supabase', fetchRows, outputRoot,
+  generatedAt: fixedDate, sourceLease: 'synthetic-exclusive-source-lease', candidateRevision: 'c'.repeat(40) })
+
+test('observed generation captures once into external private/public siblings and proves the public projection', async (t) => {
+  const root = await temporary(t), input = await fixture(root), output = join(root, 'observed')
+  const publicBefore = await fs.stat(join(webRoot, 'public')), names = await fs.readdir(join(webRoot, 'public'))
+  const rows = snapshotToGeneratorRows(input.snapshot); let fetched = 0
+  t.mock.method(globalThis, 'fetch', () => { throw new Error('network forbidden') })
+  const receipt = await generateObservedSchoolJSON(observedOptions(output, async () => { fetched++; return rows }))
+  assert.equal(fetched, 1); assert.equal(receipt.evidence, 'observed'); assert.equal(receipt.scope, 'school-json-only')
+  assert.equal(receipt.source.rowsSha256, hash(await fs.readFile(join(output, 'private-source/rows.json'))))
+  assert.equal(receipt.generatorSnapshotSha256, hash(await fs.readFile(join(output, 'private-source/generator-payload.json'))))
+  const manifest = JSON.parse(await fs.readFile(join(output, 'public-data/schools-manifest.json')))
+  assert.equal(manifest.generatedAt, fixedDate)
+  assert.equal(receipt.projection.publicRecords, rows.filter((row) => row.official_url).length)
+  assert.ok(receipt.artifacts.every((entry) => !entry.path.startsWith('private-source') && !entry.path.includes('rows.json')))
+  for (const entry of receipt.artifacts) assert.equal(hash(await fs.readFile(join(output, 'public-data', entry.path))), entry.sha256)
+  await assert.rejects(verifySchoolCandidate(output)) // Cannot masquerade as synthetic.
+  assert.deepEqual(await fs.readdir(join(webRoot, 'public')), names)
+  assert.equal((await fs.stat(join(webRoot, 'public'))).mtimeMs, publicBefore.mtimeMs)
+})
+
+test('observed destination, source and lease guards run before source access', async (t) => {
+  const root = await temporary(t), existing = join(root, 'existing'), linked = join(root, 'linked')
+  await fs.mkdir(existing); await fs.symlink(existing, linked, process.platform === 'win32' ? 'junction' : 'dir')
+  let fetched = 0
+  for (const output of [existing, join(repoRoot, 'forbidden-observed'), join(linked, 'output')]) {
+    await assert.rejects(generateObservedSchoolJSON(observedOptions(output, async () => { fetched++; return [] })))
+  }
+  for (const extra of [{ source: 'snapshot' }, { sourceLease: '' }, { candidateRevision: '' }, { generatedAt: 'yesterday' }]) {
+    await assert.rejects(generateObservedSchoolJSON({ ...observedOptions(join(root, 'fresh'), async () => { fetched++; return [] }), ...extra }))
+  }
+  assert.equal(fetched, 0); await missing(join(root, 'fresh'))
+  const noExplicitSource = cli(`--output-root=${join(root, 'unselected')}`, `--generation-time=${fixedDate}`,
+    '--source-lease=synthetic-lease', `--candidate-revision=${'c'.repeat(40)}`)
+  assert.equal(noExplicitSource.status, 1); await missing(join(root, 'unselected'))
+})
+
+test('observed private-field leaks and bounded generation leave no completion receipt', async (t) => {
+  const root = await temporary(t), input = await fixture(root), rows = snapshotToGeneratorRows(input.snapshot)
+  for (const [name, change, resourceBudget] of [
+    ['leak', (value) => { value[0].status_note = 'invented private fixture note' }, undefined],
+    ['budget', () => {}, { maxTotalBytes: 1 }],
+    ['unsafe-id', (value) => { value[0].id = '../escape' }, undefined],
+  ]) {
+    const changed = structuredClone(rows); change(changed)
+    const output = join(root, name)
+    await assert.rejects(generateObservedSchoolJSON({ ...observedOptions(output, async () => changed), resourceBudget }), /no completed generation/)
+    await missing(join(output, 'observed-generation.json'))
+  }
+})
+
+test('observed source timeout cannot publish a late fetch result', async (t) => {
+  const root = await temporary(t), output = join(root, 'late')
+  let signal
+  await assert.rejects(generateObservedSchoolJSON({ ...observedOptions(output, (options) => {
+    signal = options.signal; return new Promise(() => {})
+  }), sourceTimeoutMs: 20 }), /no completed generation/)
+  assert.equal(signal.aborted, true); await missing(join(output, 'observed-generation.json'))
+  const input = await fixture(root)
+  const lateOutput = join(root, 'late-synchronous')
+  await assert.rejects(generateObservedSchoolJSON({ ...observedOptions(lateOutput, async () => {
+    const stop = performance.now() + 20
+    while (performance.now() < stop) { /* model synchronous source work blocking timers */ }
+    return snapshotToGeneratorRows(input.snapshot)
+  }), sourceTimeoutMs: 1 }), /no completed generation/)
+  await missing(join(lateOutput, 'observed-generation.json'))
+})
+
+test('observed source transport restricts origin/method and caps cumulative response bytes', async () => {
+  let calls = 0
+  const transport = observedSourceFetch({ origin: 'https://synthetic.supabase.invalid', signal: new AbortController().signal,
+    maxResponseBytes: 10, maxTotalBytes: 10, fetchImpl: async (url, options) => {
+      calls++; assert.equal(options.redirect, 'error'); return new Response('[123]', { headers: { 'content-type': 'application/json' } })
+    } })
+  await assert.rejects(transport('https://outside.example.invalid/'))
+  await assert.rejects(transport('https://synthetic.supabase.invalid/', { method: 'POST' }))
+  assert.equal(calls, 0)
+  await transport('https://synthetic.supabase.invalid/')
+  await transport('https://synthetic.supabase.invalid/')
+  await assert.rejects(transport('https://synthetic.supabase.invalid/'))
+  const oversized = observedSourceFetch({ origin: 'https://synthetic.supabase.invalid', signal: new AbortController().signal,
+    maxResponseBytes: 2, fetchImpl: async () => new Response('[123]', { headers: { 'content-type': 'application/json' } }) })
+  await assert.rejects(oversized('https://synthetic.supabase.invalid/'))
+})
+
+test('observed writer rejects a replaced child junction before deleting or writing outside output', async (t) => {
+  const root = await temporary(t), input = await fixture(root), output = join(root, 'observed'), victim = join(root, 'victim')
+  await fs.mkdir(join(victim, 'api/v1'), { recursive: true })
+  const sentinel = join(victim, 'api/v1/sentinel.txt'); await fs.writeFile(sentinel, 'synthetic competitor')
+  const original = fs.mkdir
+  t.mock.method(fs, 'mkdir', async (path, ...args) => {
+    const result = await original(path, ...args)
+    if (path === join(output, 'public-data')) {
+      await fs.rmdir(path); await fs.symlink(victim, path, process.platform === 'win32' ? 'junction' : 'dir')
+    }
+    return result
+  })
+  syncBuiltinESMExports()
+  t.after(() => { t.mock.restoreAll(); syncBuiltinESMExports() })
+  await assert.rejects(generateObservedSchoolJSON(observedOptions(output, async () => snapshotToGeneratorRows(input.snapshot))))
+  assert.equal(await fs.readFile(sentinel, 'utf8'), 'synthetic competitor')
+  await missing(join(victim, 'schools-manifest.json')); await missing(join(output, 'observed-generation.json'))
+})
+
+test('observed writer never overwrites a competing ordinary public file', async (t) => {
+  const root = await temporary(t), input = await fixture(root), output = join(root, 'observed')
+  const target = join(output, 'public-data/api/v1/schools.json'), original = fs.open
+  t.mock.method(fs, 'open', async (path, ...args) => {
+    if (path === target) await fs.writeFile(target, 'synthetic competitor')
+    return original(path, ...args)
+  })
+  syncBuiltinESMExports()
+  t.after(() => { t.mock.restoreAll(); syncBuiltinESMExports() })
+  await assert.rejects(generateObservedSchoolJSON(observedOptions(output, async () => snapshotToGeneratorRows(input.snapshot))))
+  assert.equal(await fs.readFile(target, 'utf8'), 'synthetic competitor'); await missing(join(output, 'observed-generation.json'))
 })

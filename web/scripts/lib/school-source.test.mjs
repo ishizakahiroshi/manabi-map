@@ -3,6 +3,8 @@ import { createHash } from 'node:crypto'
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
+import { spawnSync } from 'node:child_process'
 import test from 'node:test'
 import {
   SNAPSHOT_COLUMNS, SOURCE_TABLES, REQUIRED_CODE_FILES, buildSchoolPayload, canonicalizeGeneratorRows,
@@ -248,7 +250,51 @@ test('shared map calculation ignores legacy aggregate and public API keeps sourc
 
 test('generator chooses source before loading env and reuses the tested pure payload function', async () => {
   const source = await readFile(new URL('../gen-schools-json.mjs', import.meta.url), 'utf8')
-  assert.ok(source.indexOf('parseSchoolSourceArgs(process.argv.slice(2))') < source.indexOf('async function fetchSupabaseRows()'))
-  assert.ok(source.indexOf('async function fetchSupabaseRows()') < source.indexOf("await readEnvFile(join(envDir, '.env'))"))
   assert.match(source, /const payload = buildSchoolPayload\(inputRows\)/)
+  // Run the real entrypoint in a fresh process. Guard before importing it so a
+  // regression that reads credentials during import also fails without exposure.
+  const code = `
+    import assert from 'node:assert/strict';
+    import fs from 'node:fs/promises';
+    import { syncBuiltinESMExports } from 'node:module';
+    import { basename, join } from 'node:path';
+    import { tmpdir } from 'node:os';
+    import { fileURLToPath } from 'node:url';
+    let envReads = 0, networkCalls = 0;
+    const originalRead = fs.readFile;
+    fs.readFile = async (path, ...args) => {
+      const name = basename(path instanceof URL ? fileURLToPath(path) : String(path));
+      if (name === '.env' || name.startsWith('.env.')) {
+        envReads++; throw new Error('synthetic env guard');
+      }
+      return originalRead(path, ...args);
+    };
+    syncBuiltinESMExports();
+    globalThis.fetch = async () => { networkCalls++; throw new Error('synthetic network guard'); };
+    const { main } = await import('./scripts/gen-schools-json.mjs');
+    assert.equal(envReads, 0); assert.equal(networkCalls, 0);
+    const output = join(tmpdir(), 'synthetic-source-selection-never-created');
+    for (const args of [
+      [], ['--school-source=unknown'],
+      ['--school-source=supabase', '--school-source=snapshot'],
+      ['--school-source=snapshot'],
+      ['--school-source=supabase', '--snapshot=synthetic.json'],
+      ['--output-root=' + output, '--source-lease=synthetic-lease',
+       '--generation-time=2026-01-01T00:00:00Z', '--candidate-revision=' + 'a'.repeat(40)],
+      ['--school-source=supabase', '--output-root=' + output],
+    ]) {
+      await assert.rejects(main(args));
+      assert.equal(envReads, 0); assert.equal(networkCalls, 0);
+    }
+    // A valid explicit production selection reaches the credential boundary.
+    // The guard rejects BEFORE reading any actual environment file or value.
+    await assert.rejects(main(['--school-source=supabase']), /synthetic env guard/);
+    assert.equal(envReads, 1); assert.equal(networkCalls, 0);
+    console.log('source-selection-guard-passed');
+  `
+  const result = spawnSync(process.execPath, ['--import', 'tsx', '--input-type=module', '-e', code], {
+    cwd: fileURLToPath(new URL('../../', import.meta.url)), encoding: 'utf8', timeout: 10000,
+  })
+  assert.equal(result.status, 0, result.stderr)
+  assert.equal(result.stdout.trim(), 'source-selection-guard-passed')
 })
