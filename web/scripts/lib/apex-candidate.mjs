@@ -2,7 +2,10 @@ import fs from 'node:fs/promises'
 import { dirname, join, relative, isAbsolute } from 'node:path'
 import { createHash } from 'node:crypto'
 import { checkedFile, checkedPath, verifySchoolCandidate } from './school-candidate.mjs'
-import { renderEntryPage } from '../../apex-portal/portal.mjs'
+import { portal, renderEntryPage, renderRecoveryEnded } from '../../apex-portal/portal.mjs'
+import { entrySupportFiles } from './entry-metadata.mjs'
+import { normalizedMigrationPath, validateMigrationInventory } from '../../../functions/_school-migration.ts'
+import deploymentTargets from '../../data/deployment-targets.json' with { type: 'json' }
 
 const sha256 = (bytes) => createHash('sha256').update(bytes).digest('hex')
 
@@ -46,21 +49,41 @@ export async function retainLegacyAssets(source, destination) {
       await fs.writeFile(target, bytes, { flag: 'wx' })
     }
   }
+  // The published route inventory must include assets retained after construction.
+  const inventoryPath = join(destination, 'school-migration-candidate.json')
+  let inventory
+  try { inventory = JSON.parse(await fs.readFile(await checkedFile(inventoryPath), 'utf8')) } catch (error) {
+    if (error.code !== 'ENOENT') throw error
+  }
+  if (inventory) {
+    validateMigrationInventory(inventory, inventory.phase)
+    inventory.assets = [...new Set([...inventory.assets, ...manifest.artifacts.map((item) => normalizedMigrationPath('/' + item.path))])].sort()
+    validateMigrationInventory(inventory, inventory.phase)
+    await fs.writeFile(inventoryPath, JSON.stringify(inventory) + '\n')
+  }
   return { synthetic: true, retained: seen.size }
 }
 
 /** No old SEO HTML is duplicated. Retain current candidate chunks/data for the legacy shell. */
-export async function createApexCandidate({ highSchoolOutput, apexOutput, portalRoot, schoolShell, portalConfig }) {
+export async function createApexCandidate({ highSchoolOutput, apexOutput, portalRoot, schoolShell, portalConfig = portal, phase = 'candidate-rescue' }) {
+  if (!['candidate-rescue', 'candidate-retired'].includes(phase)) throw new Error('Explicit candidate phase required')
   await fs.mkdir(apexOutput)
+  const inventory = { format: 'synthetic-school-routes', phase, routes: [], assets: [] }
+  let existingHeaders = ''
   async function copyTree(path = '') {
     for (const item of await fs.readdir(join(highSchoolOutput, path), { withFileTypes: true })) {
       const relative = path ? `${path}/${item.name}` : item.name
       if (item.isSymbolicLink()) throw new Error('Linked compatibility assets are not supported')
       if (item.isDirectory()) await copyTree(relative)
-      else if (item.isFile() && (!relative.endsWith('.html') || ['404.html', 'maintenance.html'].includes(relative)) &&
+      else if (item.isFile() && relative.endsWith('/index.html')) {
+        inventory.routes.push(normalizedMigrationPath('/' + relative.slice(0, -'/index.html'.length)))
+      } else if (item.isFile() && relative === '_headers') {
+        existingHeaders = await fs.readFile(join(highSchoolOutput, relative), 'utf8')
+      } else if (item.isFile() && (!relative.endsWith('.html') || relative === 'maintenance.html') &&
         !['robots.txt', 'sitemap.xml', 'llms.txt', '_redirects'].includes(relative)) {
         await fs.mkdir(dirname(join(apexOutput, relative)), { recursive: true })
         await fs.copyFile(join(highSchoolOutput, relative), join(apexOutput, relative), fs.constants.COPYFILE_EXCL)
+        if (!relative.startsWith('_') && !relative.endsWith('.html') && !relative.startsWith('api/')) inventory.assets.push(normalizedMigrationPath('/' + relative))
       }
     }
   }
@@ -68,9 +91,17 @@ export async function createApexCandidate({ highSchoolOutput, apexOutput, portal
   const shell = schoolShell ?? await fs.readFile(join(highSchoolOutput, 'index.html'), 'utf8')
   await fs.mkdir(join(apexOutput, 'legacy-school'))
   await fs.writeFile(join(apexOutput, 'legacy-school/index.html'), shell.replace('<head>', '<head><meta name="legacy-school-shell" content="1"><meta name="robots" content="noindex"><meta name="referrer" content="no-referrer">'), { flag: 'wx' })
-  await fs.writeFile(join(apexOutput, 'index.html'), renderEntryPage(await fs.readFile(join(portalRoot, 'index.html'), 'utf8'), portalConfig), { flag: 'wx' })
+  await fs.writeFile(join(apexOutput, 'index.html'), renderEntryPage(await fs.readFile(join(portalRoot, 'index.html'), 'utf8'), { ...portalConfig, migrationPhase: phase }), { flag: 'wx' })
   await fs.copyFile(join(portalRoot, 'portal.css'), join(apexOutput, 'portal.css'), fs.constants.COPYFILE_EXCL)
-  await fs.writeFile(join(apexOutput, 'robots.txt'), 'User-agent: *\nDisallow: /legacy-school/\nDisallow: /auth/\nDisallow: /family/\n', { flag: 'wx' })
+  const support = entrySupportFiles({ origin: deploymentTargets.targets.apex.origin, brand: portalConfig.brand, description: '親子が学ぶことと通う場所を見つける総合入口。', stylesheet: '/portal.css' })
+  support['_headers'] = existingHeaders + '\n' + support['_headers']
+  for (const [name, content] of Object.entries(support)) await fs.writeFile(join(apexOutput, name), content, { flag: 'wx' })
+  await fs.writeFile(join(apexOutput, 'school-recovery-ended.html'), renderRecoveryEnded(portalConfig), { flag: 'wx' })
+  inventory.assets.push('/portal.css', '/robots.txt', '/sitemap.xml', '/llms.txt')
+  inventory.routes.sort(); inventory.assets.sort()
+  validateMigrationInventory(inventory, phase)
+  await fs.writeFile(join(apexOutput, 'school-migration-candidate.json'), JSON.stringify(inventory) + '\n', { flag: 'wx' })
   // The callback shell and all dependent routes are handled by separately deployed Functions.
   await fs.writeFile(join(apexOutput, '_redirects'), '', { flag: 'wx' })
+  return inventory
 }
