@@ -39,6 +39,10 @@ class PublishError(ValueError):
     """Only fixed, body-free errors cross the owner bridge."""
 
 
+class TransportReadError(PublishError):
+    """An HTTPS read failed before a complete bounded response was available."""
+
+
 def need(ok, message="school publication rejected; reconcile saved evidence"):
     if not ok:
         raise PublishError(message)
@@ -179,12 +183,13 @@ def https_get(url, *, headers, timeout, maximum):
         connection.request("GET", parsed.path + ("?" + parsed.query if parsed.query else ""), headers=headers)
         response = connection.getresponse()
         body = response.read(maximum + 1)
-        need(len(body) <= maximum)
-        return {"status": response.status, "headers": {k.lower(): v for k, v in response.getheaders()}, "body": body}
-    except Exception:
-        raise PublishError("school publication HTTP verification failed") from None
+        result = {"status": response.status, "headers": {k.lower(): v for k, v in response.getheaders()}, "body": body}
+    except (OSError, http.client.HTTPException):
+        raise TransportReadError("school publication HTTPS read failed") from None
     finally:
         connection.close()
+    need(len(body) <= maximum, "school publication HTTP body limit exceeded")
+    return result
 
 
 def _read(path, maximum=MAX_RECORD):
@@ -293,11 +298,20 @@ class SchoolLivePublisher:
             batch = requests[start:start + 8]
             returned = queue.Queue()
             def one(index, request):
-                try:
-                    value = self.fetch(request[0], headers=request[1], timeout=request[2], maximum=request[3])
-                    returned.put((index, value, False))
-                except Exception:
-                    returned.put((index, None, True))
+                for attempt in range(3):
+                    try:
+                        # Never start a late retry after the owner deadline.
+                        remaining = control.remaining()
+                        value = self.fetch(request[0], headers=request[1], timeout=min(request[2], remaining), maximum=request[3])
+                        returned.put((index, value, False)); return
+                    except (TransportReadError, OSError, http.client.HTTPException):
+                        if attempt == 2: break
+                        try: delay = min(0.15 * (attempt + 1), control.remaining())
+                        except Exception: break
+                        time.sleep(delay)
+                    except Exception:
+                        break
+                returned.put((index, None, True))
             for index, request in enumerate(batch):
                 threading.Thread(target=one, args=(index, request), daemon=True).start()
             done, last = {}, time.monotonic()
