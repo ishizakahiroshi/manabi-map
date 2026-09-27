@@ -25,6 +25,8 @@ docsweep_parent: docs/plan_subdomain-entry-school-migration.md
 
 親: [総合入口と学校サブドメインへの移行](plan_subdomain-entry-school-migration.md)
 
+最新の到達点と再開順は[第6区間の統合記録](#sqlite-wave6-current)を読む。以下の各実施記録にある「未実装」「次の区間」は、その区間終了時点の履歴である。
+
 ## context配分
 
 | C | 種別 | 内容 | 備考/注意点 | AI実行 | 実行モデル |
@@ -285,3 +287,23 @@ ID/件数/公開内容の説明できない差、FK孤立、復元不可、権�
 資料: [容量・費用の検討HTML](review_portal-school-brand_2026-09-27.html)。仕様根拠: [SQLiteの適した用途](https://www.sqlite.org/whentouse.html)、[Backup API](https://www.sqlite.org/backup.html)、[Cloudflare Direct Upload](https://developers.cloudflare.com/pages/get-started/direct-upload/)。
 
 計画作成時の検証結果（2026-09-27）: 別エージェントが順序・既存依存・完了基準をレビューし重大な指摘なし。親子relatedのdry-runは追加修正0、provenance整合確認成功。対象公開3ファイルの秘密スキャンは検出0（3文字未満の設定監視語17件は対象外）。文書規約検査とHTMLの表示/保存/計算の回帰検査も成功。アプリやDBの実装検証ではない。
+
+<a id="sqlite-wave6-current"></a>
+
+### C3の2026-09-27 第6区間: 署名付き受付・全原本照合・公開許可
+
+第6区間の合成実装成果を共有計画へ統合した。[切替準備の節11](reference_sqlite-school-cutover-readiness.md#sqlite-wave6-contract)を現在の契約と残判断の入口にする。受付PG→署名付き受渡し→queue→原本transaction→export/JSON→候補/registry照合→公開許可消費→撤回→訂正/再審査→新候補→再撤回を、合成データと通信しない公開模擬処理で接続した。実原本・実認証・実配信・画面には接続していない。
+
+- 受付: `school_intake_transfer.py`と隔離SQLのexportを追加。本人・学校・学科・受付revisionに束縛した最小イベントをHMACで検査する候補とし、receipt modeの新規受付/審査は署名イベントを必須にした。生のActor入力による迂回は交代レビューで再現後に修正した。実executor方式の採用や実JWTの証拠ではない。
+- 原本: 初回を含むpreview/apply/cancelで、dataset版・公開snapshot内容hashに加えて25表の全列全行hashをtransaction内で照合する。公開投影外の変更も検知する。第5区間に残っていた初回CASの合成実装はここで進んだ。
+- 公開許可: queue内で許可を永続化し、一回の消費と到達済み撤回を同じtransactionで順序付ける。停止/再送、訂正原本と署名済み再審査の束縛、訂正後の再撤回を扱う。未配送撤回の検知や配信済みbytesの除去は保証しない。
+
+第6区間の保存ログを今回読み取り確認した結果は、Python全discover 279件成功、学校JS 45件成功・skip0、隔離受付PostgreSQL 18件成功である。JSのPG一巡は明示scenario入力を有効にした実行で、無指定実行ではその一巡がskipになる。各結果は第6区間の検証snapshotに対する記録であり、今回の文書統合でテストを再実行した結果ではない。試験入口は`test_school_intake_transfer.py`、`test_school_review_queue.py`、`test_school_source_apply.py`、`sql-candidates/test_review_intake_postgres.py`、`school-cutover-integration.test.mjs`。受付ID・主体・PIN・監査情報を公開JSONへ出さない境界も合成試験の対象になっている。
+
+#### 現在の残件と再開順
+
+1. C3で[残る5判断](reference_sqlite-school-cutover-readiness.md#sqlite-wave6-decisions)を具体化する。D1 executor認証、D2 registry、D5配信競合は技術調査で選択肢と制約を詰められる。D3廃止/非公開IDへの新規保存、D4同意の適用範囲は利用者に見える挙動を決める。調査結果だけで正式採用済みにせず、採用案・理由・影響を記録する。
+2. 確定した契約に沿ってC3の実接続adapter、学校単位同意との同期、C3-eの名称参照/UI/SEO/SSRを接続する。実画面と認証/家族共有の許可・拒否を検収する。第6区間の合成接続成功はこの検収を代替しない。
+3. C5の家族RPC実効定義照合と必要修正を経て、C4の実原本・バックアップ/媒体復元・実配布・旧原本縮小へ進む。DB原本とドメインは同日にまとめて切り替えない。実操作は具体的な対象・手順とその時点の実行指示を確認する。
+
+C3全体、C4、C5は未完了。H1/docsweep_state/context状態は今回変更しない。文書統合の承認を、上記5案の正式採用・実認証設定・migration追加/適用・実データ移設・公開の実施済み証拠にはしない。
