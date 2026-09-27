@@ -1,6 +1,26 @@
 # 合成データ用のSQLite原本試作
 
-## C1-b〜C1-e 学校25表（schema 3）
+## C2 世代バックアップと復元
+
+学校schema 3の世代作成・検証・別場所への復元は`backup.py`、ローカル複製と削除しない保持候補の検査は`backup_replica.py`。既定はdry-run。実行方法と検証境界は[バックアップ契約](../../docs/reference_sqlite-backup-contract.md)を参照する。公開用snapshotと原本DBのバックアップは別物で、原本DBを配信フォルダへ置かない。Google Driveの同期や別媒体への実配置は、この合成実装だけでは完了しない。
+
+UNCへのファイル転送は別の`backup_transport.py`を統合CLIの`replicate-remote`から使う。SQLiteはUNC上で開かず、読み戻したローカルコピーを検証する。RDP転送ドライブは明示`--rdp-drive`が必要。失敗時も手元の完成世代とリモートの試行結果を残す。不完全な保存先を上書きする再試行や常駐の自動再試行は行わない。
+
+## C3 学校・学科のID候補索引
+
+`school_id_index.py --bundle <scratch>/candidate-001 --output <scratch>/id-index-001.json`で、検証済みschema 3 snapshotから学校IDと学科ID/所属学校だけの候補を検査する。`--apply`で新規ファイルへ確定し、`--previous <scratch>/id-index-previous.json`で過去IDを保持した差分を作る。廃校等で入力から消えたIDを削除せず、学科の学校付替えは拒否する。候補の生成はSupabase registryへの登録・公開ではない。切替全体は[参照と生成の準備](../../docs/reference_sqlite-school-cutover-readiness.md)を参照する。
+
+## C3-a/b/d 登録・受付・公開の合成試作
+
+`school_registry.py`は既存ID索引から合成登録receiptとUUIDだけのSQL候補を作る。`sql-candidates/`は実migrationの配置先ではなく、隔離PostgreSQL向けの学校/学科registry・全5参照表のFK切替・読み取り復旧検査を置く。既存学校の削除や実DB接続は行わない。
+
+`school_review_queue.py`はリポ外の新規SQLiteへ合成受付を保存し、審査・採用記録・生成・公開要求・公開確認を別状態で追跡する。Actorは合成の役割入力であり、認証/RLSではない。採用予定の許可列投影を返すが、実原本へ書き込む処理は持たない。従来の`applied`を公開済みに変換しない。
+
+公開前検査は`web/scripts/lib/school-publish-gate.mjs`。候補・登録receipt・公開要求の版/hashと、各JSONのID/所属を照合する。許可先は通信しないstubのみ。仕様・API・実行例・未検収範囲は[切替準備の第4区間](../../docs/reference_sqlite-school-cutover-readiness.md#9-第4区間の共通契約ローカル合成試作)を参照する。
+
+通常試験: `python -B -m unittest discover -s scripts/local-data -p "test_*.py"`。PGは既存バイナリと新規専用scratchを明示して`python -B scripts/local-data/sql-candidates/test_registry_postgres.py --postgres-bin <installed-bin> --scratch <new-local-directory>`。`web`の`pnpm test:school-source`は既存学校入力/隔離生成に加えgateとPython→JSの通し試験を実行する。実認証・実データ・実公開の検収には読み替えない。
+
+## C1-b〜C1-e 学校25表（schema 3）の契約
 
 `store_school.py` は基本7表・沿革3表・入試等15表をまとめて扱う学校版の合成原本CLI。`school_history.py` / `school_admission.py` と各SQLに追加18表の列・制約を分け、既存schema 1/2と40テストを変更せず残す。`example.school.synthetic.json` は `school_fixture.synthetic_payload()` で既存の合成例だけから構成する。
 
@@ -46,7 +66,15 @@ pnpm exec vitest run src/lib/admission.test.ts src/lib/mapPayload.test.ts
 
 Pythonは全列/NULL可否、25表再取込み、最終表失敗/commit失敗時の全表と両版復旧、明示移行、出力失敗/破損拒否を検査する。JSは独立した合成Supabase取得形とsnapshotをrows・catalog・アプリ・地図・APIで比較し、同名別ID、閉校前身校、座標欠損、公式URL欠損、旧新統計の二重集計防止、出典/品質ゲートを検査する。Pythonが作る実際の合成bundleをJS adapterで読む統合テストも含む。実学校データ・本番DB・認証設定・既存public/dist成果物へアクセスしない。
 
-C2の世代バックアップ、C3/C4の実原本取込み・管理更新・利用者参照・運用切替、他サービスへのadapter適用は未実施。schema 3も合成専用であり、本番入力を受け付けるように宣言を偽装しない。
+C2の世代バックアップとC3の管理更新・生成経路は合成原本で実装している。実媒体への配置、実原本取込み・実認証・利用者参照・運用切替は未検収。共通manifestの合成adapter接続も実原本の移行を意味しない。schema 3は合成専用であり、本番入力を受け付けるように宣言を偽装しない。
+
+## C3 合成原本適用と受付・再評価
+
+schema 3の管理更新試作は[切替準備の第5区間契約](../../docs/reference_sqlite-school-cutover-readiness.md#10-第5区間の契約合成試作限定)を参照する。`school_source_apply.py`はリポ外の合成原本だけを対象に、既存の偏差値行をtransactionで変更し、実内容由来の版と永続receiptを保存する。`school_review_queue.py`の既定はこのreceiptを照合する経路であり、予定targetだけの`adopt`は明示`source_mode='planning_stub'`のfixtureに限定する。
+
+合成経路は`plan_adoption`→`application_request`→`SourceAdapter.apply`→`reconcile_application`→既存export→隔離学校JSON生成。原本commit後にqueueが停止しても再照合できる。撤回後は`request_reevaluation`で全影響対象の訂正を審査し、実原本適用receiptを検査して新候補から再開する。取消は`cancel_pending`で原本内tombstoneを先に確定し、遅れて届く要求を拒否する。旧公開履歴は消さない。
+
+追加試験はPythonの通常discoverに含む。認証付き受付候補は`python -B scripts/local-data/sql-candidates/test_review_intake_postgres.py --postgres-bin <installed-bin> --scratch <new-local-directory>`で別途実行する。新規loopback clusterだけを使い、終了時に停止する。実JWT/PIN、既存学校単位同意と候補同意の同期、RPCからローカルqueueへの認証付き配送はこのコマンドの成功で検収済みにしない。合成PINと候補処理を試験する範囲は参照契約の保護対応表へ記載する。
 
 ## C1-a 基本7表（schema 2）
 

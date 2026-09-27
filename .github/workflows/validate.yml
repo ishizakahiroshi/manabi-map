@@ -48,6 +48,15 @@ jobs:
       - name: Install
         run: pnpm install --frozen-lockfile
 
+      # Compare the PR head with its common ancestor, not the synthetic merge
+      # checkout. Push events use the previous tip. No DB/secrets are accessed.
+      - name: Check grants in added migrations
+        working-directory: .
+        env:
+          MIGRATION_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          MIGRATION_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: node scripts/check-migration-grants.mjs --base "$MIGRATION_BASE_SHA" --head "$MIGRATION_HEAD_SHA"
+
       - name: Typecheck
         run: pnpm typecheck
 

@@ -1,18 +1,12 @@
 import { createHash } from 'node:crypto'
 import { mkdir, readdir, readFile, rm, unlink, writeFile } from 'node:fs/promises'
-import { dirname, join } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { dirname, join, resolve } from 'node:path'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import { gzipSync } from 'node:zlib'
-import { buildSchoolPayload, loadSchoolSource, parseSchoolSourceArgs } from './lib/school-source.mjs'
+import { buildSchoolPayload, loadSchoolSource, parseSchoolSourceArgs, parseSchoolSnapshot, snapshotToGeneratorRows, canonicalSchoolSourceJSON } from './lib/school-source.mjs'
+import { stageSchoolCandidate, checkedFile, checkedOutput } from './lib/school-candidate.mjs'
 import { loadCivicData, resolveCityGroup, UNRESOLVED_CITY_LABEL } from './lib/municipalities.mjs'
-import {
-  buildOpenApiDocument,
-  buildPublicSchoolRecords,
-  DATASET_ATTRIBUTION,
-  DATASET_CLAIM,
-  DATASET_LICENSE_URL,
-  DATASET_ORIGIN,
-} from './lib/public-api.mjs'
+
 // 近隣校の選定と後継校の逆引きは React 側・gen-seo-pages.mjs と同一実装を共有する
 // （tsx 経由で .ts を直 import（package.json の scripts が tsx で起動する。Node の type stripping には依存しない — Cloudflare Pages のビルドイメージは pnpm 同梱の preinstall Node しか使えないため）。フォーク禁止 —
 // 学校単体 JSON と静的 HTML・JS mount 後で校名・距離が食い違う事故を防ぐ。
@@ -46,8 +40,6 @@ async function readEnvFile(path) {
   }
 }
 
-// Select before loading any credentials. A local failure never selects Supabase.
-const sourceOptions = parseSchoolSourceArgs(process.argv.slice(2))
 async function fetchSupabaseRows() {
   // .env の探索先。既定は web/（従来どおり）。MANABI_MAP_ENV_DIR を設定するとリポジトリ外を見る
   // （秘密をリポジトリ配下に置かないための仕組み。vite.config.ts の envDir と同じ変数を使う）。
@@ -173,421 +165,511 @@ async function fetchSupabaseRows() {
 
   return rows
 }
-const inputRows = await loadSchoolSource({ ...sourceOptions, fetchSupabase: fetchSupabaseRows })
-const payload = buildSchoolPayload(inputRows)
-const { schools: rows, sourceCatalog } = payload
+async function writeSchoolFiles(inputRows, publicDir, generatedAt, logger = console) {
+  const {
+  buildOpenApiDocument,
+  buildPublicSchoolRecords,
+  DATASET_ATTRIBUTION,
+  DATASET_CLAIM,
+  DATASET_LICENSE_URL,
+  DATASET_ORIGIN,
+  } = await import('./lib/public-api.mjs')
+  const payload = buildSchoolPayload(inputRows)
+  const { schools: rows, sourceCatalog } = payload
 
-// official_url は公開 API の学校採用ゲートでもある。NULL を許容して生成は続けるが、
-// 県追加時の取りこぼしがビルドログで必ず見えるように全件数と県別件数を警告する。
-const officialUrlGaps = rows.filter((row) => row.is_active !== false && !row.official_url)
-if (officialUrlGaps.length > 0) {
-  const byPrefecture = Object.entries(Object.groupBy(officialUrlGaps, (row) => row.prefecture))
-    .map(([prefecture, schools]) => `${prefecture}:${schools.length}`)
-    .join('、')
-  console.warn(
-    `[official_url] 現行校 ${officialUrlGaps.length}/${rows.length} 校が未登録です（${byPrefecture}）。` +
-    '公開 API から除外されるため、県教委・私学協会の公式一覧から補完してください。',
-  )
-}
+  // official_url は公開 API の学校採用ゲートでもある。NULL を許容して生成は続けるが、
+  // 県追加時の取りこぼしがビルドログで必ず見えるように全件数と県別件数を警告する。
+  const officialUrlGaps = rows.filter((row) => row.is_active !== false && !row.official_url)
+  if (officialUrlGaps.length > 0) {
+    const byPrefecture = Object.entries(Object.groupBy(officialUrlGaps, (row) => row.prefecture))
+      .map(([prefecture, schools]) => `${prefecture}:${schools.length}`)
+      .join('、')
+    logger.warn(
+      `[official_url] 現行校 ${officialUrlGaps.length}/${rows.length} 校が未登録です（${byPrefecture}）。` +
+      '公開 API から除外されるため、県教委・私学協会の公式一覧から補完してください。',
+    )
+  }
 
-// --- build hash 付き URL 化 -------------------------------------------------
-// 内容から sha256 の先頭 10 桁を hash とし、`schools-<hash>.json` を出力する。
-// あわせて `schools-manifest.json` を「常に fresh に取る」ポインタとして書き、
-// フロント側は manifest → hash 付き URL の 2 段 fetch で反映ラグを解消する。
-// 過去の hash 付き JSON は build 時に掃除して重複配信を防ぐ。
-// 詳細: docs/local/plan_schools-json-cache-strategy.md
-const publicDir = join(webRoot, 'public')
-await mkdir(publicDir, { recursive: true })
-const generatedAt = new Date().toISOString()
+  // --- build hash 付き URL 化 -------------------------------------------------
+  // 内容から sha256 の先頭 10 桁を hash とし、`schools-<hash>.json` を出力する。
+  // あわせて `schools-manifest.json` を「常に fresh に取る」ポインタとして書き、
+  // フロント側は manifest → hash 付き URL の 2 段 fetch で反映ラグを解消する。
+  // 過去の hash 付き JSON は build 時に掃除して重複配信を防ぐ。
+  // 詳細: docs/local/plan_schools-json-cache-strategy.md
+  await mkdir(publicDir, { recursive: true })
 
-const body = `${JSON.stringify(payload)}\n`
-const hash = createHash('sha256').update(body).digest('hex').slice(0, 10)
-const filename = `schools-${hash}.json.gz`
-const outputPath = join(publicDir, filename)
+  const body = `${JSON.stringify(payload)}\n`
+  const hash = createHash('sha256').update(body).digest('hex').slice(0, 10)
+  const filename = `schools-${hash}.json.gz`
+  const outputPath = join(publicDir, filename)
 
-// --- 地図・一覧用の全国データ（docs/local/plan_data-usage-audit.md C2）-----------
-// 上の全件 JSON は入試履歴と出典で 3.79MB あり、`/map` へ入るたびに毎回落ちていた。
-// 実際に地図・お気に入り・比較・マイページ・統合検索が読むのはピンと一覧に出る列だけで、
-// 入試履歴の本体は詳細シートでしか使わない（シートは単体 JSON で補う）。
-// 列の選定と最新年度倍率の畳み込みは src/lib/mapPayload.ts に置く（React 側と共有）。
-//
-// **全件 JSON は残す。** ビルド時の静的生成（gen-seo-pages.mjs）が読む正典で、
-// 公開データとしても配り続ける。ブラウザが毎回読むのを止めるだけ。
-const mapPayload = buildMapPayload(rows)
-const mapBody = `${JSON.stringify(mapPayload)}\n`
-const mapHash = createHash('sha256').update(mapBody).digest('hex').slice(0, 10)
-const mapFilename = `schools-map-${mapHash}.json.gz`
-const mapOutputPath = join(publicDir, mapFilename)
+  // --- 地図・一覧用の全国データ（docs/local/plan_data-usage-audit.md C2）-----------
+  // 上の全件 JSON は入試履歴と出典で 3.79MB あり、`/map` へ入るたびに毎回落ちていた。
+  // 実際に地図・お気に入り・比較・マイページ・統合検索が読むのはピンと一覧に出る列だけで、
+  // 入試履歴の本体は詳細シートでしか使わない（シートは単体 JSON で補う）。
+  // 列の選定と最新年度倍率の畳み込みは src/lib/mapPayload.ts に置く（React 側と共有）。
+  //
+  // **全件 JSON は残す。** ビルド時の静的生成（gen-seo-pages.mjs）が読む正典で、
+  // 公開データとしても配り続ける。ブラウザが毎回読むのを止めるだけ。
+  const mapPayload = buildMapPayload(rows)
+  const mapBody = `${JSON.stringify(mapPayload)}\n`
+  const mapHash = createHash('sha256').update(mapBody).digest('hex').slice(0, 10)
+  const mapFilename = `schools-map-${mapHash}.json.gz`
+  const mapOutputPath = join(publicDir, mapFilename)
 
-// --- 検索用の軽量索引 -------------------------------------------------------
-// トップの統合検索は schools.json 全体を読まない（plan_seo-growth-strategy_c5 C3）。
-// - 市区町村索引: 高校が 1 校以上ある市区町村。ふりがな付き（かな入力対応）で
-//   市区町村コード順。地名候補 → 県ページ（/pref/<slug>/#<市区町村>）への導線に使う。
-// - 校名索引: 全収録校の校名・ふりがな・所在地・座標のみ（検索欄フォーカス時に遅延読込）。
-const { prefectures, muniByPref } = await loadCivicData(webRoot)
-const prefBySlugName = new Map(prefectures.map((p) => [p.name, p]))
+  // --- 検索用の軽量索引 -------------------------------------------------------
+  // トップの統合検索は schools.json 全体を読まない（plan_seo-growth-strategy_c5 C3）。
+  // - 市区町村索引: 高校が 1 校以上ある市区町村。ふりがな付き（かな入力対応）で
+  //   市区町村コード順。地名候補 → 県ページ（/pref/<slug>/#<市区町村>）への導線に使う。
+  // - 校名索引: 全収録校の校名・ふりがな・所在地・座標のみ（検索欄フォーカス時に遅延読込）。
+  const { prefectures, muniByPref } = await loadCivicData(webRoot)
+  const prefBySlugName = new Map(prefectures.map((p) => [p.name, p]))
 
-// --- 出典追跡可能な公開 API（plan_public-api-readiness C4） ------------------
-// アプリ用 payload は変更せず、明示的な許可リストを通した派生物だけを固定 URL で配る。
-// public/ に生成してから Vite が dist/ へコピーするため、動的 API や Pages Functions は不要。
-const publicApiRecords = buildPublicSchoolRecords(rows, sourceCatalog, generatedAt)
-const publicApiPrefectures = new Set(publicApiRecords.map((row) => row.prefecture))
-const missingPublicApiPrefectures = prefectures
-  .filter((pref) => rows.some((row) => row.prefecture === pref.name) && !publicApiPrefectures.has(pref.name))
-  .map((pref) => pref.name)
-if (missingPublicApiPrefectures.length > 0) {
-  throw new Error(
-    '公開 API の official_url ゲートで都道府県が全欠落しました。' +
-    `公開仕様を確定するまで生成を停止します: ${missingPublicApiPrefectures.join('、')}`,
-  )
-}
-const publicApiRoot = join(publicDir, 'api', 'v1')
-const publicApiSchoolsDir = join(publicApiRoot, 'schools')
-await rm(publicApiRoot, { recursive: true, force: true })
-await mkdir(publicApiSchoolsDir, { recursive: true })
+  // --- 出典追跡可能な公開 API（plan_public-api-readiness C4） ------------------
+  // アプリ用 payload は変更せず、明示的な許可リストを通した派生物だけを固定 URL で配る。
+  // public/ に生成してから Vite が dist/ へコピーするため、動的 API や Pages Functions は不要。
+  const publicApiRecords = buildPublicSchoolRecords(rows, sourceCatalog, generatedAt)
+  const publicApiPrefectures = new Set(publicApiRecords.map((row) => row.prefecture))
+  const missingPublicApiPrefectures = prefectures
+    .filter((pref) => rows.some((row) => row.prefecture === pref.name) && !publicApiPrefectures.has(pref.name))
+    .map((pref) => pref.name)
+  if (missingPublicApiPrefectures.length > 0) {
+    throw new Error(
+      '公開 API の official_url ゲートで都道府県が全欠落しました。' +
+      `公開仕様を確定するまで生成を停止します: ${missingPublicApiPrefectures.join('、')}`,
+    )
+  }
+  const publicApiRoot = join(publicDir, 'api', 'v1')
+  const publicApiSchoolsDir = join(publicApiRoot, 'schools')
+  await rm(publicApiRoot, { recursive: true, force: true })
+  await mkdir(publicApiSchoolsDir, { recursive: true })
 
-const publicApiPayload = {
-  api_version: 'v1',
-  generated_at: generatedAt,
-  count: publicApiRecords.length,
-  schools: publicApiRecords,
-}
-await writeFile(join(publicApiRoot, 'schools.json'), `${JSON.stringify(publicApiPayload)}\n`)
-
-const prefApiCounts = {}
-for (const pref of prefectures) {
-  const prefRecords = publicApiRecords.filter((row) => row.prefecture === pref.name)
-  if (prefRecords.length === 0) continue
-  prefApiCounts[pref.slug] = prefRecords.length
-  await writeFile(
-    join(publicApiSchoolsDir, `${pref.slug}.json`),
-    `${JSON.stringify({
-      api_version: 'v1',
-      generated_at: generatedAt,
-      prefecture: pref.name,
-      count: prefRecords.length,
-      schools: prefRecords,
-    })}\n`,
-  )
-}
-
-const packageJson = JSON.parse(await readFile(join(webRoot, 'package.json'), 'utf8'))
-await writeFile(
-  join(publicApiRoot, 'dataset.json'),
-  `${JSON.stringify({
-    name: 'Manabi Map 学校基本情報データセット',
-    version: packageJson.version,
+  const publicApiPayload = {
     api_version: 'v1',
     generated_at: generatedAt,
-    school_count: publicApiRecords.length,
-    prefecture_count: Object.keys(prefApiCounts).length,
-    prefectures: prefApiCounts,
-    license: 'CC BY-SA 4.0',
-    license_url: DATASET_LICENSE_URL,
-    attribution: DATASET_ATTRIBUTION,
-    provenance_policy: DATASET_CLAIM,
-    inclusion_policy: '学校公式 URL を持つ現行校と、追跡可能な公式出典を伴う項目のみを収録します。',
-    exclusion_policy: '偏差値の編集推計と、出典 URL を確認できない項目は収録しません。',
-    distributions: [
-      { content_url: `${DATASET_ORIGIN}/api/v1/schools.json`, encoding_format: 'application/json' },
-      { content_url_template: `${DATASET_ORIGIN}/api/v1/schools/{prefecture}.json`, encoding_format: 'application/json' },
-    ],
-  }, null, 2)}\n`,
-)
+    count: publicApiRecords.length,
+    schools: publicApiRecords,
+  }
+  await writeFile(join(publicApiRoot, 'schools.json'), `${JSON.stringify(publicApiPayload)}\n`)
 
-// --- 呼び方の契約（OpenAPI）--------------------------------------------------
-// dataset.json が「何が入っているか」の台帳、openapi.json が「どう呼ぶか」の契約。
-// 記述の実体は scripts/lib/public-api.mjs に置く（DATA.md の生成元と同じ場所に集め、
-// 公開する項目とその説明が別々の場所で食い違わないようにする）。
-await writeFile(
-  join(publicApiRoot, 'openapi.json'),
-  `${JSON.stringify(
-    buildOpenApiDocument({
+  const prefApiCounts = {}
+  for (const pref of prefectures) {
+    const prefRecords = publicApiRecords.filter((row) => row.prefecture === pref.name)
+    if (prefRecords.length === 0) continue
+    prefApiCounts[pref.slug] = prefRecords.length
+    await writeFile(
+      join(publicApiSchoolsDir, `${pref.slug}.json`),
+      `${JSON.stringify({
+        api_version: 'v1',
+        generated_at: generatedAt,
+        prefecture: pref.name,
+        count: prefRecords.length,
+        schools: prefRecords,
+      })}\n`,
+    )
+  }
+
+  const packageJson = JSON.parse(await readFile(join(webRoot, 'package.json'), 'utf8'))
+  await writeFile(
+    join(publicApiRoot, 'dataset.json'),
+    `${JSON.stringify({
+      name: 'Manabi Map 学校基本情報データセット',
       version: packageJson.version,
-      prefectureSlugs: Object.keys(prefApiCounts),
-    }),
-    null,
-    2,
-  )}\n`,
-)
-
-const detailRows = rows.filter((row) => row.latitude != null && row.longitude != null)
-const cityGroups = new Map()
-const unresolvedByPref = new Map()
-for (const row of detailRows) {
-  const resolved = resolveCityGroup(row, muniByPref)
-  if (!resolved) {
-    unresolvedByPref.set(row.prefecture, (unresolvedByPref.get(row.prefecture) ?? 0) + 1)
-    continue
-  }
-  const key = `${row.prefecture}|${resolved.label}`
-  const entry = cityGroups.get(key) ?? {
-    pref: row.prefecture,
-    prefSlug: prefBySlugName.get(row.prefecture)?.slug ?? null,
-    city: resolved.label,
-    kana: resolved.kana,
-    code: resolved.code,
-    count: 0,
-  }
-  entry.count += 1
-  cityGroups.set(key, entry)
-}
-const cityIndex = [...cityGroups.values()]
-  .filter((entry) => entry.prefSlug != null)
-  .sort((a, b) => (a.code < b.code ? -1 : a.code > b.code ? 1 : 0))
-  .map(({ code: _code, ...entry }) => entry)
-
-const nameIndex = detailRows.map((row) => ({
-  i: row.id,
-  n: row.name,
-  k: row.name_kana ?? null,
-  p: row.prefecture,
-  c: resolveCityGroup(row, muniByPref)?.label ?? row.city ?? null,
-  lat: row.latitude != null ? Number(row.latitude) : null,
-  lng: row.longitude != null ? Number(row.longitude) : null,
-}))
-
-const cityIndexBody = `${JSON.stringify(cityIndex)}\n`
-const cityIndexFilename = `city-index-${createHash('sha256').update(cityIndexBody).digest('hex').slice(0, 10)}.json`
-const nameIndexBody = `${JSON.stringify(nameIndex)}\n`
-const nameIndexFilename = `school-name-index-${createHash('sha256').update(nameIndexBody).digest('hex').slice(0, 10)}.json`
-
-// 古い schools-*.json / 索引を掃除（本 build で出力する分だけ残す）。
-const keep = new Set([filename, mapFilename, cityIndexFilename, nameIndexFilename])
-const existing = await readdir(publicDir)
-for (const name of existing) {
-  if (keep.has(name)) continue
-  if (
-    name === 'schools.json' ||
-    /^schools-map-[0-9a-f]+\.json(?:\.gz)?$/.test(name) ||
-    /^schools-[0-9a-f]+\.json(?:\.gz)?$/.test(name) ||
-    /^city-index-[0-9a-f]+\.json$/.test(name) ||
-    /^school-name-index-[0-9a-f]+\.json$/.test(name)
-  ) {
-    await unlink(join(publicDir, name))
-  }
-}
-
-await writeFile(outputPath, gzipSync(body, { level: 9 }))
-await writeFile(mapOutputPath, gzipSync(mapBody, { level: 9 }))
-await writeFile(join(publicDir, cityIndexFilename), cityIndexBody)
-await writeFile(join(publicDir, nameIndexFilename), nameIndexBody)
-
-// --- 学校単体 JSON / 県別分割 JSON（plan_seo-growth-strategy_c7 C1） ---------
-// 学校詳細ページ（/school/<id>/ 直リンク着地）は全件 JSON（gzip 約 1.7MB / 展開約 28MB）
-// を読まず、単体 JSON（数 KB〜数十 KB）だけで初期描画を完結させる。全件 JSON は
-// 地図表示時のみ遅延取得する。県別分割は将来の地図の分県ロード用に同形式で置く。
-// ファイル名は固定パス（/school-data/<id>.json）とし、フロントは manifest の
-// schoolDataVersion を `?v=` に付けて取得する（public/_headers の immutable とセット）。
-const schoolDataDir = join(publicDir, 'school-data')
-await rm(schoolDataDir, { recursive: true, force: true })
-await mkdir(schoolDataDir, { recursive: true })
-
-// 出典 index は全件 catalog（sourceCatalog）基準で振られているため、部分出力ごとに
-// ローカル catalog へ振り直す。rows は全件 payload（出力済み body）とオブジェクトを
-// 共有しているので、必ず structuredClone した行に対してだけ書き換える。
-// visited は同一 stat の二重 remap 防止。同じ前身校を複数の関係行が参照すると
-// unit 配列がクローン内でも共有され、2 回目の remap が「ローカル index を全件 index と
-// 誤読する」壊れ方をする（compactUnitSources の二重圧縮事故と同型）。
-function remapSourceRefs(units, localCatalog, localIndex, visited) {
-  for (const unit of units ?? []) {
-    for (const stat of unit.school_admission_selection_stats ?? []) {
-      if (visited.has(stat)) continue
-      visited.add(stat)
-      stat.school_admission_stat_sources = (stat.school_admission_stat_sources ?? []).map((ref) => {
-        if (typeof ref !== 'number') return ref
-        let local = localIndex.get(ref)
-        if (local == null) {
-          local = localCatalog.length
-          localCatalog.push(sourceCatalog[ref])
-          localIndex.set(ref, local)
-        }
-        return local
-      })
-    }
-  }
-}
-
-/** rows の部分集合を、全件 JSON と同じ形（formatVersion / sourceCatalog / schools）で切り出す。 */
-function subsetPayload(subsetRows) {
-  const localCatalog = []
-  const localIndex = new Map()
-  const visited = new WeakSet()
-  const cloned = subsetRows.map((row) => {
-    const clone = structuredClone(row)
-    remapSourceRefs(clone.admission_recruitment_units, localCatalog, localIndex, visited)
-    for (const relationship of clone.predecessor_relationships ?? []) {
-      remapSourceRefs(relationship.predecessor?.admission_recruitment_units, localCatalog, localIndex, visited)
-    }
-    return clone
-  })
-  return { formatVersion: payload.formatVersion, sourceCatalog: localCatalog, schools: cloned }
-}
-
-// 単体 JSON は個別ページを持つ学校（緯度経度あり = gen-seo-pages.mjs の生成対象・
-// React 側 mapSchoolRows のフィルタと同一集合）だけ出力する。近隣校の母集合も同じ。
-const detailIds = new Set(detailRows.map((row) => row.id))
-const neighborUniverse = detailRows.map((row) => ({
-  id: row.id,
-  name: row.name,
-  prefecture: row.prefecture,
-  city: row.city ?? null,
-  latitude: Number(row.latitude),
-  longitude: Number(row.longitude),
-}))
-const subjectById = new Map(neighborUniverse.map((subject) => [subject.id, subject]))
-const successorsById = successorsByPredecessorId(detailRows)
-
-for (const row of detailRows) {
-  const single = subsetPayload([row])
-  // 近隣校（距離は raw の double のまま持つ。丸めると静的 HTML の toFixed(1) 表示と
-  // 端数の丸め方向がずれうるため、丸めは表示側だけで行う）。
-  single.neighbors = selectNeighbors(subjectById.get(row.id), neighborUniverse).map(
-    ({ school, distanceKm }) => ({
-      id: school.id,
-      name: school.name,
-      prefecture: school.prefecture,
-      city: school.city,
-      distanceKm,
-    }),
+      api_version: 'v1',
+      generated_at: generatedAt,
+      school_count: publicApiRecords.length,
+      prefecture_count: Object.keys(prefApiCounts).length,
+      prefectures: prefApiCounts,
+      license: 'CC BY-SA 4.0',
+      license_url: DATASET_LICENSE_URL,
+      attribution: DATASET_ATTRIBUTION,
+      provenance_policy: DATASET_CLAIM,
+      inclusion_policy: '学校公式 URL を持つ現行校と、追跡可能な公式出典を伴う項目のみを収録します。',
+      exclusion_policy: '偏差値の編集推計と、出典 URL を確認できない項目は収録しません。',
+      distributions: [
+        { content_url: `${DATASET_ORIGIN}/api/v1/schools.json`, encoding_format: 'application/json' },
+        { content_url_template: `${DATASET_ORIGIN}/api/v1/schools/{prefecture}.json`, encoding_format: 'application/json' },
+      ],
+    }, null, 2)}\n`,
   )
-  single.successors = successorsById.get(row.id) ?? []
-  // 所属市区町村ページ（/pref/<slug>/<市区町村>/）への導線用。row.city の生値は表記が
-  // 揺れている（郡付き・政令市の区・null）ので、県ページ見出しと同じ解決済みラベルを別に持つ。
-  // 解決できない校（広域通信制のキャンパス列挙住所など）は null＝リンクを出さない。
-  single.cityGroup = resolveCityGroup(row, muniByPref)?.label ?? null
-  // 前身校のうち個別ページが存在する id（詳細シートのリンク可否判定用）。
-  single.linkableSchoolIds = (row.predecessor_relationships ?? [])
-    .map((relationship) => relationship.predecessor?.id)
-    .filter((id) => id != null && detailIds.has(id))
-  await writeFile(join(schoolDataDir, `${row.id}.json`), `${JSON.stringify(single)}\n`)
+
+  // --- 呼び方の契約（OpenAPI）--------------------------------------------------
+  // dataset.json が「何が入っているか」の台帳、openapi.json が「どう呼ぶか」の契約。
+  // 記述の実体は scripts/lib/public-api.mjs に置く（DATA.md の生成元と同じ場所に集め、
+  // 公開する項目とその説明が別々の場所で食い違わないようにする）。
+  await writeFile(
+    join(publicApiRoot, 'openapi.json'),
+    `${JSON.stringify(
+      buildOpenApiDocument({
+        version: packageJson.version,
+        prefectureSlugs: Object.keys(prefApiCounts),
+      }),
+      null,
+      2,
+    )}\n`,
+  )
+
+  const detailRows = rows.filter((row) => row.latitude != null && row.longitude != null)
+  const cityGroups = new Map()
+  const unresolvedByPref = new Map()
+  for (const row of detailRows) {
+    const resolved = resolveCityGroup(row, muniByPref)
+    if (!resolved) {
+      unresolvedByPref.set(row.prefecture, (unresolvedByPref.get(row.prefecture) ?? 0) + 1)
+      continue
+    }
+    const key = `${row.prefecture}|${resolved.label}`
+    const entry = cityGroups.get(key) ?? {
+      pref: row.prefecture,
+      prefSlug: prefBySlugName.get(row.prefecture)?.slug ?? null,
+      city: resolved.label,
+      kana: resolved.kana,
+      code: resolved.code,
+      count: 0,
+    }
+    entry.count += 1
+    cityGroups.set(key, entry)
+  }
+  const cityIndex = [...cityGroups.values()]
+    .filter((entry) => entry.prefSlug != null)
+    .sort((a, b) => (a.code < b.code ? -1 : a.code > b.code ? 1 : 0))
+    .map(({ code: _code, ...entry }) => entry)
+
+  const nameIndex = detailRows.map((row) => ({
+    i: row.id,
+    n: row.name,
+    k: row.name_kana ?? null,
+    p: row.prefecture,
+    c: resolveCityGroup(row, muniByPref)?.label ?? row.city ?? null,
+    lat: row.latitude != null ? Number(row.latitude) : null,
+    lng: row.longitude != null ? Number(row.longitude) : null,
+  }))
+
+  const cityIndexBody = `${JSON.stringify(cityIndex)}\n`
+  const cityIndexFilename = `city-index-${createHash('sha256').update(cityIndexBody).digest('hex').slice(0, 10)}.json`
+  const nameIndexBody = `${JSON.stringify(nameIndex)}\n`
+  const nameIndexFilename = `school-name-index-${createHash('sha256').update(nameIndexBody).digest('hex').slice(0, 10)}.json`
+
+  // 古い schools-*.json / 索引を掃除（本 build で出力する分だけ残す）。
+  const keep = new Set([filename, mapFilename, cityIndexFilename, nameIndexFilename])
+  const existing = await readdir(publicDir)
+  for (const name of existing) {
+    if (keep.has(name)) continue
+    if (
+      name === 'schools.json' ||
+      /^schools-map-[0-9a-f]+\.json(?:\.gz)?$/.test(name) ||
+      /^schools-[0-9a-f]+\.json(?:\.gz)?$/.test(name) ||
+      /^city-index-[0-9a-f]+\.json$/.test(name) ||
+      /^school-name-index-[0-9a-f]+\.json$/.test(name)
+    ) {
+      await unlink(join(publicDir, name))
+    }
+  }
+
+  await writeFile(outputPath, gzipSync(body, { level: 9 }))
+  await writeFile(mapOutputPath, gzipSync(mapBody, { level: 9 }))
+  await writeFile(join(publicDir, cityIndexFilename), cityIndexBody)
+  await writeFile(join(publicDir, nameIndexFilename), nameIndexBody)
+
+  // --- 学校単体 JSON / 県別分割 JSON（plan_seo-growth-strategy_c7 C1） ---------
+  // 学校詳細ページ（/school/<id>/ 直リンク着地）は全件 JSON（gzip 約 1.7MB / 展開約 28MB）
+  // を読まず、単体 JSON（数 KB〜数十 KB）だけで初期描画を完結させる。全件 JSON は
+  // 地図表示時のみ遅延取得する。県別分割は将来の地図の分県ロード用に同形式で置く。
+  // ファイル名は固定パス（/school-data/<id>.json）とし、フロントは manifest の
+  // schoolDataVersion を `?v=` に付けて取得する（public/_headers の immutable とセット）。
+  const schoolDataDir = join(publicDir, 'school-data')
+  await rm(schoolDataDir, { recursive: true, force: true })
+  await mkdir(schoolDataDir, { recursive: true })
+
+  // 出典 index は全件 catalog（sourceCatalog）基準で振られているため、部分出力ごとに
+  // ローカル catalog へ振り直す。rows は全件 payload（出力済み body）とオブジェクトを
+  // 共有しているので、必ず structuredClone した行に対してだけ書き換える。
+  // visited は同一 stat の二重 remap 防止。同じ前身校を複数の関係行が参照すると
+  // unit 配列がクローン内でも共有され、2 回目の remap が「ローカル index を全件 index と
+  // 誤読する」壊れ方をする（compactUnitSources の二重圧縮事故と同型）。
+  function remapSourceRefs(units, localCatalog, localIndex, visited) {
+    for (const unit of units ?? []) {
+      for (const stat of unit.school_admission_selection_stats ?? []) {
+        if (visited.has(stat)) continue
+        visited.add(stat)
+        stat.school_admission_stat_sources = (stat.school_admission_stat_sources ?? []).map((ref) => {
+          if (typeof ref !== 'number') return ref
+          let local = localIndex.get(ref)
+          if (local == null) {
+            local = localCatalog.length
+            localCatalog.push(sourceCatalog[ref])
+            localIndex.set(ref, local)
+          }
+          return local
+        })
+      }
+    }
+  }
+
+  /** rows の部分集合を、全件 JSON と同じ形（formatVersion / sourceCatalog / schools）で切り出す。 */
+  function subsetPayload(subsetRows) {
+    const localCatalog = []
+    const localIndex = new Map()
+    const visited = new WeakSet()
+    const cloned = subsetRows.map((row) => {
+      const clone = structuredClone(row)
+      remapSourceRefs(clone.admission_recruitment_units, localCatalog, localIndex, visited)
+      for (const relationship of clone.predecessor_relationships ?? []) {
+        remapSourceRefs(relationship.predecessor?.admission_recruitment_units, localCatalog, localIndex, visited)
+      }
+      return clone
+    })
+    return { formatVersion: payload.formatVersion, sourceCatalog: localCatalog, schools: cloned }
+  }
+
+  // 単体 JSON は個別ページを持つ学校（緯度経度あり = gen-seo-pages.mjs の生成対象・
+  // React 側 mapSchoolRows のフィルタと同一集合）だけ出力する。近隣校の母集合も同じ。
+  const detailIds = new Set(detailRows.map((row) => row.id))
+  const neighborUniverse = detailRows.map((row) => ({
+    id: row.id,
+    name: row.name,
+    prefecture: row.prefecture,
+    city: row.city ?? null,
+    latitude: Number(row.latitude),
+    longitude: Number(row.longitude),
+  }))
+  const subjectById = new Map(neighborUniverse.map((subject) => [subject.id, subject]))
+  const successorsById = successorsByPredecessorId(detailRows)
+
+  for (const row of detailRows) {
+    const single = subsetPayload([row])
+    // 近隣校（距離は raw の double のまま持つ。丸めると静的 HTML の toFixed(1) 表示と
+    // 端数の丸め方向がずれうるため、丸めは表示側だけで行う）。
+    single.neighbors = selectNeighbors(subjectById.get(row.id), neighborUniverse).map(
+      ({ school, distanceKm }) => ({
+        id: school.id,
+        name: school.name,
+        prefecture: school.prefecture,
+        city: school.city,
+        distanceKm,
+      }),
+    )
+    single.successors = successorsById.get(row.id) ?? []
+    // 所属市区町村ページ（/pref/<slug>/<市区町村>/）への導線用。row.city の生値は表記が
+    // 揺れている（郡付き・政令市の区・null）ので、県ページ見出しと同じ解決済みラベルを別に持つ。
+    // 解決できない校（広域通信制のキャンパス列挙住所など）は null＝リンクを出さない。
+    single.cityGroup = resolveCityGroup(row, muniByPref)?.label ?? null
+    // 前身校のうち個別ページが存在する id（詳細シートのリンク可否判定用）。
+    single.linkableSchoolIds = (row.predecessor_relationships ?? [])
+      .map((relationship) => relationship.predecessor?.id)
+      .filter((id) => id != null && detailIds.has(id))
+    await writeFile(join(schoolDataDir, `${row.id}.json`), `${JSON.stringify(single)}\n`)
+  }
+
+  // 県別分割（全 rows を prefecture ごとに全件 JSON と同形式で分割）。
+  // 取りこぼし（prefectures.json に無い県名の行）は verify-static-output.mjs の
+  // 合計突き合わせで build を落として検出する。
+  const prefDataUrls = {}
+  for (const pref of prefectures) {
+    const prefRows = rows.filter((row) => row.prefecture === pref.name)
+    if (prefRows.length === 0) continue
+    const prefFilename = `pref-${pref.slug}.json`
+    await writeFile(join(schoolDataDir, prefFilename), `${JSON.stringify(subsetPayload(prefRows))}\n`)
+    prefDataUrls[pref.slug] = `/school-data/${prefFilename}`
+  }
+
+  /**
+   * pref-index に載せる所在地を作る。
+   *
+   * address は県名始まりが大半だが、市区町村から始まる行が混ざっている
+   * （神奈川県 28 校・2026-08-25 実測）。県ページと市区町村ページの一覧は
+   * この 1 本の文字列をそのまま出すので、県名の有無をここで揃えておく。
+   *
+   * **市区町村を解決できなかった行は住所を載せない。** その手の行は address が
+   * 住所として機能しておらず、拠点の列挙が入っている（「東京都池袋・新宿代々木 ほか」
+   * のような広域通信制 8 校・2026-08-25 実測）。所在地が単一に定まらない学校に
+   * 代表を 1 つ選んで載せる根拠が無いので、出さないほうを採る。
+   * 判定は resolveCityGroup の結果をそのまま使う（住所文字列を見る規則は足さない）。
+   */
+  function compactAddress(row, city) {
+    if (city === UNRESOLVED_CITY_LABEL) return null
+    const address = row.address?.trim()
+    if (!address) return null
+    return address.startsWith(row.prefecture) ? address : `${row.prefecture}${address}`
+  }
+
+  // 県ページ用の軽量インデックス（docs/local/plan_ssr-hydration_c3_initial-data.md）。
+  // PrefecturePage が実際に参照するフィールドだけを短縮キーで持つ（searchIndex と同手法）。
+  // 上の pref-<slug>.json は学校詳細と同じ全項目で東京 2.8MB / 北海道 6.5MB あり、
+  // プリレンダー HTML へ埋め込めないため、埋め込み用にこれを別途作る。
+  // 地図・詳細ページと同じく lat/lng がある校だけ（mapSchoolRows / gen-seo-pages の targets と一致）。
+  // cities は city-index と同じ市区町村コード順。school.c は resolveCityGroup のラベル。
+  const prefIndexUrls = {}
+  for (const pref of prefectures) {
+    const prefRows = rows.filter(
+      (row) => row.prefecture === pref.name && row.latitude != null && row.longitude != null,
+    )
+    if (prefRows.length === 0) continue
+    const cities = cityIndex.filter((entry) => entry.prefSlug === pref.slug).map((entry) => entry.city)
+    const compactSchools = prefRows.map((row) => {
+      // 学科系統と中高一貫は「持っているときだけ」キーを置く。学科ゼロの学校に dg: [] を
+      // 置くと 47 県で無駄が乗るうえ、「空配列」と「キー無し」の 2 通りを表示側で
+      // 判定することになる。無いものは書かない。
+      const deptGroups = encodeDeptGroups(row.school_departments)
+      const city = resolveCityGroup(row, muniByPref)?.label ?? row.city ?? UNRESOLVED_CITY_LABEL
+      return {
+        i: row.id,
+        n: row.name,
+        k: row.name_kana ?? null,
+        c: city,
+        o: row.ownership,
+        ls: row.lifecycle_status_code ?? null,
+        rs: row.recruitment_status_code ?? null,
+        ct: row.course_times?.length ? row.course_times : ['fulltime'],
+        g: row.gender_type ?? null,
+        // 一覧に出す所在地（県名から始まる 1 本の文字列。出せない行は null）。
+        // **正規化はこの 1 箇所だけで行う。** 表示側で県名や市区町村名を足し引き
+        // し始めると、同じ表記ゆれを画面ごとに別々の regex で吸収することになる。
+        a: compactAddress(row, city),
+        ...(deptGroups.length ? { dg: deptGroups } : {}),
+        ...(row.is_integrated ? { ig: true } : {}),
+        lat: row.latitude != null ? Number(row.latitude) : null,
+        lng: row.longitude != null ? Number(row.longitude) : null,
+      }
+    })
+    const prefIndexBody = {
+      slug: pref.slug,
+      cities,
+      schools: compactSchools,
+    }
+    const prefIndexFilename = `pref-index-${pref.slug}.json`
+    await writeFile(join(schoolDataDir, prefIndexFilename), `${JSON.stringify(prefIndexBody)}\n`)
+    prefIndexUrls[pref.slug] = `/school-data/${prefIndexFilename}`
+  }
+
+  const manifest = {
+    url: `/${filename}`,
+    hash,
+    count: rows.length,
+    formatVersion: payload.formatVersion,
+    compression: 'gzip',
+    // 地図・一覧用の全国データ（plan_data-usage-audit.md C2）。ブラウザはこちらを読む。
+    mapUrl: `/${mapFilename}`,
+    mapHash,
+    mapCount: mapPayload.schools.length,
+    mapFormatVersion: mapPayload.formatVersion,
+    sourceCatalogCount: sourceCatalog.length,
+    cityIndexUrl: `/${cityIndexFilename}`,
+    cityIndexCount: cityIndex.length,
+    nameIndexUrl: `/${nameIndexFilename}`,
+    // 学校単体 JSON / 県別分割 JSON（/school-data/）のキャッシュバスト用バージョンと台帳。
+    // URL は固定パスなので、取得時に `?v=<schoolDataVersion>` を付ける。
+    schoolDataVersion: hash,
+    schoolDataCount: detailRows.length,
+    prefDataUrls,
+    prefIndexUrls,
+    generatedAt,
+  }
+  await writeFile(join(publicDir, 'schools-manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`)
+
+  logger.log(
+    `wrote ${mapPayload.schools.length} schools to ${mapOutputPath} ` +
+    `(map url=${manifest.mapUrl})`,
+  )
+  logger.log(
+    `wrote ${rows.length} schools to ${outputPath} (manifest url=${manifest.url}, ` +
+    `cityIndex=${cityIndex.length}, nameIndex=${nameIndex.length}, ` +
+    `schoolData=${detailRows.length}, prefData=${Object.keys(prefDataUrls).length}, ` +
+    `prefIndex=${Object.keys(prefIndexUrls).length}, ` +
+    `publicApi=${publicApiRecords.length})`,
+  )
+
+  // 市区町村を解決できず県ページの「その他」へ落ちる校数。新県データ投入後にここが
+  // 跳ねたら city/address の表記異常（県名二重・欠損表記等）を疑うこと。
+  if (unresolvedByPref.size > 0) {
+    const detail = [...unresolvedByPref.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .map(([pref, count]) => `${pref}=${count}`)
+      .join(', ')
+    const total = [...unresolvedByPref.values()].reduce((a, b) => a + b, 0)
+    logger.warn(`city 未解決（「その他」行き）: ${total} 校 (${detail})`)
+  }
+  return manifest
 }
 
-// 県別分割（全 rows を prefecture ごとに全件 JSON と同形式で分割）。
-// 取りこぼし（prefectures.json に無い県名の行）は verify-static-output.mjs の
-// 合計突き合わせで build を落として検出する。
-const prefDataUrls = {}
-for (const pref of prefectures) {
-  const prefRows = rows.filter((row) => row.prefecture === pref.name)
-  if (prefRows.length === 0) continue
-  const prefFilename = `pref-${pref.slug}.json`
-  await writeFile(join(schoolDataDir, prefFilename), `${JSON.stringify(subsetPayload(prefRows))}\n`)
-  prefDataUrls[pref.slug] = `/school-data/${prefFilename}`
+// This identity covers the generator, its local runtime dependencies and static configuration.
+// It records provenance; it is not a signature or a claim of deployed/reviewed code.
+const GENERATOR_FILES = [
+  'web/scripts/gen-schools-json.mjs', 'web/scripts/lib/school-candidate.mjs',
+  'web/scripts/lib/school-source.mjs', 'web/scripts/lib/municipalities.mjs',
+  'web/scripts/lib/public-api.mjs', 'web/scripts/lib/dept-groups-shared.mjs',
+  'web/scripts/lib/city-index-shared.mjs', 'web/scripts/lib/site.mjs',
+  'web/src/lib/neighbors.ts', 'web/src/lib/haversine.ts', 'web/src/lib/successors.ts',
+  'web/src/lib/school-select.ts', 'web/src/lib/mapPayload.ts',
+  'web/src/lib/admissionUnits.ts', 'web/src/lib/admission.ts',
+  'web/data/prefectures.json', 'web/data/municipalities.json',
+  'web/data/site.json', 'web/data/dataset-claims.json', 'web/package.json',
+].sort()
+const repoRoot = resolve(webRoot, '..')
+const digest = (bytes) => createHash('sha256').update(bytes).digest('hex')
+async function generatorIdentity() {
+  const files = await Promise.all(GENERATOR_FILES.map(async (path) => ({ path, sha256: digest(await readFile(await checkedFile(join(repoRoot, path)))) })))
+  return { files, sha256: digest(canonicalSchoolSourceJSON(files)) }
 }
 
-/**
- * pref-index に載せる所在地を作る。
- *
- * address は県名始まりが大半だが、市区町村から始まる行が混ざっている
- * （神奈川県 28 校・2026-08-25 実測）。県ページと市区町村ページの一覧は
- * この 1 本の文字列をそのまま出すので、県名の有無をここで揃えておく。
- *
- * **市区町村を解決できなかった行は住所を載せない。** その手の行は address が
- * 住所として機能しておらず、拠点の列挙が入っている（「東京都池袋・新宿代々木 ほか」
- * のような広域通信制 8 校・2026-08-25 実測）。所在地が単一に定まらない学校に
- * 代表を 1 つ選んで載せる根拠が無いので、出さないほうを採る。
- * 判定は resolveCityGroup の結果をそのまま使う（住所文字列を見る規則は足さない）。
+/** Generate only school JSON into a fresh external directory from a synthetic pair.
+ * Neither importing this module nor this path reads credentials or invokes Supabase.
+ * SEO generation, the application build and publication are separate acceptance steps.
  */
-function compactAddress(row, city) {
-  if (city === UNRESOLVED_CITY_LABEL) return null
-  const address = row.address?.trim()
-  if (!address) return null
-  return address.startsWith(row.prefecture) ? address : `${row.prefecture}${address}`
-}
-
-// 県ページ用の軽量インデックス（docs/local/plan_ssr-hydration_c3_initial-data.md）。
-// PrefecturePage が実際に参照するフィールドだけを短縮キーで持つ（searchIndex と同手法）。
-// 上の pref-<slug>.json は学校詳細と同じ全項目で東京 2.8MB / 北海道 6.5MB あり、
-// プリレンダー HTML へ埋め込めないため、埋め込み用にこれを別途作る。
-// 地図・詳細ページと同じく lat/lng がある校だけ（mapSchoolRows / gen-seo-pages の targets と一致）。
-// cities は city-index と同じ市区町村コード順。school.c は resolveCityGroup のラベル。
-const prefIndexUrls = {}
-for (const pref of prefectures) {
-  const prefRows = rows.filter(
-    (row) => row.prefecture === pref.name && row.latitude != null && row.longitude != null,
-  )
-  if (prefRows.length === 0) continue
-  const cities = cityIndex.filter((entry) => entry.prefSlug === pref.slug).map((entry) => entry.city)
-  const compactSchools = prefRows.map((row) => {
-    // 学科系統と中高一貫は「持っているときだけ」キーを置く。学科ゼロの学校に dg: [] を
-    // 置くと 47 県で無駄が乗るうえ、「空配列」と「キー無し」の 2 通りを表示側で
-    // 判定することになる。無いものは書かない。
-    const deptGroups = encodeDeptGroups(row.school_departments)
-    const city = resolveCityGroup(row, muniByPref)?.label ?? row.city ?? UNRESOLVED_CITY_LABEL
-    return {
-      i: row.id,
-      n: row.name,
-      k: row.name_kana ?? null,
-      c: city,
-      o: row.ownership,
-      ls: row.lifecycle_status_code ?? null,
-      rs: row.recruitment_status_code ?? null,
-      ct: row.course_times?.length ? row.course_times : ['fulltime'],
-      g: row.gender_type ?? null,
-      // 一覧に出す所在地（県名から始まる 1 本の文字列。出せない行は null）。
-      // **正規化はこの 1 箇所だけで行う。** 表示側で県名や市区町村名を足し引き
-      // し始めると、同じ表記ゆれを画面ごとに別々の regex で吸収することになる。
-      a: compactAddress(row, city),
-      ...(deptGroups.length ? { dg: deptGroups } : {}),
-      ...(row.is_integrated ? { ig: true } : {}),
-      lat: row.latitude != null ? Number(row.latitude) : null,
-      lng: row.longitude != null ? Number(row.longitude) : null,
-    }
-  })
-  const prefIndexBody = {
-    slug: pref.slug,
-    cities,
-    schools: compactSchools,
+export async function generateSchoolCandidate({ snapshotPath, manifestPath, outputRoot }) {
+  const inputs = await Promise.all([snapshotPath, manifestPath].map(checkedFile))
+  if (inputs[0] === inputs[1]) throw new Error('Separate snapshot and source manifest required')
+  await checkedOutput(outputRoot, inputs, repoRoot)
+  const [snapshotBytes, manifestBytes] = await Promise.all(inputs.map((path) => readFile(path)))
+  const snapshot = parseSchoolSnapshot(snapshotBytes, manifestBytes)
+  const sourceManifest = JSON.parse(manifestBytes)
+  // IDs are used as detail filenames. Validate before writing even to the private stage.
+  if (snapshot.tables.schools.some((row) => !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(row.id))) {
+    throw new Error('Invalid school candidate: canonical lowercase UUID required for every school')
   }
-  const prefIndexFilename = `pref-index-${pref.slug}.json`
-  await writeFile(join(schoolDataDir, prefIndexFilename), `${JSON.stringify(prefIndexBody)}\n`)
-  prefIndexUrls[pref.slug] = `/school-data/${prefIndexFilename}`
+  const rows = snapshotToGeneratorRows(snapshot)
+  const { prefectures } = await loadCivicData(webRoot)
+  if (rows.some((row) => !prefectures.some((pref) => pref.name === row.prefecture))) {
+    throw new Error('Invalid school candidate: unknown prefecture would omit partition output')
+  }
+  const generator = await generatorIdentity()
+  const metadata = {
+    datasetVersion: snapshot.dataset_version, sourceVersion: snapshot.source_version,
+    generatedAt: sourceManifest.created_at,
+    source: { snapshotSha256: digest(snapshotBytes), manifestSha256: digest(manifestBytes), contentSha256: sourceManifest.content_sha256 },
+  }
+  return stageSchoolCandidate({ outputRoot, inputPaths: inputs, protectedRoot: repoRoot, metadata, generator,
+    build: async (stage) => {
+      await writeSchoolFiles(rows, stage, metadata.generatedAt, { log() {}, warn() {} })
+      // Detect input/config edits while generating. Never label that mixture complete.
+      const current = await Promise.all(inputs.map(async (path) => digest(await readFile(await checkedFile(path)))))
+      if (current[0] !== metadata.source.snapshotSha256 || current[1] !== metadata.source.manifestSha256 ||
+          (await generatorIdentity()).sha256 !== generator.sha256) throw new Error('School candidate inputs changed during generation')
+    },
+  })
 }
 
-const manifest = {
-  url: `/${filename}`,
-  hash,
-  count: rows.length,
-  formatVersion: payload.formatVersion,
-  compression: 'gzip',
-  // 地図・一覧用の全国データ（plan_data-usage-audit.md C2）。ブラウザはこちらを読む。
-  mapUrl: `/${mapFilename}`,
-  mapHash,
-  mapCount: mapPayload.schools.length,
-  mapFormatVersion: mapPayload.formatVersion,
-  sourceCatalogCount: sourceCatalog.length,
-  cityIndexUrl: `/${cityIndexFilename}`,
-  cityIndexCount: cityIndex.length,
-  nameIndexUrl: `/${nameIndexFilename}`,
-  // 学校単体 JSON / 県別分割 JSON（/school-data/）のキャッシュバスト用バージョンと台帳。
-  // URL は固定パスなので、取得時に `?v=<schoolDataVersion>` を付ける。
-  schoolDataVersion: hash,
-  schoolDataCount: detailRows.length,
-  prefDataUrls,
-  prefIndexUrls,
-  generatedAt,
+export async function main(args = process.argv.slice(2)) {
+  const outputArgs = args.filter((arg) => arg.startsWith('--output-root='))
+  if (outputArgs.length > 1) throw new Error('Only one output root is allowed')
+  const options = parseSchoolSourceArgs(args.filter((arg) => !arg.startsWith('--output-root=')))
+  if (options.source === 'snapshot') {
+    const outputRoot = outputArgs[0]?.slice('--output-root='.length)
+    if (!outputRoot) throw new Error('Snapshot generation requires an explicit external --output-root')
+    const receipt = await generateSchoolCandidate({ snapshotPath: options.snapshotPath, manifestPath: options.manifestPath, outputRoot })
+    console.log(JSON.stringify({ status: 'generated', scope: receipt.scope, artifactsSha256: receipt.artifactsSha256, artifacts: receipt.artifacts.length }))
+    return receipt
+  }
+  if (outputArgs.length) throw new Error('An output root is supported only for synthetic snapshot candidates')
+  // Existing production generation remains explicitly selected and unchanged.
+  const rows = await loadSchoolSource({ ...options, fetchSupabase: fetchSupabaseRows })
+  return writeSchoolFiles(rows, join(webRoot, 'public'), new Date().toISOString())
 }
-await writeFile(join(publicDir, 'schools-manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`)
 
-console.log(
-  `wrote ${mapPayload.schools.length} schools to ${mapOutputPath} ` +
-  `(map url=${manifest.mapUrl})`,
-)
-console.log(
-  `wrote ${rows.length} schools to ${outputPath} (manifest url=${manifest.url}, ` +
-  `cityIndex=${cityIndex.length}, nameIndex=${nameIndex.length}, ` +
-  `schoolData=${detailRows.length}, prefData=${Object.keys(prefDataUrls).length}, ` +
-  `prefIndex=${Object.keys(prefIndexUrls).length}, ` +
-  `publicApi=${publicApiRecords.length})`,
-)
-
-// 市区町村を解決できず県ページの「その他」へ落ちる校数。新県データ投入後にここが
-// 跳ねたら city/address の表記異常（県名二重・欠損表記等）を疑うこと。
-if (unresolvedByPref.size > 0) {
-  const detail = [...unresolvedByPref.entries()]
-    .sort((a, b) => b[1] - a[1])
-    .map(([pref, count]) => `${pref}=${count}`)
-    .join(', ')
-  const total = [...unresolvedByPref.values()].reduce((a, b) => a + b, 0)
-  console.warn(`city 未解決（「その他」行き）: ${total} 校 (${detail})`)
+if (process.argv[1] && pathToFileURL(resolve(process.argv[1])).href === import.meta.url) {
+  main().catch(() => {
+    // Avoid echoing input values, paths or credentials through a CLI exception stack.
+    console.error('School generation failed; no completed candidate was confirmed.')
+    process.exitCode = 1
+  })
 }

@@ -5,7 +5,7 @@ docsweep_state: planned
 tags: [sqlite, static-generation, backup, data-migration]
 owner: ishizakahiroshi
 review_status: draft
-related: [docs/plan_subdomain-entry-school-migration.md, docs/reference_sqlite-school-source-contract.md]
+related: [docs/plan_subdomain-entry-school-migration.md, docs/reference_sqlite-school-source-contract.md, docs/local/bugfix_family-favorites-status-ambiguity_2026-09-27.md]
 last_reviewed: 2026-09-27
 due: 2026-10-04
 work_id: WK-20260927T045835019-fa81c51a
@@ -17,7 +17,7 @@ ai_author_model_id: unknown
 ai_author_model_display: unknown
 ai_author_reasoning: unknown
 ai_author_model_source: unavailable
-ai_execution_refs: [AIX-20260927T045835019-749f2ce4, AIX-20260927T133204820-c9608138, AIX-20260927T133944102-40f5caee, AIX-20260927T140139638-d4f2cd0c, AIX-20260927T140154258-c1a469f8, AIX-20260927T142311747-b9a02fbe, AIX-20260927T143351122-59cd2f6d, AIX-20260927T144139564-d21f3866, AIX-20260927T144343495-03c9c044, AIX-20260927T151505567-a21d1b47, AIX-20260927T151506349-606f90b4, AIX-20260927T151507062-ed8249fb, AIX-20260927T151507758-986a4fa8, AIX-20260927T152038644-ee0e54d0, AIX-20260927T152523029-03ea1403]
+ai_execution_refs: [AIX-20260927T045835019-749f2ce4, AIX-20260927T133204820-c9608138, AIX-20260927T133944102-40f5caee, AIX-20260927T140139638-d4f2cd0c, AIX-20260927T140154258-c1a469f8, AIX-20260927T142311747-b9a02fbe, AIX-20260927T143351122-59cd2f6d, AIX-20260927T144139564-d21f3866, AIX-20260927T144343495-03c9c044, AIX-20260927T151505567-a21d1b47, AIX-20260927T151506349-606f90b4, AIX-20260927T151507062-ed8249fb, AIX-20260927T151507758-986a4fa8, AIX-20260927T152038644-ee0e54d0, AIX-20260927T152523029-03ea1403, AIX-20260927T181805960-5e23f256, AIX-20260927T183805863-4c4cd170, AIX-20260927T183913218-7f06a6d2, AIX-20260927T184419559-582781ab, AIX-20260927T184854452-385abba9, AIX-20260927T190739656-00847bd1, AIX-20260927T190927342-eff9e6b1, AIX-20260927T191019721-a10fb853, AIX-20260927T193526845-1b89d8c4, AIX-20260927T193553686-03535520, AIX-20260927T193555404-0ebe1d34, AIX-20260927T193557162-60cb68d8, AIX-20260927T194111590-78179ea7, AIX-20260927T194120279-d6f01223, AIX-20260927T194151262-c808dbef, AIX-20260927T194346702-15dc07ea, AIX-20260927T194453819-2b626f5e, AIX-20260927T194455615-ff0ff5b4, AIX-20260927T194457422-8e84b49b, AIX-20260927T194641527-08b15da2, AIX-20260927T200952829-3eb2f4a9, AIX-20260927T201007392-8d9f8da8, AIX-20260927T201008944-d4d1f545, AIX-20260927T201010606-aa825886, AIX-20260927T201549165-fde4cf9a, AIX-20260927T201550730-f84527a5, AIX-20260927T201729040-f225b408, AIX-20260927T201810160-9df043fd, AIX-20260927T202007881-a56da3b9, AIX-20260927T202253503-76690565, AIX-20260927T202416839-004cd705, AIX-20260927T224036048-2e725d28]
 docsweep_parent: docs/plan_subdomain-entry-school-migration.md
 ---
 
@@ -31,12 +31,13 @@ docsweep_parent: docs/plan_subdomain-entry-school-migration.md
 
 | C | 種別 | 内容 | 備考/注意点 | AI実行 | 実行モデル |
 |---|---|---|---|---|---|
-| C1 | planned | SQLite原本・取込み・共通スナップショットを作る | 合成データから実装。既存ID・型・公開範囲を維持 | AIX-20260927T133204820-c9608138; AIX-20260927T133944102-40f5caee; AIX-20260927T140139638-d4f2cd0c; AIX-20260927T140154258-c1a469f8; AIX-20260927T142311747-b9a02fbe; AIX-20260927T143351122-59cd2f6d; AIX-20260927T144139564-d21f3866; AIX-20260927T144343495-03c9c044; AIX-20260927T151505567-a21d1b47; AIX-20260927T151506349-606f90b4; AIX-20260927T151507062-ed8249fb; AIX-20260927T151507758-986a4fa8; AIX-20260927T152038644-ee0e54d0; AIX-20260927T152523029-03ea1403 | implementation: openai / gpt-6-sol / high; review: openai / unknown / unknown; verification: openai / unknown / unknown; implementation: openai / unknown / unknown; review: openai / unknown / unknown; implementation: openai / unknown / unknown; verification: openai / unknown / unknown; review: openai / unknown / unknown; implementation: openai / unknown / unknown; implementation: openai / unknown / unknown; implementation: openai / unknown / unknown; implementation: openai / unknown / unknown; review: openai / unknown / unknown; verification: openai / unknown / unknown |
-| C2 | planned | 原本の世代バックアップと復元を作る | C1のスキーマ/版情報を使用。保存先の実体確認は設定前 |  |  |
-| C3 | planned | 静的生成・管理更新・利用者参照を切り替える準備 | C1/C2後。実DBへの適用はC4 |  |  |
+| C1 | planned | SQLite原本・取込み・共通スナップショットを作る | 合成データから実装。既存ID・型・公開範囲を維持 | AIX-20260927T133204820-c9608138; AIX-20260927T133944102-40f5caee; AIX-20260927T140139638-d4f2cd0c; AIX-20260927T140154258-c1a469f8; AIX-20260927T142311747-b9a02fbe; AIX-20260927T143351122-59cd2f6d; AIX-20260927T144139564-d21f3866; AIX-20260927T144343495-03c9c044; AIX-20260927T151505567-a21d1b47; AIX-20260927T151506349-606f90b4; AIX-20260927T151507062-ed8249fb; AIX-20260927T151507758-986a4fa8; AIX-20260927T152038644-ee0e54d0; AIX-20260927T152523029-03ea1403; AIX-20260927T181805960-5e23f256 | implementation: openai / gpt-6-sol / high; review: openai / unknown / unknown; verification: openai / unknown / unknown; implementation: openai / unknown / unknown; review: openai / unknown / unknown; implementation: openai / unknown / unknown; verification: openai / unknown / unknown; review: openai / unknown / unknown; implementation: openai / unknown / unknown; implementation: openai / unknown / unknown; implementation: openai / unknown / unknown; implementation: openai / unknown / unknown; review: openai / unknown / unknown; verification: openai / unknown / unknown; implementation: openai / unknown / unknown |
+| C2 | planned | 原本の世代バックアップと復元を作る | C1のスキーマ/版情報を使用。保存先の実体確認は設定前 | AIX-20260927T183805863-4c4cd170; AIX-20260927T184419559-582781ab; AIX-20260927T184854452-385abba9; AIX-20260927T190739656-00847bd1; AIX-20260927T190927342-eff9e6b1; AIX-20260927T191019721-a10fb853 | implementation: openai / unknown / unknown; review: openai / unknown / unknown; verification: openai / unknown / unknown; implementation: openai / unknown / unknown; review: openai / unknown / unknown; verification: openai / unknown / unknown |
+| C3 | planned | 静的生成・管理更新・利用者参照を切り替える準備 | C1/C2後。実DBへの適用はC4 | AIX-20260927T183913218-7f06a6d2; AIX-20260927T190739656-00847bd1; AIX-20260927T190927342-eff9e6b1; AIX-20260927T191019721-a10fb853; AIX-20260927T193526845-1b89d8c4; AIX-20260927T193553686-03535520; AIX-20260927T193555404-0ebe1d34; AIX-20260927T193557162-60cb68d8; AIX-20260927T194111590-78179ea7; AIX-20260927T194120279-d6f01223; AIX-20260927T194151262-c808dbef; AIX-20260927T194346702-15dc07ea; AIX-20260927T194453819-2b626f5e; AIX-20260927T194455615-ff0ff5b4; AIX-20260927T194457422-8e84b49b; AIX-20260927T194641527-08b15da2; AIX-20260927T200952829-3eb2f4a9; AIX-20260927T201007392-8d9f8da8; AIX-20260927T201008944-d4d1f545; AIX-20260927T201010606-aa825886; AIX-20260927T201549165-fde4cf9a; AIX-20260927T201550730-f84527a5; AIX-20260927T201729040-f225b408; AIX-20260927T201810160-9df043fd; AIX-20260927T202007881-a56da3b9; AIX-20260927T202253503-76690565; AIX-20260927T202416839-004cd705 | review: openai / unknown / unknown; implementation: openai / unknown / unknown; review: openai / unknown / unknown; verification: openai / unknown / unknown; implementation: openai / unknown / unknown; implementation: openai / unknown / unknown; implementation: openai / unknown / unknown; implementation: openai / unknown / unknown; review: openai / unknown / unknown; implementation: openai / unknown / unknown; verification: openai / unknown / unknown; review: openai / unknown / unknown; implementation: openai / unknown / unknown; implementation: openai / unknown / unknown; implementation: openai / unknown / unknown; review: openai / unknown / unknown; implementation: openai / unknown / unknown; implementation: openai / unknown / unknown; implementation: openai / unknown / unknown; implementation: openai / unknown / unknown; review: openai / unknown / unknown; review: openai / unknown / unknown; review: openai / unknown / unknown; implementation: openai / unknown / unknown; implementation: openai / unknown / unknown; review: openai / unknown / unknown; verification: openai / unknown / unknown |
 | C4 | planned | 実原本の移設・公開切替・旧原本の縮小 | 明示実行指示後。参照・復元・公開検収の順序を守る |  |  |
+| C5 | planned | [家族お気に入りRPCの曖昧参照](local/bugfix_family-favorites-status-ambiguity_2026-09-27.md)の実効定義照合と正式修正 | C3合成で再現・候補検証済み。実適用前の確認事項。実接続/適用は別承認 |  |  |
 
-実行順序: `C1 → C2 → C3 → C4`。親C1で採用したデータ構成を具体化する子計画。子の実装/原本切替と親C2〜C4のURL・ブランド移行は別工程とし、同日にDB原本とドメインをまとめて変更しない。親C1は本書作成だけでは完了にしない。依存先が未完成のCを並列実行しない。C3内の合成テスト作成等は、編集ファイルと共有スキーマが重ならない範囲で分担できる。
+実行順序: `C1 → C2 → C3 → C5の実効確認/必要修正 → C4`。親C1で採用したデータ構成を具体化する子計画。子の実装/原本切替と親C2〜C4のURL・ブランド移行は別工程とし、同日にDB原本とドメインをまとめて変更しない。親C1は本書作成だけでは完了にしない。依存先が未完成のCを並列実行しない。C3内の合成テスト作成等は、編集ファイルと共有スキーマが重ならない範囲で分担できる。
 
 ## 目的・採用事項
 
@@ -80,7 +81,7 @@ docsweep_parent: docs/plan_subdomain-entry-school-migration.md
 
 ### 作業内容
 
-到達点: [生成器の依存表・型・公開契約](reference_sqlite-school-source-contract.md)のC1-a〜C1-eを合成実装・検証済み。2026-09-27の静的調査で整理した25表をschema 3へ取り込み、正式ローカルsnapshot/manifestと明示入力adapterを接続した。今回の承認範囲は学校版のC1-b〜C1-eであり、他サービスへの共通manifest契約は未完了。C1全体のplannedは維持し、C2〜C4へ自動で進まない。
+到達点: [生成器の依存表・型・公開契約](reference_sqlite-school-source-contract.md)のC1-a〜C1-eを合成実装・検証済み。2026-09-27の静的調査で整理した25表をschema 3へ取り込み、正式ローカルsnapshot/manifestと明示入力adapterを接続した。後続の自律並行区間で他サービスへの共通manifest契約と合成接続も実装・レビューした（末尾の2026-09-27記録）。計画全体のplannedは維持し、C2〜C4は本区間の対象外とする。
 
 1. baselineに加えmigrationとコードを読み、原本/利用者/管理受付/運用設定を分類する。`scripts/`以下のデータ取込み・SQL生成・審査経路も検索し、Supabase原本へ書く経路を列挙する。`data_reports`、計測events、app_config等を無条件に原本へ移さない。
 2. 学校用SQLiteスキーマ・schema migration、列の型対応、公開に必要な関連表、入力/出力契約を実装する。原本非公開列と公開用snapshotを別にする。サービスを跨いだ外部キーは作らない。
@@ -287,6 +288,84 @@ ID/件数/公開内容の説明できない差、FK孤立、復元不可、権�
 資料: [容量・費用の検討HTML](review_portal-school-brand_2026-09-27.html)。仕様根拠: [SQLiteの適した用途](https://www.sqlite.org/whentouse.html)、[Backup API](https://www.sqlite.org/backup.html)、[Cloudflare Direct Upload](https://developers.cloudflare.com/pages/get-started/direct-upload/)。
 
 計画作成時の検証結果（2026-09-27）: 別エージェントが順序・既存依存・完了基準をレビューし重大な指摘なし。親子relatedのdry-runは追加修正0、provenance整合確認成功。対象公開3ファイルの秘密スキャンは検出0（3文字未満の設定監視語17件は対象外）。文書規約検査とHTMLの表示/保存/計算の回帰検査も成功。アプリやDBの実装検証ではない。
+
+### C1の2026-09-27 共通manifest区間
+
+ユーザーの自律並行実行指示により、C1作業5の[共通形式](reference_local-source-manifest.md)と[漢字・かるた初回境界](reference_kanji-karuta-source-boundaries.md)を追加した。学校は既存schema 3 bundleを先に検証するread-only adapterを追加。旧2ファイル・15コード識別・JS入力形式は変更しない。土地の既存施設入力は担当リポの純粋adapterで共通形式へ接続し、同じ合成出力を本リポの共通検証器にも通した。地域固有のスキーマは転記していない。
+
+学校既存を含むPython全体102件成功後、独立レビューで見つけたmanifest再読取り時のbool/int同値と不正timezone分の受理を修正。新規区間9件を再実行して成功（既存94件と合わせ103件）。既存学校JS12件も成功。土地は担当側29件成功。漢字は内容準備24件と既存保存境界4件成功。合成宣言は実値の自動識別ではなく、原本移設や配布可否の証明ではない。
+
+今回のC1共通manifest残区間は実装・独立レビュー・合成検証まで到達した。C2以降の世代バックアップ、運用上の入力切替、実原本取込み、公開切替は未実施。親子plan全体の完了とは分ける。
+
+### C2の2026-09-27 自律並行実装・合成検証
+
+ユーザーの残ステップ承認に基づき、親と3サブエージェントでC2実装と独立したC3読取り調査を並行した。[バックアップ契約](reference_sqlite-backup-contract.md)にAPI/CLIと未検収境界をまとめた。新規のbackup.pyはread-only transactionとSQLite Backup APIから整合世代を作り、厳密10キーmanifest、DB全bytes、schema定義、integrity/FK、25表の全行、公開用投影hashを検証する。restoreは別の新規DBへ検査して確定。元原本・既存世代は上書きしない。
+
+backup_replica.pyは完成世代のローカル複製と保持候補のdry-run。metadataの型を区別して同一コピーの再実行を許し、破損/不完全世代がある場合は削除候補0。削除処理はない。cloud_syncは常にunverified、UNC共有への直接複製は未対応。school_backup.pyにcreate/verify/restore/replicate/retentionの統合CLIを追加し、書込みは--applyのみ。
+
+独立レビューでは、失敗回収で競合相手のファイルを自分の所有物と誤認する問題を再現し、xb成功時のfile identityだけを回収する方式へ修正。applyの型、timezone分、Windowsでのfsyncハンドル、link直後の中断も修正/回帰した。継続的な悪意ある祖先directory差替え、OS強制終了、電源断、媒体故障の保証とは分ける。
+
+検証: Python 3.14 `python -B -m unittest discover -s scripts/local-data -p "test_*.py" -v`、**141件すべて成功、62.335秒、skip0**。既存103件＋core20件＋replica16件＋統合2件。WAL writer稼働中・並行commit・期限付きbusy、非上書き、故障注入、コピー→復元→既存export→同じsnapshot内容hash/件数、C1共通adapterへ戻るところまで合成で確認した。独立担当は最終追加前35件の全成功と修正差分を確認、親は最終全体を実行した。
+
+公開対象10ファイルのsecret-scanはKB86/family14を使い、検出0・未走査0。本体indexを変更しない別indexで実施。ログ・着手前控え・最終差分はリポ外に保存した。実媒体の情報はpublicへ転記しない。
+
+C2のローカル処理と合成受入は完了。実配置・別媒体からの復元・クラウド同期/暗号化・容量から決める保持数はC4の実検収として残す。利用者DBのnightly backupは変更していない。実DB・実原本・本番・build・commit/pushへは進んでいない。
+
+### C3の2026-09-27 切替準備の読取り調査
+
+[切替準備の参照一覧](reference_sqlite-school-cutover-readiness.md)を追加。原本の直読/直書き/審査受付、利用者3表に加え受付と補正監査のFK、ID索引候補、採用と公開の状態、未決事項と次単位C3-a〜eをコードから整理した。既存appliedを公開検証済みと読み替えず、学校削除のCASCADEを受付/監査へ及ぼさない設計が必要。C3は調査までで、registryやmigrationの実装/実効権限確認は未実施。
+
+### C2/C3の2026-09-27 第3区間: RDP複製・ID索引・隔離生成
+
+ユーザーの継続指示により親＋3担当で実装し、担当を交代して独立レビューした。C2は既存ローカル処理の制限を維持したまま`backup_transport.py`と`replicate-remote`を追加。UNCには完成世代のファイルだけを転送し、SQLite検証は全量を読み戻したローカルで実行する。失敗先は削除せず、手元の完成世代も保持。完全一致は再検証して再利用、不完全先は新しい保存先名で再試行する。
+
+通常UNCの識別番号検査を維持し、実RDPで識別番号が取得ごとに変わる観測に対応する明示RDPモードを追加した。対象は転送ドライブの単一英字共有に限定し、directory同一性検査が利用できないことを結果に明示。fileの型・link数・サイズ・時刻・内容hashと全manifest検証は維持する。リモートI/OをOS内で強制中断する期限保証ではなく、常駐の再試行機能も含めない。
+
+C3-aは`school_id_index.py`を追加し、全学校/学科の許可ID列だけの候補索引と前版との差分を生成。過去IDを保持し学科所属変更を拒否。C3-cは既存学校JSON生成器を出力先注入可能にし、リポ外・入力外の新規先へmap/full・詳細・検索・県別・公開APIを生成する。候補manifestに入力、生成コード/静的設定、全ファイルのhashを記録する。既定Supabase経路の生成本体は維持。import時の生成・設定読取りを除き、snapshot経路は認証設定やネット接続を使わない。
+
+独立レビューでlink直後中断の所有物回収、CLIのUNC文字列保持、候補ディレクトリ差替え/回収、Windowsファイル名のUUID大小衝突を確認・修正し、回帰試験へ固定した。候補生成は全学校IDを小文字UUIDへ限定し、県別から落ちる未知県を事前拒否する。ID索引や候補manifestは登録・公開・署名済みの証拠ではない。
+
+検証はPython全体**182件成功・skip0（56.625秒）**、学校入力/隔離生成**26件成功・skip0**、既存static **81件成功・skip0**、typecheck、対象JS lint。実RDP経路にも合成2ファイル約297 KiBだけを新規保存し、dry-run→転送→同じ先への再実行→読戻し→復元→既存exportを確認。25表件数・投影hash一致と原本不変を確認した。同じsnapshotからID索引と12ファイルの学校JSON候補を生成し、source内容/ファイルhash・dataset/source版の一致、全学校2ID保持と公開対象1校を照合した。実配置情報とログはローカル手順へ分離した。
+
+今回のC2追加・C3-a索引/C3-c JSON候補の区間は完了。C3全体は継続し、registry/FK移行候補とPostgreSQL認可試験、受付→採用→生成→公開の状態契約、配布前ゲート、SEO/SSR/UI統合が残る。実原本・利用者DB・migration適用・本番・build・commit/pushには進んでいない。媒体故障の独立性・実切断・電源断・クラウド同期は今回の成功に含めず、親全体の状態を完了へ変更しない。
+
+### C3の2026-09-27 第4区間: registry・永続queue・公開前検査
+
+親1・子3の分担で、[共通契約の節9](reference_sqlite-school-cutover-readiness.md#9-第4区間の共通契約ローカル合成試作)を先に固定して実装した。AはregistryとSQL候補、Bは受付queue、Cは公開前検査、親は契約・状態/identity通し試験・記録を担当。A→Cと親、B→A、C→Bの交代レビューを行った。
+
+- C3-a: 既存ID索引を再利用した合成登録receipt、UUIDのみの登録SQL、全5参照表の学校FK・3表の同校学科FKを変更する候補、読み取り復旧前検査を追加した。過去IDを維持し、旧学校行削除でも利用者/受付/監査の全行が残り、切替後メモを巻き戻さないことを合成PGで確認した。実migration配置への追加はない。
+- C3-b: 新規scratchのSQLiteへ受付と監査eventsを原子的に保持。元版CAS、二重採用、dataset版再利用、古い公開要求、役割拒否、同意revision、生成/公開失敗・再試行・プロセス中断を試験した。採用済み祖先の同意撤回を子提案で迂回する問題を独立レビューで再現し、累積版全体の進行・変更投影を止める修正と5回帰を追加した。既存appliedは公開確認にしない。
+- C3-d: 候補manifestとPython ID/登録検証器を再利用し、全生成JSON（圧縮full/map、詳細、校名/県別索引、API）のID集合・学科所属も検査する。破損・別世代・未登録ID・不許可先を拒否し、通信しないstubで失敗/再試行/前版復旧を確認。復旧は再ゲートし、過去の成功済requestIdを使う偽の復旧を拒否する。
+
+合成PGで既存`get_family_shared_favorites`の`status`曖昧参照を再現。認可条件を保持した列修飾候補を`sql-candidates/family_favorites_qualification.sql`へ隔離し、元エラーと候補適用後の許可/拒否を検査した。正式migrationは未変更、実サービスの発生有無は未確認。C5で実効定義と必要な修正を追跡する。
+
+親による最終検証: Python全体**220件成功・skip0（62.986秒）**、学校入力/生成/gate/状態結合**40件成功・skip0**、隔離PostgreSQL **10件成功（11.687秒）**、既存static **81件成功・skip0**、typecheck・対象JS lint成功。PGは既存18.4バイナリから新規clusterをloopbackに起動し終了時に停止。実DDL/policy/RPCを選択抽出した試験で、auth関数/usersや旧学校業務列は合成shimである。実JWT・PIN/ロックアウト・投稿レート制限・全Supabase schemaの検証ではない。
+
+通し試験はPython export→候補JSON→ID登録模擬→永続queue→公開失敗/再試行→確認の版と状態の接続を検査した。採用予定の補正値を原本へ適用するadapterは未実装で、fixtureから生成した候補を使用する。この区間の成功を実原本採用・本公開の完了に読み替えない。
+
+次のC3区間: 採用予定変更の原本transactionへの接続、撤回後の再評価と進行再開、実認証付きRPC候補を具体化する。registryの正式採用と退役/未公開ID保存方針を確定するまではUIへ接続しない。その後C3-eで名称参照・SEO/SSR・画面受入、C5の実効照合、C4の実原本/実配布へ進む。C3全体・親H1/docsweep_stateはplannedを維持する。実DB・実原本・媒体再試験・build・commit/push/tag・公開・新依存導入は行っていない。
+
+### C3の2026-09-27 第5区間: 原本適用・撤回後再開・受付候補
+
+親1・子3で[第5区間契約](reference_sqlite-school-cutover-readiness.md#10-第5区間の契約合成試作限定)を固定して実装した。Aはschema 3原本adapterと原本内receipt、Bは永続queueの適用待ち・再照合・再評価/取消、Cは隔離受付RPC候補、親は実原本値から生成物までの通し試験と記録を担当。AがB/C、CがA/親、Bが親を交代レビューした。
+
+- 原本: 許可した偏差値列だけを既存有効行へ適用。所属とNULL学校単位の意味、元版CAS、途中rollback、同一要求の再試行/別内容拒否、commit前後停止、取消tombstoneを検査。変更とreceiptを同じtransactionへ保存し、全25表の実内容から新しい版を得る。既存export/manifestへ戻して検証する。
+- queue: 予定採用では世代を進めず、実原本receiptと現在tipを照合してから進める。原本commit後queue未更新なら停止したまま再照合できる。撤回した全祖先の影響を訂正したreceiptから新しい候補へ進み、旧審査/候補/公開要求を無効化する。再同意で旧審査を復活させず、公開済み履歴を残す。
+- 受付候補: auth.uid/管理者判定、本人撤回とrevision、PIN/ロックアウト、既存rate trigger、監査と状態の拒否条件を隔離SQLへ実装。正式migrationと実RPC/UIは未接続。既存appliedを公開済みに変換しない。
+- 通し: 合成原本の偏差値50→61がexportと学校詳細JSONへ届くことを確認。公開失敗/再試行、撤回停止、52への訂正と新候補からの再開、ID集合と旧公開履歴保持を検査した。登録/公開は模擬である。
+
+独立レビューで2件を確定・修正した。受付後に学科所属が変更された古い審査は、審査時の現所属再確認と行ロックで拒否。撤回後に保存済み公開要求を再試行できる接続漏れは、成果物検査後・公開状態変更直前のqueue/原本再照合を必須にした。指摘者が元の再現を再実行し、拒否と状態不変を確認した。原本commit/queue未更新中の公開拒否も独立試験した。
+
+| 親による今回の検証 | 結果 |
+|---|---|
+| Python全体 | 256件成功、skip0、70.692秒 |
+| 学校JS（入力/生成/gate/統合） | 41件成功、skip0 |
+| 隔離PostgreSQL | registry既存10件＋受付候補14件成功、skip0。新規clusterは停止 |
+| static / typecheck / 対象JS lint | static81件成功、skip0。型検査・lint成功 |
+
+PGは実PostgreSQL 18.4とinstalled pgcryptoで候補PIN/ロックアウト、baselineから抽出したrate trigger、選択したpolicy/RPCを実行した。auth.uid/usersはshim。実JWT/OAuth/PostgREST、全Supabase schema、旧補正RPC本体の実行、既存/新規PIN endpointの並行運用、匿名rate分岐/global300は検収していない。Python Actorは合成入力であり、認証証明ではない。
+
+第5区間終了時の再開案（第6区間で一部を実装済み）: 本C3から認証付き受付→ローカルqueueの受渡しと既存学校単位同意との同期契約を設計し、実行者認証・registry正式採用・退役/未公開IDへの保存方針を具体案と影響つきで本人に確認する。初回CASを公開投影から全原本hashへ拡張する運用判断、公開検査直後の同時撤回と実輸送の整合も実接続前に扱う。現在の残件は以下に集約する。
 
 <a id="sqlite-wave6-current"></a>
 

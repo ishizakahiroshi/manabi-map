@@ -134,7 +134,8 @@ def create_schema(db, payload):
 
 
 def check_metadata(db):
-    check_shape(db, TABLES, {"singleton", "schema_version", "purpose", "dataset_version", "source_version"})
+    check_shape(db, TABLES, {"singleton", "schema_version", "purpose", "dataset_version", "source_version"},
+                allow_apply_receipts=True)
     row = db.execute("SELECT * FROM source_metadata WHERE singleton=1").fetchone()
     require(row is not None and row["schema_version"] == SCHEMA_VERSION and row["purpose"] == PURPOSE,
             "unsupported source purpose/schema; use explicit migration")
@@ -144,8 +145,16 @@ def check_metadata(db):
     return row
 
 
-def check_shape(db, table_contract, metadata_columns):
+def check_shape(db, table_contract, metadata_columns, *, allow_apply_receipts=False):
     tables = {r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+    if allow_apply_receipts and "source_apply_receipts" in tables:
+        columns = list(db.execute("PRAGMA table_info(source_apply_receipts)"))
+        require([(r["name"], r["type"], r["notnull"], r["pk"]) for r in columns] ==
+                [("request_id", "TEXT", 1, 1), ("request_sha256", "TEXT", 1, 0),
+                 ("document", "TEXT", 1, 0)], "invalid source receipt table")
+        require(next(r["strict"] for r in db.execute("PRAGMA table_list")
+                     if r["name"] == "source_apply_receipts") == 1, "receipt table must be strict")
+        tables.remove("source_apply_receipts")
     require(tables == set(table_contract) | {"source_metadata"}, "unexpected database tables")
     for table, columns in {**table_contract, "source_metadata": metadata_columns}.items():
         actual = {r["name"] for r in db.execute(f"PRAGMA table_info({table})")}
