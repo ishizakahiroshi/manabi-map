@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<!--docsweep-meta
+type: review-sheet
+status: planned
+tags: [portal, brand-portability, migration]
+owner: ishizakahiroshi
+related: [plan_subdomain-entry-school-migration.md]
+last_reviewed: 2026-09-27
+docsweep_policy: archive_with_release
+-->
+<html lang="ja"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>総合入口・学校移行・ブランド運用 — 検討シート</title><style>
+  :root{
+    --bg:#f6f7f9; --card:#fff; --ink:#1f2733; --sub:#5b6675; --line:#e2e6ec;
+    --accent:#2563eb; --accent-soft:#eaf1ff;
+    --ok:#1a7f4b; --ok-soft:#e7f5ee; --warn:#b06a00;
+    --todo:#b4232a; --todo-soft:#fdeced; --rec:#0e7c66; --rec-soft:#e3f6f1;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font-family:"Segoe UI","Hiragino Kaku Gothic ProN","Yu Gothic UI",Meiryo,sans-serif;
+    line-height:1.75;font-size:15px}
+  .wrap{max-width:980px;margin:0 auto;padding:28px 20px 90px}
+  header.top{background:linear-gradient(135deg,#1e3a8a,#2563eb);color:#fff;
+    border-radius:14px;padding:24px 26px;margin-bottom:22px;box-shadow:0 6px 22px rgba(37,99,235,.18)}
+  header.top h1{margin:0 0 6px;font-size:22px;letter-spacing:.02em}
+  header.top p{margin:0;opacity:.92;font-size:13.5px}
+  .meta{margin-top:12px;font-size:12.5px;opacity:.85}
+  h2{font-size:18px;margin:34px 0 12px;padding-left:11px;border-left:5px solid var(--accent)}
+  h3{font-size:15.5px;margin:22px 0 8px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;
+    padding:18px 20px;margin:14px 0;box-shadow:0 1px 3px rgba(0,0,0,.03)}
+  p{margin:8px 0}
+  code{background:#eef1f5;border-radius:5px;padding:1px 6px;font-size:13px;
+    font-family:"Cascadia Code",Consolas,monospace}
+  .legend{display:flex;gap:10px;flex-wrap:wrap;margin:10px 0 0}
+  .tag{display:inline-block;font-size:12px;font-weight:600;border-radius:999px;
+    padding:2px 11px;line-height:1.6}
+  .tag.done{background:var(--ok-soft);color:var(--ok)}
+  .tag.todo{background:var(--todo-soft);color:var(--todo)}
+  .tag.rec{background:var(--rec-soft);color:var(--rec)}
+  /* 参加者タグ（色は人数に応じて足す。tag.p1 / p2 / p3 …） */
+  .tag.p1{background:#efe7fb;color:#6b3fb8}
+  .tag.p2{background:#e6f4ea;color:#2f7d46}
+  .tag.p3{background:#fde9e7;color:#b4443a}
+  .tag.p4{background:#e3f1fb;color:#2b6ca3}
+  table{width:100%;border-collapse:collapse;margin:10px 0;font-size:14px}
+  th,td{border:1px solid var(--line);padding:8px 10px;text-align:left;vertical-align:top}
+  th{background:#f0f3f8;font-weight:600}
+  /* ===== 図（インライン SVG）=====
+     正典: _shared/html-house-style.md「図は SVG か table で描く」。
+     等幅の罫線アート（─ │ ┐ ▼）は日本語ラベルが混じると桁がずれるので使わない。 */
+  .fig{margin:12px 0 6px;background:#fbfcfe;border:1px solid var(--line);border-radius:10px;
+    padding:12px 12px 8px;overflow-x:auto}
+  .fig svg{display:block;margin:0 auto;width:100%;max-width:700px;height:auto}
+  .fig .cap{font-size:12px;color:var(--sub);text-align:center;margin:6px 0 0}
+  .fig text{font-family:"Segoe UI","Hiragino Kaku Gothic ProN","Yu Gothic UI",Meiryo,sans-serif}
+  .fig .b{fill:#fff;stroke:#5b6675;stroke-width:1.5}            /* ふつうの箱 */
+  .fig .bx{fill:#eaf1ff;stroke:#2563eb;stroke-width:1.5}        /* 強調（これから作るもの） */
+  .fig .bg2{fill:#f0f3f8;stroke:#aab2bd;stroke-width:1.5}       /* 薄い（いまのもの・対象外） */
+  .fig .bo{fill:#e7f5ee;stroke:#1a7f4b;stroke-width:1.5}        /* よい状態 */
+  .fig .bw{fill:#fdeced;stroke:#b4232a;stroke-width:1.5}        /* 困る状態 */
+  .fig .bd{fill:none;stroke:#8a94a3;stroke-width:1.5;stroke-dasharray:5 4}  /* 点線（未定・将来） */
+  .fig .hl{fill:none;stroke:#2563eb;stroke-width:2;stroke-dasharray:5 4}    /* 重なりを囲む枠 */
+  .fig .t{font-size:12.5px;fill:#1f2733;text-anchor:middle;dominant-baseline:middle}
+  .fig .ts{font-size:11px;fill:#5b6675;text-anchor:middle;dominant-baseline:middle}
+  .fig .tsl{font-size:11px;fill:#5b6675;text-anchor:start;dominant-baseline:middle}
+  .fig .tl{font-size:12.5px;font-weight:700;fill:#1f2733;text-anchor:start;dominant-baseline:middle}
+  .fig .ln{stroke:#5b6675;stroke-width:1.5;fill:none}
+  .fig .dv{stroke:#d5dbe4;stroke-width:1;stroke-dasharray:4 3}  /* 左右を分ける区切り線 */
+  .fig .bad{fill:#b4232a}
+  .fig .good{fill:#1a7f4b}
+  /* 一覧 ⇄ 質問の往復（SKILL.md の 12） */
+  .tm{display:inline-block;font-size:11.5px;font-weight:700;border-radius:999px;padding:2px 9px;margin-left:4px;vertical-align:1px;white-space:nowrap}
+  .tm-now{background:#fdeced;color:#b4232a;border:1px solid #f2c3c6}
+  .tm-close{background:#fff3d6;color:#b06a00;border:1px solid #f3d8a8}
+  .tm-later{background:#f4f6f9;color:#5b6675;border:1px solid #dde3ea}
+  .backlink{margin:10px 0 0;font-size:12px;text-align:right}
+  .backlink a{color:#5b6675;text-decoration:none;border-bottom:1px dotted #aab2bd}
+  .card a{color:#2f6fb5}
+  /* いま／直すと の 2 列（SKILL.md の 9） */
+  .ba{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:12px 0 6px}
+  @media (max-width:760px){.ba{grid-template-columns:1fr}}
+  .ba-col{border:1px solid var(--line);border-radius:9px;padding:8px 9px 10px;background:#fcfdff}
+  .ba-h{font-weight:700;font-size:11.5px;padding:2px 9px;border-radius:999px;display:inline-block}
+  .ba-h.now{background:#fdeced;color:#b4232a}
+  .ba-h.next{background:#e7f5ee;color:#1a7f4b}
+  .bb{border:1px solid var(--line);border-radius:7px;padding:5px 8px;font-size:12.5px;line-height:1.5;margin-top:6px;background:#fff}
+  .bb small{display:block;color:var(--sub);font-size:11px;line-height:1.45;margin-top:2px}
+  .bb.bad{background:#fdeced;border-color:#f2c3c6}
+  .bb.ok{background:#e7f5ee;border-color:#bfe3cf}
+  .bb.gray{background:#f4f6f9;border-color:#dde3ea;color:#48566a}
+  .bb.mono{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:12px;background:#f8fafc}
+  .glossary dl{margin:6px 0 0;display:grid;grid-template-columns:max-content 1fr;gap:6px 14px}
+  .glossary dt{font-weight:700;color:var(--accent)}
+  .glossary dd{margin:0}
+  .callout{background:#fff7ed;border:1px solid #f3d8a8;border-left:5px solid var(--warn);
+    border-radius:10px;padding:14px 18px;margin:14px 0}
+  .callout b{color:var(--warn)}
+  .decision{border-left:5px solid var(--todo)}
+  .decision .qid{display:inline-block;background:var(--todo);color:#fff;font-weight:700;
+    border-radius:6px;padding:1px 9px;font-size:13px;margin-right:8px}
+  .why{background:#f3f8ff;border:1px solid #d4e4fb;border-radius:9px;
+    padding:11px 14px;margin:10px 0;font-size:13.5px;color:#33445e}
+  .why .row{margin:3px 0}
+  .why b{color:var(--accent)}
+  .opts{margin:12px 0 6px}
+  .opt{display:flex;gap:9px;align-items:flex-start;padding:9px 12px;border:1px solid var(--line);
+    border-radius:8px;margin:7px 0;cursor:pointer;background:#fcfdff;transition:.12s}
+  .opt:hover{border-color:var(--accent);background:var(--accent-soft)}
+  .opt input{margin-top:5px}
+  .opt .lbl{flex:1}
+  .opt .opt-main{font-weight:600}
+  .opt .opt-sub{display:block;font-size:12.5px;color:var(--sub);font-weight:400;margin-top:2px}
+  .opt .rec-mark{font-size:11px;color:var(--rec);font-weight:700;border:1px solid var(--rec);
+    border-radius:999px;padding:0 7px;white-space:nowrap;margin-left:6px;align-self:flex-start}
+  .memo{width:100%;min-height:54px;border:1px solid var(--line);border-radius:8px;
+    padding:8px 10px;font-family:inherit;font-size:13.5px;resize:vertical;margin-top:8px}
+  .memo::placeholder{color:#aab2bd}
+  .guidefill{min-height:120px}
+  .toolbar{position:sticky;bottom:0;background:rgba(246,247,249,.94);backdrop-filter:blur(4px);
+    border-top:1px solid var(--line);padding:12px 0;margin-top:30px;display:flex;gap:10px;flex-wrap:wrap}
+  button{font:inherit;font-weight:600;border:none;border-radius:9px;padding:10px 18px;
+    cursor:pointer;background:var(--accent);color:#fff}
+  button.ghost{background:#fff;color:var(--accent);border:1px solid var(--accent)}
+  button:hover{filter:brightness(1.05)}
+  #summaryBox{width:100%;min-height:200px;margin-top:12px;border:1px solid var(--line);
+    border-radius:10px;padding:12px;font-family:"Cascadia Code",Consolas,monospace;font-size:13px}
+  .note{font-size:12.5px;color:var(--sub)}
+  ul{margin:8px 0;padding-left:22px}
+  li{margin:3px 0}
+  /* おすすめ一括（個別質問より前に置く。正典: _shared/html-house-style.md） */
+  .bulk{background:var(--rec-soft);border:1px solid #bfe3cf;border-radius:10px;
+    padding:12px 16px;margin:12px 0;display:flex;gap:12px;align-items:center;flex-wrap:wrap;font-size:13.5px}
+  .bulk button{background:var(--rec)}
+
+  /* ===== 前の答えで要否が変わる設問の出し分け =====
+     正典: _shared/html-house-style.md「答えによって要否が変わる質問は…」節
+     使わないシートでは JS の COND を空のままにしておけば何も起きない。 */
+  .pickbar{background:#eef4ff;border:1px solid #cfe0fb;border-radius:10px;
+    padding:11px 15px;margin:12px 0 6px;font-size:13.5px;position:sticky;top:0;z-index:5}
+  .pickbar b{color:var(--accent)}
+  .pickbar .none{color:#8a94a3}
+  .condbar{font-size:12.5px;border-radius:8px;padding:8px 12px;margin:2px 0 10px;border:1px solid}
+  .condbar.wait{background:#f4f6f9;border-color:#dde3ea;color:var(--sub)}
+  .condbar.on{background:var(--ok-soft);border-color:#bfe3cf;color:var(--ok);font-weight:700}
+  .condbar.off{background:#f4f6f9;border-color:#dde3ea;color:#8a94a3;font-weight:700}
+  .card.decision.na{opacity:.5}
+  .card.decision.na .opt{cursor:default;background:#f7f8fa}
+  .card.decision.na .opt:hover{border-color:var(--line);background:#f7f8fa}
+  /* 紙では自動判定が効かないので、条件を文字で残す */
+  .condstatic{display:none}
+  body.static .condstatic{display:block;font-size:12.5px;color:#48566a;font-weight:700;
+    border:1px dashed #b9c1cc;border-radius:8px;padding:7px 12px;margin:2px 0 10px}
+  body.static .pickbar,body.static .condbar,body.static .bulk{display:none}
+
+  /* ===== 静的（印刷・紙配布）モード: <body class="static"> ===== */
+  body.static .opt input{display:none}
+  body.static .opt .lbl::before{content:"☐  ";font-size:16px;color:#445}
+  body.static .memo{min-height:0}
+  body.static .memo::after{content:""}
+  body.static .toolbar,body.static #summarySection,body.static .note.interactive-only{display:none}
+  /* 静的モードのメモ欄は手書き用に下線の余白を確保 */
+  body.static .memo{border:none;border-bottom:1px dashed #b9c1cc;border-radius:0;min-height:48px}
+
+  @media print{
+    body{background:#fff} .toolbar{display:none} .bulk{display:none} .opt:hover{background:#fcfdff}
+    header.top{box-shadow:none} .card{break-inside:avoid}
+  }
+
+
+:root{--bg:#f7f3ea;--card:#fffdf8;--ink:#241f1a;--sub:#62594e;--line:#ddd5c8;--accent:#a74419;--accent-soft:#fff0e4;--ok:#276541;--warn:#865300}
+body{font-size:16px} .wrap{max-width:1120px;padding:28px 24px 70px} header.top{background:#241f1a;box-shadow:none;padding:32px} header.top h1{font-size:clamp(25px,4vw,38px);line-height:1.4} header.top p{font-size:16px;opacity:1;max-width:780px} .meta{opacity:1;color:#e4d8c9} h2{margin-top:42px;font-size:23px} h3{font-size:18px} a{color:#8c3d1c;text-underline-offset:3px} .card a{color:#8c3d1c} .card{box-shadow:none;border-radius:16px;padding:22px} .why{background:#fff5eb;border-color:#e9d2bc;color:#40382f;font-size:14px} .why b{color:#8c3d1c} .fig{background:#fffdf8} .fig .bx{fill:#fff0e4;stroke:#a74419} .fig .t{font-size:17px} .fig .ts{font-size:14px} .fig .tl{font-size:18px} .fig svg{max-width:850px} .fig .ln{stroke-width:2} .nav{display:flex;flex-wrap:wrap;gap:8px;margin:18px 0}.nav a{padding:9px 13px;background:#fffdf8;border:1px solid var(--line);border-radius:8px;text-decoration:none;min-height:44px}.stats,.grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}.stat{padding:16px 20px;background:#fffdf8;border:1px solid var(--line);border-radius:12px}.stat strong{display:block;font-size:30px}.stat span{font-size:13px}.grid.two{grid-template-columns:repeat(2,minmax(0,1fr))}.mini{padding:16px;border:1px solid var(--line);border-radius:10px}.mini h3{margin:6px 0}.mini p{font-size:14px}.decided-item{border-left:4px solid var(--ok);padding:12px 16px;margin:10px 0;background:#f1f6ef}.decided-item strong{display:block}.decided-item p{font-size:14px;margin:3px 0}.cr{font-size:12px;color:#62594e}.decision{border-left-color:#a74419}.decision .qid{background:#a74419}.opt input{accent-color:#a74419;min-width:18px;min-height:18px}.opt:has(input:checked){border:2px solid #a74419;background:#fff0e4}.opt-sub{line-height:1.7}.toolbar{position:static;background:transparent}.bulk{background:#edf5ed}.bulk button{white-space:normal}.note{color:#62594e}.memo::placeholder{color:#6c6459}.index-row{display:grid;grid-template-columns:60px 1fr 130px;gap:10px;padding:12px 0;border-bottom:1px solid var(--line)}.index-row a{font-weight:700}.roadmap{counter-reset:stage}.stage{position:relative;border-left:3px solid #ba8c69;padding:4px 0 22px 23px;margin-left:13px}.stage:before{counter-increment:stage;content:counter(stage);position:absolute;left:-16px;top:0;width:28px;height:28px;border-radius:50%;background:#241f1a;color:white;text-align:center;line-height:28px;font-size:13px}.stage h3{margin:0}.stage p{font-size:14px}.statusline{font-size:13px;color:#62594e}.chip{display:inline-block;background:#eee6d9;padding:2px 8px;border-radius:6px;font-size:12px} .opt .lbl{min-width:0}.opt .rec-mark{margin-left:0} .opt{flex-wrap:wrap}.opt .lbl{flex-basis:70%} code{overflow-wrap:anywhere} .backlink{font-size:14px} :focus-visible{outline:3px solid #a74419;outline-offset:4px} .fig .cap{font-size:13px}.sectionlead{max-width:780px}.source-list{overflow-wrap:anywhere}.intro-label{letter-spacing:.14em;color:#ffb08b;font-size:12px;font-weight:700;margin-bottom:12px}.facts{border-top:1px solid var(--line);margin-top:12px;padding-top:10px} .btnline{display:flex;gap:8px;flex-wrap:wrap} .button-link{display:inline-block;background:#fff0e4;padding:10px 14px;border:1px solid #ce9f78;border-radius:8px}
+@media(max-width:640px){.wrap{padding:16px 12px 40px}header.top{padding:24px 20px}.stats{gap:8px}.stat{padding:12px 10px}.stat strong{font-size:26px}.stat span{font-size:11px}.grid,.grid.two{grid-template-columns:1fr}.card{padding:17px 14px}.index-row{grid-template-columns:40px 1fr}.index-row>span:last-child{grid-column:2}.fig{padding:8px 4px}.fig svg{min-width:0}.glossary dl{grid-template-columns:1fr;gap:2px}.glossary dd{margin-bottom:8px}.toolbar button{width:100%;min-height:44px}h2{font-size:21px}.tm{white-space:normal}.opt{padding:12px 8px}}
+@media print{.nav,.bulk,.toolbar,.interactive-only,#summarySection{display:none}body{font-size:11pt}.wrap{max-width:none;padding:0}.card{box-shadow:none;break-inside:avoid}.decision{break-before:page}header.top{background:white;color:#241f1a;border:2px solid #241f1a}.meta,.intro-label{color:#62594e}a{color:inherit}.memo{min-height:60px}.stats,.grid.two{grid-template-columns:repeat(2,1fr)}}
+
+.accepted{border-left-color:#276541}.accepted .qid{background:#276541}.acceptedbar{background:#e7f5ee;color:#205337;padding:9px 12px;border-radius:8px;font-weight:700}.accepted .opt{cursor:default}.table-scroll{overflow-x:auto;max-width:100%}.table-scroll table{min-width:540px}.evidence{font-size:13px;color:#62594e}.proposal{background:#fff4df;border:1px solid #ddc99e;padding:5px 9px;border-radius:6px;font-size:12px;display:inline-block}.capacity-bar{height:20px;background:#e7e0d5;border-radius:4px;overflow:hidden;margin:6px 0}.capacity-bar span{height:100%;display:block;background:#a74419}.meter-label{font-size:14px;display:flex;justify-content:space-between;gap:12px}.metric{font-size:27px;font-weight:700}.flow-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}.flow-grid .mini{background:#fff5eb}.accepted .opt:has(input:checked){border-color:#276541;background:#edf5ed}.detail{border:1px solid var(--line);border-radius:10px;padding:14px;margin:14px 0;background:#fffdf8}.detail summary{cursor:pointer;font-weight:700;min-height:32px}.evidence a{overflow-wrap:anywhere}@media(max-width:640px){.flow-grid{grid-template-columns:1fr}.meter-label{display:block}}@media print{.detail{break-inside:avoid}.table-scroll{overflow:visible}.table-scroll table{min-width:0}.accepted{break-before:auto}.acceptedbar{color:#205337}.detail:not([open])>*:not(summary){display:block}}
+
+.lead-answer{font-size:clamp(22px,3.5vw,32px);font-weight:750;line-height:1.5}.price-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}.price-card{padding:18px;background:#fffdf8;border:1px solid var(--line);border-radius:12px}.price-card strong{font-size:28px;display:block;color:#276541}.price-card h3{margin:4px 0}.quick{font-size:16px;background:#eaf4eb;border-left:5px solid #276541;padding:16px 20px;border-radius:10px}.choice-card{border:1px solid var(--line);border-radius:12px;padding:18px;min-width:0}.choice-card.recommended{border:2px solid #276541}.choice-card h3{margin-top:6px}.choice-card .opts{margin-top:16px}.tree{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:12px 0}.tree .branch{border:1px solid #c9b9a2;border-radius:7px;padding:10px;text-align:center;background:#fff4e7;font-size:14px}.tree .branch:first-child{grid-column:1/-1;background:#edf5ed}.legacy{border-left-color:#8a8175}.legacy .qid{background:#8a8175}.legacy .opts{opacity:.85}.legacy .opt{cursor:default}.legacy textarea{min-height:75px}.money{font-variant-numeric:tabular-nums;white-space:nowrap}.source-note{font-size:12.5px;color:#62594e}.source-note a{overflow-wrap:anywhere}.method{font-size:13px}.badge-unconfirmed{display:inline-block;border:1px solid #bd8e61;background:#fff3e4;color:#714316;border-radius:6px;padding:3px 9px;font-size:12px}.narrow-copy{max-width:850px}.choice-card ul{font-size:14px}.bullet-key{font-weight:700}.table-scroll th{white-space:normal}.legacy .opt:has(input:checked){border-color:#8a8175;background:#f3eee6} @media(max-width:640px){.price-grid{grid-template-columns:1fr}.price-card{padding:15px}.price-card strong{font-size:25px}.choice-card{padding:14px}.tree{grid-template-columns:1fr}.tree .branch:first-child{grid-column:auto}}@media print{.price-grid{grid-template-columns:repeat(3,1fr)}.decision{break-before:auto}.choice-card{break-inside:avoid}}
+
+.forecast{border:2px solid #276541;padding:24px;border-radius:16px;background:#fffdf8;margin:24px 0}.forecast h2{margin-top:0}.forecast-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}.forecast-card{border:1px solid #ddd5c8;border-radius:12px;padding:18px;min-width:0}.forecast-card h3{margin-top:0}.forecast-fields{display:flex;gap:10px;flex-wrap:wrap;margin:12px 0}.forecast-fields label{font-size:13px;flex:1;min-width:105px}.forecast select{display:block;width:100%;padding:8px;font:inherit;background:white;color:#241f1a;border:1px solid #b9b1a3;border-radius:5px;box-sizing:border-box}.forecast input{display:block;width:100%;max-width:160px;box-sizing:border-box;padding:8px;border:1px solid #b9b1a3;border-radius:5px;font:inherit;background:white;color:#241f1a}.forecast input:invalid{border-color:#b42318}.forecast-status{font-size:18px;font-weight:bold;margin:12px 0 6px}.forecast-bar{height:22px;background:#e6e4dc;border-radius:5px;position:relative;margin:6px 0 8px;overflow:hidden}.forecast-bar:after{content:'';position:absolute;left:80%;height:100%;border-left:2px dashed #615b52}.forecast-fill{height:100%;width:0;background:#23814d;transition:width .15s}.forecast-fill.amber{background:#b77900}.forecast-fill.red{background:#c53932}.forecast-small{font-size:13px;line-height:1.7;margin:6px 0}.forecast-result{font-size:15px;font-weight:700;line-height:1.7}.forecast-legend{font-size:14px;padding:12px;background:#eff5ed;border-radius:8px}.forecast .metric-line{display:flex;justify-content:space-between;gap:8px;font-size:14px}.forecast .limit-label{text-align:right;font-size:12px;margin-top:-4px}.forecast .unknown{border-left:4px solid #8a8175;background:#f2efea;padding:12px;font-size:14px}.forecast .detail{padding:10px}.forecast .school-row{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:8px 0}.forecast-summary{padding:16px;border:2px solid #276541;border-radius:10px;margin-top:18px;font-size:16px;line-height:1.8}.forecast button{margin:10px 8px 0 0}.forecast-source{font-size:12px;overflow-wrap:anywhere}.forecast .bad-input{color:#a32520;font-weight:bold}@media(max-width:640px){.forecast{padding:16px 12px}.forecast-grid{grid-template-columns:1fr}.forecast-card{padding:14px}.forecast .metric-line{display:block}.forecast .school-row{grid-template-columns:1fr 1fr}}@media print{.forecast-grid{grid-template-columns:1fr 1fr}.forecast-card{break-inside:avoid}.forecast button{display:none}.forecast-bar,.forecast-fill{print-color-adjust:exact;-webkit-print-color-adjust:exact}}
+</style></head>
+<body class="interactive"><svg width="0" height="0" aria-hidden="true" focusable="false" style="position:absolute"><defs>
+  <marker id="arw" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+    <path d="M0 0 L10 5 L0 10 z" fill="#5b6675"/>
+  </marker>
+</defs></svg><main class="wrap"><header class="top"><div class="intro-label">MANABI MAP / COST &amp; DEPLOYMENT REVIEW</div><h1>無料で分けて始める。<br>有料化の条件を先に決める。</h1><p>学校種別・地域ごとの配信、Cloudflare の利用枠、ローカル原本とSupabaseの役割を分けて判断する資料。</p><div class="meta">改訂: 2026-09-27 ／ ローカル原本・利用者DB分離の試算 ／ 実装・契約開始前の比較資料</div></header>
+<p class="lead-answer">公開情報はローカルで管理して焼き込む。<br>Supabaseは利用者データ中心なら、無料で始める見通しです。</p>
+<p class="narrow-copy">新しい設計方針：学校・土地・教材の原本はローカルDBに置き、公開可能な項目だけHTML・JSONへ生成します。オンラインDBは認証・お気に入り・メモなど利用者固有の保存を中心にします。下の初期条件なら利用者DBは160MB（32％）です。実移設は未実施です。<b>各サイトの容量・アカウント共通の実行回数と build・DB の利用枠・継続運用の条件</b>がすべて収まることが必要です。現在の請求・DB 容量・アクセス量は未確認で、今の構成が $0 と確認できたわけではありません。</p>
+<section class="forecast" id="forecast"><h2>まず見る：全部展開したとき、無料枠のどこまで使う？</h2>
+<p><b>下のバーは現在値ではなく、各サービスを大きくした将来シナリオの予測値です。</b>要件としての最大規模はまだ未確定のため、校数・教材数・地域数を仮置きし、変更できるようにしました。各サイトへ均等に分けられる前提です。</p>
+<div class="forecast-legend"><b>緑：80％以下で容量に余裕 ／ 黄：80％超〜100％で余裕が少ない ／ 赤：100％超でその構成では配信不可</b><br>80％はこの資料の設計目安で、Cloudflareの制限ではありません。緑は「表示した容量条件内」の意味です。アクセス処理・DB・更新も、下の共有枠で別に確認します。</div>
+<div class="forecast-grid"><article class="forecast-card"><h3>学校全種別：60,000 校の想定</h3><details class="detail"><summary>学校種別ごとの想定校数・分割数を変える</summary><div class="school-row"><label>小学校（校）<input type="number" id="fc-primary" value="20000" min="1" max="100000000" step="1" data-forecast></label><label>配信先数<input type="number" id="fc-primary-parts" value="3" min="1" max="100" step="1" data-forecast></label></div><div class="school-row"><label>中学校（校）<input type="number" id="fc-middle" value="10000" min="1" max="100000000" step="1" data-forecast></label><label>配信先数<input type="number" id="fc-middle-parts" value="2" min="1" max="100" step="1" data-forecast></label></div><div class="school-row"><label>高校・高専（校）<input type="number" id="fc-high" value="6000" min="1" max="100000000" step="1" data-forecast></label><label>配信先数<input type="number" id="fc-high-parts" value="1" min="1" max="100" step="1" data-forecast></label></div><div class="school-row"><label>その他の学校種別合計（校）<input type="number" id="fc-other" value="24000" min="1" max="100000000" step="1" data-forecast></label><label>配信先数<input type="number" id="fc-other-parts" value="4" min="1" max="100" step="1" data-forecast></label></div><p class="forecast-small">「その他」は幼児教育・大学・専門学校などを含む容量試算用の合算。種別内訳やサイトの組合せを採用した意味ではありません。</p></details><p class="forecast-small">現行実測：5,096校で11,718ファイル。将来校数は統計値ではなく試算用。1校2ファイル＋共通1,526ファイル/site＋新しいAPI小分け分を加算。APIは1,000校以下の単位へ分ける設計案。</p><div class="forecast-status" id="fc-school-status"></div><div class="metric-line"><b>分割後・最大サイトのファイル数</b><span id="fc-school-value"></span></div><div class="forecast-bar" role="meter" aria-label="分割後・最大サイトのファイル数" aria-valuemin="0" aria-valuemax="100" id="fc-school-meter"><div class="forecast-fill" id="fc-school-fill"></div></div><div class="limit-label">右端＝無料上限 100％／破線＝見直し目安 80％</div><div class="metric-line"><b>最大1ファイルの予測</b><span id="fc-school-asset-value"></span></div><div class="forecast-bar" role="meter" aria-label="最大1ファイルの予測" aria-valuemin="0" aria-valuemax="100" id="fc-school-asset-meter"><div class="forecast-fill" id="fc-school-asset-fill"></div></div><div class="limit-label">右端＝無料上限 100％／破線＝見直し目安 80％</div><p class="forecast-result" id="fc-school-result"></p><p class="forecast-small" id="fc-school-before"></p></article><article class="forecast-card"><h3>漢字：画像・音声まで増やす想定</h3><div class="forecast-fields"><label>教材の字数<input type="number" id="fc-kanji" value="2136" min="1" max="100000000" step="1" data-forecast></label><label>配信先数<input type="number" id="fc-kanji-parts" value="2" min="1" max="100" step="1" data-forecast></label></div><p class="forecast-small">1字8ファイル（ページ・JSON・図2種・音声4種）＋共通200/site。最大ファイル4MiBを仮置き。現在実装のファイル数を8倍した実測ではなく、素材を充実させる将来モデル。</p><div class="forecast-status" id="fc-kanji-status"></div><div class="metric-line"><b>分割後・最大サイトのファイル数</b><span id="fc-kanji-value"></span></div><div class="forecast-bar" role="meter" aria-label="分割後・最大サイトのファイル数" aria-valuemin="0" aria-valuemax="100" id="fc-kanji-meter"><div class="forecast-fill" id="fc-kanji-fill"></div></div><div class="limit-label">右端＝無料上限 100％／破線＝見直し目安 80％</div><div class="metric-line"><b>最大1ファイルの予測</b><span id="fc-kanji-asset-value"></span></div><div class="forecast-bar" role="meter" aria-label="最大1ファイルの予測" aria-valuemin="0" aria-valuemax="100" id="fc-kanji-asset-meter"><div class="forecast-fill" id="fc-kanji-asset-fill"></div></div><div class="limit-label">右端＝無料上限 100％／破線＝見直し目安 80％</div><p class="forecast-result" id="fc-kanji-result"></p><p class="forecast-small" id="fc-kanji-before"></p></article><article class="forecast-card"><h3>かるた：100種類 × 100枚の想定</h3><div class="forecast-fields"><label>かるたの種類数<input type="number" id="fc-karuta" value="100" min="1" max="100000000" step="1" data-forecast></label><label>1種類の枚数<input type="number" id="fc-karuta-cards" value="100" min="1" max="100000000" step="1" data-forecast></label><label>配信先数<input type="number" id="fc-karuta-parts" value="3" min="1" max="100" step="1" data-forecast></label></div><p class="forecast-small">1枚4ファイル（ページ・JSON・画像・音声）＋共通200/site。種類単位で分け、最大画像・音声0.5MiBを仮置き。カードを全部まとめたZIP等は含みません。</p><div class="forecast-status" id="fc-karuta-status"></div><div class="metric-line"><b>分割後・最大サイトのファイル数</b><span id="fc-karuta-value"></span></div><div class="forecast-bar" role="meter" aria-label="分割後・最大サイトのファイル数" aria-valuemin="0" aria-valuemax="100" id="fc-karuta-meter"><div class="forecast-fill" id="fc-karuta-fill"></div></div><div class="limit-label">右端＝無料上限 100％／破線＝見直し目安 80％</div><div class="metric-line"><b>最大1ファイルの予測</b><span id="fc-karuta-asset-value"></span></div><div class="forecast-bar" role="meter" aria-label="最大1ファイルの予測" aria-valuemin="0" aria-valuemax="100" id="fc-karuta-asset-meter"><div class="forecast-fill" id="fc-karuta-asset-fill"></div></div><div class="limit-label">右端＝無料上限 100％／破線＝見直し目安 80％</div><p class="forecast-result" id="fc-karuta-result"></p><p class="forecast-small" id="fc-karuta-before"></p></article><article class="forecast-card"><h3>土地情報：2,000地域・100万件の想定</h3><div class="forecast-fields"><label>地域数<input type="number" id="fc-land" value="2000" min="1" max="100000000" step="1" data-forecast></label><label>1地域のデータ件数<input type="number" id="fc-land-records" value="500" min="1" max="100000000" step="1" data-forecast></label><label>配信先数<input type="number" id="fc-land-parts" value="2" min="1" max="100" step="1" data-forecast></label></div><p class="forecast-small">1地域8ファイル＋共通200/site。1件2KiBの公開JSONを地域ごとに1つ出すモデル。細かい地図形状や画像・履歴を含める場合は増量が必要。地図タイル・航空写真の自前配信は含みません。実在の全国データ量ではありません。</p><div class="forecast-status" id="fc-land-status"></div><div class="metric-line"><b>分割後・最大サイトのファイル数</b><span id="fc-land-value"></span></div><div class="forecast-bar" role="meter" aria-label="分割後・最大サイトのファイル数" aria-valuemin="0" aria-valuemax="100" id="fc-land-meter"><div class="forecast-fill" id="fc-land-fill"></div></div><div class="limit-label">右端＝無料上限 100％／破線＝見直し目安 80％</div><div class="metric-line"><b>最大1ファイルの予測</b><span id="fc-land-asset-value"></span></div><div class="forecast-bar" role="meter" aria-label="最大1ファイルの予測" aria-valuemin="0" aria-valuemax="100" id="fc-land-asset-meter"><div class="forecast-fill" id="fc-land-asset-fill"></div></div><div class="limit-label">右端＝無料上限 100％／破線＝見直し目安 80％</div><p class="forecast-result" id="fc-land-result"></p><p class="forecast-small" id="fc-land-before"></p></article></div>
+<div class="forecast-summary" id="fc-summary" aria-live="polite"></div>
+<p class="forecast-small" id="fc-eastwest"></p>
+<p class="forecast-small">各サイトで偏りが出ると均等分割の数字を上回ります。容量が最大になる実地域で確認します。学校の新API分割は未実装で、既存v1 APIを突然変更する案ではありません。素材・地域ページの追加も再計測対象です。</p>
+<h3>全部のサービスで共用する枠も計算する</h3>
+<div class="forecast-grid"><article class="forecast-card"><h3>Cloudflare：アクセス時の処理</h3><div class="forecast-fields"><label>4サービス合計の訪問/日<input type="number" id="fc-visits" value="4000" min="0" max="100000000" step="1" data-forecast></label><label>1訪問あたり動的処理回数<input type="number" id="fc-calls" value="5" min="0" max="100000000" step="1" data-forecast></label></div><div class="metric-line"><b>1日の動的処理回数</b><span id="fc-requests-value"></span></div><div class="forecast-bar" role="meter" aria-label="1日の動的処理回数" aria-valuemin="0" aria-valuemax="100" id="fc-requests-meter"><div class="forecast-fill" id="fc-requests-fill"></div></div><div class="limit-label">右端＝無料上限 100％／破線＝見直し目安 80％</div><p id="fc-requests-result" class="forecast-result"></p><p class="forecast-small">4000訪問は需要予測の実測ではなく、各サービス1000訪問/日という合成負荷。静的ファイルの通信回数はこの枠に足しません。bot・背景処理を含む実回数、1回のCPU 10ms枠は別途実測が必要です。</p></article>
+<article class="forecast-card"><h3>Cloudflare：全サイトの更新</h3><div class="forecast-fields"><label>1サイトあたり更新回数/月<input type="number" id="fc-builds" value="4" min="0" max="100000000" step="1" data-forecast></label><label>生成・配布の方式<select id="fc-remote-build" data-forecast><option value="0" selected>ローカル生成→配布（主案）</option><option value="1">Cloudflareで生成（比較）</option></select></label></div><div class="metric-line"><b>月間Pagesビルド回数</b><span id="fc-builds-value"></span></div><div class="forecast-bar" role="meter" aria-label="月間Pagesビルド回数" aria-valuemin="0" aria-valuemax="100" id="fc-builds-meter"><div class="forecast-fill" id="fc-builds-fill"></div></div><div class="limit-label">右端＝無料上限 100％／破線＝見直し目安 80％</div><p id="fc-builds-result" class="forecast-result"></p><p id="fc-projects" class="forecast-small"></p><p class="forecast-small">主案はローカル生成済み成果物をWranglerで配布するため、Cloudflare上のビルドは0回。公開回数は別です。「Cloudflareで生成」を選ぶと全サイトをCloudflareでビルドする場合を表示。preview・再試行・他プロジェクト分は未加算。ローカルの生成時間・アップロード時間は実測します。</p></article>
+<article class="forecast-card"><h3>Supabase：利用者データを保存する容量</h3><div class="forecast-fields"><label>累計の保存利用者数<input type="number" id="fc-db-users" value="1000" min="0" max="100000000" step="1" data-forecast></label><label>1人の保存量（KB）<input type="number" id="fc-db-user" value="60" min="0" max="100000000" step="1" data-forecast></label><label>共通・運用予算（MB）<input type="number" id="fc-db-base" value="100" min="0" max="100000000" step="1" data-forecast></label></div><div class="metric-line"><b>利用者DB 500MBに対する予測</b><span id="fc-db-school-value"></span></div><div class="forecast-bar" role="meter" aria-label="利用者DB 500MBに対する予測" aria-valuemin="0" aria-valuemax="100" id="fc-db-school-meter"><div class="forecast-fill" id="fc-db-school-fill"></div></div><div class="limit-label">右端＝比較容量100％／破線＝見直し目安80％</div><p id="fc-db-school-result" class="forecast-result"></p><p class="forecast-small"><b>学校・土地・教材の原本はここに加算しません。</b>1人60KBは認証4KB＋お気に入り50件×0.3KB＋メモ20件×2KB＋地点等1KBの仮定。学習履歴のオンライン同期を追加するなら1人あたり保存量を増やします。</p><p class="forecast-small">共通100MBは拡張・スキーマ・最小設定・運用記録等の仮予算で、現在値ではありません。利用者のAuth行は1人の保存量側。KB=1000bytes、MB=100万bytes。計測イベントや長文メモの増加も実測します。個人データを静的ファイルに混ぜません。</p></article>
+<article class="forecast-card"><h3>ローカルDB：公開情報の原本と複製</h3><div class="forecast-fields"><label>原本用の作業容量予算（GB）<input type="number" id="fc-local-budget" value="20" min="1" max="100000000" step="1" data-forecast></label><label>原本＋バックアップ等の本数<input type="number" id="fc-local-copies" value="3" min="1" max="100" step="1" data-forecast></label></div><div class="metric-line"><b>ローカル原本の予算使用率</b><span id="fc-db-land-value"></span></div><div class="forecast-bar" role="meter" aria-label="ローカル原本の予算使用率" aria-valuemin="0" aria-valuemax="100" id="fc-db-land-meter"><div class="forecast-fill" id="fc-db-land-fill"></div></div><div class="limit-label">右端＝比較容量100％／破線＝見直し目安80％</div><p id="fc-db-land-result" class="forecast-result"></p><p class="forecast-small">学校10KB/校、土地2KiB/件、漢字8KiB/字、かるた2KiB/枚の独立したDB仮定を合計。公開JSONからDBサイズへの換算ではありません。予算20GBはPCの空き容量を測った値ではありません。</p><div class="unknown"><b>ここはSupabaseの課金判定ではありません。</b>原本はSQLite・MySQL・MariaDB等でローカル管理。画像・音声本体、生成物、一時領域は別に確保します。バックアップは別媒体も用意し、公開データを同じ版から再生成できるようにします。</div></article>
+<article class="forecast-card"><h3>DBからの送信量・認証利用者</h3><div class="forecast-fields"><label>月間の認証利用者（人）<input type="number" id="fc-active" value="1000" min="0" max="100000000" step="1" data-forecast></label><label>1人あたりDB送信（KB/月）<input type="number" id="fc-egress" value="1500" min="0" max="100000000" step="1" data-forecast></label><label>運用等の送信（MB/月）<input type="number" id="fc-egress-base" value="50" min="0" max="100000000" step="1" data-forecast></label></div><div class="metric-line"><b>通常送信5GB/月に対する予測</b><span id="fc-egress-value"></span></div><div class="forecast-bar" role="meter" aria-label="通常送信5GB/月に対する予測" aria-valuemin="0" aria-valuemax="100" id="fc-egress-meter"><div class="forecast-fill" id="fc-egress-fill"></div></div><div class="limit-label">右端＝無料上限 100％／破線＝見直し目安 80％</div><div class="metric-line"><b>認証利用者50,000人/月に対する予測</b><span id="fc-mau-value"></span></div><div class="forecast-bar" role="meter" aria-label="認証利用者50,000人/月に対する予測" aria-valuemin="0" aria-valuemax="100" id="fc-mau-meter"><div class="forecast-fill" id="fc-mau-fill"></div></div><div class="limit-label">右端＝無料上限 100％／破線＝見直し目安 80％</div><p id="fc-egress-result" class="forecast-result"></p><p class="forecast-small">送信は1人50KB/日×30日と、運用50MB/月の合成仮定。公開情報の生成のためにSupabaseから学校・土地の原本を読み出す通信は、この新方式では加算しません。全projectの合計を入れる欄です。認証利用者はPVと異なり、ゲスト認証した利用者も含みます。cached egressの別5GBはDB送信に合算しません。Storageに画像・音声を置く場合の1GB枠は別です。</p></article>
+<article class="forecast-card"><h3>この試算から言えること</h3><p id="fc-verdict" class="forecast-result"></p><div class="unknown"><b>現在の請求・DB実容量・アクセス実績は未取得。</b>予測の緑と、現時点の無料運用確認を区別します。DBの休止・バックアップ条件やCPU時間も数のバーだけでは判定できません。</div><button type="button" onclick="resetForecast()">試算を初期値へ戻す</button><p class="forecast-small">試算の入力はこの端末のブラウザへ保存し、決定サマリにも条件を添付します。初期値への復元はP1の回答や過去の履歴を消しません。</p></article></div>
+<p class="forecast-source">基準：<a href="https://developers.cloudflare.com/pages/platform/limits/">Cloudflare Pages上限</a>、<a href="https://developers.cloudflare.com/workers/platform/limits/">Workers上限</a>、<a href="https://developers.cloudflare.com/pages/configuration/monorepos/">同一リポのGit連携</a>、<a href="https://supabase.com/pricing">Supabase Free</a>。2026-09-27確認。料金の詳しい比較は下段。</p></section>
+<div class="price-grid"><div class="price-card"><strong>配信 $0</strong><h3>小さく分けて配る</h3><p>学校種別ごとに分け、大きい種別だけ東西などへ分割。各 Pages を無料枠に収める案。</p></div><div class="price-card"><strong>$5 は別の話</strong><h3>処理回数の有料枠</h3><p>Workers Paid は処理回数・CPU の契約。Pages の容量を増やす契約とは別です。</p></div><div class="price-card"><strong>DB $0 または $25〜</strong><h3>DB は共有できる</h3><p>配信先を増やすだけなら、学校用 DB を地域の数だけ増設する必要はありません。</p></div></div>
+<p class="source-note">公式仕様確認日: 2026-09-27。料金は米ドル・税等別。ドメイン維持、外部地図、メールなどの費用は別途確認します。無料の永久保証ではありません。</p>
+<nav class="nav" aria-label="資料の目次"><a href="#forecast">将来規模の予測バー</a><a href="#qlist">今回決めること</a><a href="#database">原本と利用者DB</a><a href="#local-backup">原本のバックアップ</a><a href="#cost">費用の組合せ</a><a href="#limits">無料の条件</a><a href="#capacity">容量の実測</a><a href="#migration">移行と復旧</a><a href="#decided">採用済み・保留記録</a><a href="#summary">回答を出力</a></nav>
+<div class="quick"><b>今回のおすすめ:</b> 同じブランドの学校入口から、種別・地域を選んで各サイトへ移動する構成です。まず無料分割で成立するかを設計し、有料化は実測と運用要件を見て判断します。東西をまたぐ統合検索は初期の必須機能にしません。</div>
+<h2 id="qlist">01　今回の判断は「配信の分け方」</h2><p>Q0・A2・B1 の 3 回答は採用済みです。旧 A1 の高校 URL 二択では、今回の学校種別サブドメイン案を決められないため保留記録へ移しました。新しい判断は <a href="#q-P1">P1</a> の 1 件です。</p>
+<div class="card decision" id="q-P1"><p><span class="qid">P1</span><span class="tag p1">運営者</span> <span class="tag p2">開発担当</span> <span class="tm tm-close">C1 の構成確定時</span><br><b>学校を種別・地域ごとに分けて配信するか</b></p>
+<div class="why"><div class="row"><b>何を決める？</b> 学校検索を無料枠に収まる単位へ分けるか、ひとつの配信先へ集約して有料拡張も比較するかを決めます。</div><div class="row"><b>なぜ大事？</b> 毎月の固定費だけでなく、利用者の移動方法、更新先の数、ログインの引継ぎに影響します。</div><div class="row"><b>おすすめ</b> 地域を選んで移動でき、全国横断検索が初期必須ではないため、案 1 を推奨します。まだ採用していません。</div><div class="row"><b>暫定の防ぎ方</b> 公開中のサイトを維持し、分割候補ごとの容量と認証を確認するまで URL・契約を変更しません。</div><div class="row"><b>改修の目安</b> 分割ルール・生成先の試作 2〜4 日／画面・データ・認証確認 1〜2 日の粗い概算。DB/API 拡張・外部設定・本番反映は別で、容量の実査後に更新します。</div></div>
+<div class="grid two"><div class="choice-card recommended"><span class="proposal">推奨案・未採用</span><h3>案 1　種別で分け、大きい種別だけ地域分割</h3><div class="tree" role="img" aria-label="共通の学校入口から高校・高専、中学校、小学校の東・西へ移動する案"><div class="branch"><b>共通の学校入口・同じブランド</b></div><div class="branch">高校・高専</div><div class="branch">中学校・ほかの種別</div><div class="branch">小学校：東の地域</div><div class="branch">小学校：西の地域</div></div><p>学校種別のサブドメインに分け、容量の大きい種別だけ、さらに地域で分けます。東西は例で、境界とサイト数は実際の生成容量から決めます。</p><p><b>メリット:</b> 各配信物を無料枠へ収めやすく、必要な地域だけを軽く開けます。</p><p><b>デメリット:</b> 更新先と確認箇所が増え、別サイトへ移ると再ログインが必要になる場合があります。</p><div class="opts" data-q="P1"><label class="opt"><input type="radio" name="P1" data-key="p1"><span class="lbl"><span class="opt-main">学校種別で分け、大きい種別だけ地域分割する</span><span class="opt-sub">無料枠に収まる構成を先に設計。全国横断の統合検索は初期必須にしない。</span></span><span class="rec-mark">おすすめ</span></label></div></div>
+<div class="choice-card"><span class="proposal">比較案・未採用</span><h3>案 2　学校をひとつの配信先へ集約</h3><div class="fig"><svg viewBox="0 0 360 210" role="img" aria-label="URL と画面をまとめても、容量・処理・DB の枠は別々に確認します。"><rect class="bx" x="20" y="4" width="320" height="48" rx="9"/><text class="t" x="180" y="28">ひとつの学校サイト</text><path class="ln" d="M180 53 V70" marker-end="url(#arw)"/><rect class="bo" x="20" y="74" width="320" height="48" rx="9"/><text class="t" x="180" y="98">種別・地域を同じ画面で切替</text><path class="ln" d="M180 123 V140" marker-end="url(#arw)"/><rect class="bo" x="20" y="144" width="320" height="48" rx="9"/><text class="t" x="180" y="168">容量に応じ有料拡張を比較</text></svg><p class="cap">URL と画面をまとめても、容量・処理・DB の枠は別々に確認します。</p></div><p>学校の配信先をまとめ、Pages Pro 等の増枠や Workers Static Assets への移行を比較します。有料枠でも 1 ファイル 25 MiB の制約は残ります。</p><p><b>メリット:</b> 公開先が少なく、同じ学校サイト内ではログイン状態を保ちやすくなります。</p><p><b>デメリット:</b> 学校種別の増加をひとつの容量枠で受けるため、早い段階で増枠・データ分割・移植が必要になる可能性があります。</p><div class="opts" data-q="P1"><label class="opt"><input type="radio" name="P1" data-key="p2"><span class="lbl"><span class="opt-main">学校をひとつの配信先へ集約し、有料拡張も比較する</span><span class="opt-sub">公開先を少なく保つ。料金と移行工数を確認してから契約方式を選ぶ。</span></span></label></div></div></div>
+<p class="note"><b>期日:</b> C1 の構成確定時。今回の回答は設計方針の選択であり、有料契約の開始・DB 移設・本番公開の実行指示ではありません。どちらを選んでも、既存 API の互換性と利用者の保存内容を守ります。</p><label for="memo-P1" class="note">希望する地域の分け方・費用の条件・補足</label><textarea class="memo" id="memo-P1" placeholder="例：地域を選んで移動できればよい。月額の条件や追加の希望があれば記入。"></textarea><div class="bulk"><span>P1 が未選択の場合だけ案 1 を入れます。</span><button type="button" onclick="pickRecommended()">P1 のおすすめを選ぶ</button></div><p class="backlink"><a href="#qlist">↑ 判断の説明へ戻る</a></p></div>
+<div class="card"><h3>利用者には「学校を選ぶ → 地域を選ぶ → 探す」</h3><div class="flow-grid"><div class="mini"><b>同じブランドで案内</b><p>総合入口 → 学校入口 → 学校種別。見た目と戻る導線を共通にし、URL の移動は許容します。</p></div><div class="mini"><b>大きい種別だけ地域を選ぶ</b><p>東西などへ分かれている場合は、最初に地域を選びます。対象地域を画面に明示します。</p></div><div class="mini"><b>境界の近くは隣県へリンク</b><p>隣の地域へ移動できる導線を用意します。東西をまたぐ全校結果の統合は初期に作りません。</p></div></div><p class="note">総合入口と学校入口を分ける方針は継続します。以前の school.manabi-map.app への移転案を含め、学校種別のサブドメイン名・地域境界・既存高校版の最終 URL は、この構成判断の後で再比較します。学校種別ごとの公開日を約束する資料ではありません。</p></div>
+<h2 id="database">02　原本はローカル、利用者データはオンライン</h2>
+<div class="grid two"><div class="card"><h3>公開情報の流れ</h3><div class="fig"><svg viewBox="0 0 360 210" role="img" aria-label="ローカル原本から公開用ファイルを生成しCloudflareへ配信"><rect class="bx" x="20" y="4" width="320" height="48" rx="9"/><text class="t" x="180" y="28">ローカルDB：学校・土地・教材</text><path class="ln" d="M180 53 V70" marker-end="url(#arw)"/><rect class="bo" x="20" y="74" width="320" height="48" rx="9"/><text class="t" x="180" y="98">公開項目だけHTML・JSONへ</text><path class="ln" d="M180 123 V140" marker-end="url(#arw)"/><rect class="bo" x="20" y="144" width="320" height="48" rx="9"/><text class="t" x="180" y="168">Cloudflareから静的に配信</text></svg><p class="cap">公開後はPCを止めても、配信済みサイトを閲覧できます。</p></div><p>更新時だけローカル原本を編集し、検査して同じデータ版から再生成・配布します。公開サイトから自宅PCのDBへ接続しません。公開ページに反映されるのは次回配布後です。</p></div><div class="card"><h3>利用者データの流れ</h3><div class="flow-grid" style="grid-template-columns:1fr"><div class="mini"><b>ブラウザでログイン</b><p>お気に入り・メモ・家族共有・中心地点などを保存。</p></div><div class="mini"><b>Supabaseで利用者別に保管</b><p>認証とRLSを維持。学校IDで静的データと結び付けます。</p></div></div><p>学校や土地の原本をクラウドDBへ重複保存しない設計です。同じSupabaseを使っても別サブドメインのログイン状態は自動共有されないため、再ログイン・ゲスト連携を確認します。</p></div></div>
+<div class="card"><h3>移行時は「学校テーブルを削除するだけ」にしない</h3><p>現行の学校IDは、お気に入り・メモ・利用者の偏差値記録から外部キーで参照され、学校行の削除に連動して保存内容を削除する設定があります。<b>学校IDを保ち、参照の付替えとデータ保持を先に検証してから原本を移します。</b>最小ID参照表を一時的に残す案も比較し、その容量は共通枠へ含めます。</p><p>管理者の修正・審査は現在DBの学校情報を読むため、ローカル原本へ反映して再生成する経路へ改めます。利用者の変更提案を受ける場合も、原本へ自動混入させず採用処理を分けます。保守設定や計測イベントなど既存の小さなオンライン依存は、配置と保存期間を個別に整理します。</p></div>
+<div class="card"><h3>ローカルDBと公開作業の選び方</h3><p>原本はSQLiteをサービス単位で使う方針を採用しました。MariaDB等の導入は現時点で不要とし、将来の同時更新で支障が出た場合に再評価します。現行PostgreSQLとのSQL・型・拡張機能の差は移植時に確認します。</p><p>原本のスナップショット → 公開許可項目だけ抽出 → 件数・ID・容量を検査 → HTML/JSON生成 → 配布、の順にします。原本DBファイルをそのまま公開せず、個人データを静的生成物へ混ぜません。バックアップからの復元と、前の公開版へ戻す手順も用意します。</p><p>生成済み成果物はWrangler経由のDirect Uploadを比較案の中心に置きます。既存Git連携プロジェクトの自動公開と競合しない切替が必要です。管理画面のドラッグ＆ドロップは1,000ファイル上限・Functionsの制約があるため、この規模の配布方式にはしません。</p><p class="source-note"><a href="https://www.sqlite.org/whentouse.html">SQLiteの適した用途</a>／<a href="https://developers.cloudflare.com/pages/get-started/direct-upload/">Cloudflare Direct Upload</a>。本資料は設計更新であり、DB移設・原本削除・自動公開設定の変更は行っていません。</p></div>
+<div class="card" id="local-backup"><h3>合意した運用方針：編集する原本は1つ、控えを複数へ</h3><p>ローカル原本から静的生成し、利用者保存をオンラインへ分離する方針は了承済み。SQLiteを採用し、実際の保存先と保持世代は実装計画で具体化します。</p><div class="flow-grid"><div class="mini"><b>原本：ローカル1か所</b><p>普段の編集・取込み先を固定。複数のコピーをそれぞれ編集する運用にはしません。</p></div><div class="mini"><b>整合したバックアップを作る</b><p>SQLiteのBackup API等で完成したコピーを作り、検査して日付・データ版を付けます。</p></div><div class="mini"><b>別ドライブ＋Google Drive</b><p>完成したコピーを複製。同期先を編集用の原本にせず、旧世代も残します。</p></div></div><p><b>保存先の候補:</b> C・D・EドライブとGoogle Drive。ドライブ文字が違っても同じ物理ディスクなら故障への備えは一つなので、配置時に実体と空き容量を確認します。Google Drive側の空き容量も別に確認します。</p><p><b>SQLiteの手順:</b> 書込み中のDB本体だけをコピーせず、Backup APIまたはVACUUM INTO等で一貫したコピーを生成 → 完了後に整合性・件数・データ版を確認 → 日付付きバックアップを別媒体と同期先へ配布 → 同期完了と復元を確認。WALに未反映の内容が残る場合も考慮します。</p><p>同期は誤削除も伝わり得るため、世代を残すバックアップとして設計します。保持世代数・頻度は実容量に合わせて決定。上の容量バーの「原本＋バックアップ等の本数」は試算値で、PC側の同期コピーを含む各保存先の実容量も別途数えます。MariaDB等を選ぶ場合は、そのDBに適したバックアップ方式を用います。</p><p class="source-note"><a href="https://www.sqlite.org/backup.html">SQLite Backup API</a>／<a href="https://www.sqlite.org/wal.html">WALの扱い</a>。保存先の設定・DB導入・バックアップ実行はまだ行っていません。</p></div><h3>Supabase の無料条件と有料化</h3><div class="table-scroll"><table><thead><tr><th>項目</th><th>Free</th><th>Pro の基準</th></tr></thead><tbody><tr><td>基本料金</td><td>$0</td><td>$25 / organization / 月から</td></tr><tr><td>DB の容量</td><td>database size 500 MB / project</td><td>disk size 8 GB / project が基本枠。超過等は別</td></tr><tr><td>認証の月間アクティブ利用者</td><td>50,000 MAU</td><td>100,000 MAU が基本枠</td></tr><tr><td>送信量</td><td>egress 5 GB ＋ cached egress 別枠 5 GB</td><td>egress 250 GB ＋ cached 別枠 250 GB が基本枠</td></tr><tr><td>ファイル保管</td><td>Storage 1 GB</td><td>Storage 100 GB が基本枠</td></tr><tr><td>運用条件</td><td>active project は最大 2。1 週間の未使用で休止。自動バックアップなし</td><td>Micro 1 台分の compute credit を含む。日次バックアップ 7 日保持</td></tr></tbody></table></div>
+<p class="source-note"><a href="https://supabase.com/pricing">Supabase 公式料金</a>／<a href="https://supabase.com/docs/guides/platform/billing-on-supabase">課金単位</a>。Free の 2 active projects は利用者を通じた制約があり、別 organization を作って無料枠を増やす案にはしません。cached egress は Storage CDN の別枠で、DB の送信に合計 10 GB を使えるという意味ではありません。<a href="https://supabase.com/docs/guides/platform/manage-your-usage/egress">送信量の定義</a></p>
+<div class="callout"><b>学校の配信物 約 538 MiB と、DB 500 MB は別の容量です。</b>配信物には多数の HTML・JSON・画像が含まれます。これを DB 使用量へ読み替えて「既に DB 無料枠を超過」とは判断できません。DB は実際のデータ・索引等を測る必要があります。<a href="https://supabase.com/docs/guides/platform/database-size">DB サイズの定義</a></div>
+<p class="note">通常の Cloudflare サブドメインで画面を配信するだけなら、Supabase の有料 Custom Domain を付ける前提にはしません。DB の実サイズ、MAU、送信量、Storage、バックアップと休止の許容条件を確認してから Free / Pro を判断します。MAU はページ閲覧数ではなく、認証で活動した利用者数です。匿名利用者も対象となるため、サイトごとに新しい匿名 ID を作る場合の増加も見積もります。<a href="https://supabase.com/docs/guides/platform/manage-your-usage/monthly-active-users">MAU の定義</a>／<a href="https://supabase.com/docs/guides/auth/auth-anonymous">匿名認証</a></p>
+<h2 id="cost">03　月額は「配信・処理」と「DB」を足して考える</h2><p>下表は<b>新しい構成を比べるための条件付き試算</b>です。現在の請求額でも、Free で既に運用できると確認した結果でもありません。学校用 DB を 1 project、追加の有料機能・超過利用なしと仮定しています。</p><div class="table-scroll"><table><thead><tr><th>配信・処理</th><th>DB</th><th>合計 / 月</th><th>仮の円換算</th></tr></thead><tbody><tr><td>Cloudflare Free：$0</td><td>Supabase Free：$0</td><td class="money"><b>$0</b></td><td>0 円</td></tr><tr><td>Workers Paid：$5</td><td>Supabase Free：$0</td><td class="money"><b>$5</b></td><td>750 円</td></tr><tr><td>Cloudflare Free：$0</td><td>Supabase Pro：$25</td><td class="money"><b>$25</b></td><td>3,750 円</td></tr><tr><td>Workers Paid：$5</td><td>Supabase Pro：$25</td><td class="money"><b>$30</b></td><td>4,500 円</td></tr></tbody></table></div><p class="note">円換算は比較用の仮定 <b>1 USD = 150 円</b>。最新為替ではありません。税・為替手数料・ドメイン・外部地図・メール等を除きます。Workers Paid の行は処理枠への課金で、Pages Pro の容量増枠料金を含みません。</p>
+<div class="grid two"><div class="card"><h3>Pages の容量を有料で増やす場合</h3><p>Pages Pro 等では 100,000 files/site へ増枠できます。Pro 掲載価格は $25/月払い、年払いは月換算 $20。Workers Paid $5 とは別に比較する費用です。</p><p>たとえば Pro 月払い $25 と Supabase Pro $25 を選ぶなら、他の課金なしでも $50/月が基準になります。</p><p class="source-note"><a href="https://www.cloudflare.com/plans/">Pro 価格</a>／<a href="https://developers.cloudflare.com/pages/platform/limits/">Pages 増枠条件</a></p></div><div class="card"><h3>DB を本当に複数へ分ける場合</h3><p>Supabase Pro は organization の $25 基本料金に Micro 1 台分の credit が含まれ、追加 Micro は各 $10/月が目安です。</p><p>他の使用なし・月間継続稼働なら <b>2 台で $35、5 台で $65</b>。共有 1 台なら配信先が増えても、地域数 × $25 にはなりません。</p><p class="source-note"><a href="https://supabase.com/pricing">Supabase compute 料金</a>。今回 DB 分割・移設は実装しません。</p></div></div>
+<div class="card"><h3>かるた・漢字・土地情報も、同じ基準で個別に見積もる</h3><div class="flow-grid"><div class="mini"><b>かるた</b><p>画像・音声を含む生成物の数と最大サイズを測ります。静的な教材だけなら配信の無料枠を比較でき、成績を端末だけに保存するか、ログインして共有するかで DB の要否が変わります。実装・容量は未確認です。</p></div><div class="mini"><b>漢字</b><p>教材ページの静的配信と、学習履歴の同期を分けて考えます。教材を配るだけの構成に、学校用 DB と同じ契約が必須とは限りません。将来の教材・画像・音声を含む容量は別途測ります。</p></div><div class="mini"><b>土地情報</b><p>全国の情報をひとつの巨大 JSON にせず、地域・必要な項目ごとに生成する案を比較します。公開データの配信と、元データの保管・更新に使う DB の費用を分けて見積もります。</p></div></div><p class="note">上の $0 / $5 / $25 / $30 表は学校用 DB 1 project の比較です。将来サービス全部の合計額ではありません。学校の地域分割と、別サービスの DB を統合する判断も別です。非公開側の内部容量や管理情報は掲載していません。</p></div>
+<h2 id="limits">04　無料分割が成立する条件</h2><p>分割で増やせるのは主に<b>サイトごとの配信容量</b>です。アカウント共通の枠や運用作業は増やせません。</p><div class="table-scroll"><table><thead><tr><th>確認する枠</th><th>無料の条件</th><th>分割の効果・注意</th></tr></thead><tbody><tr><td>Pages ファイル数</td><td>各 site 20,000 以下</td><td>配信物を分ければ各枠で管理できる</td></tr><tr><td>単一ファイル</td><td>各ファイル 25 MiB 以下</td><td>全国版の巨大 JSON を全サイトへコピーするだけでは解決しない</td></tr><tr><td>同一リポの直接 Git 連携</td><td>標準 5 Pages projects まで</td><td>入口も枠を使う。超える場合は増枠確認や別の配布方法を設計する</td></tr><tr><td>Functions / Workers</td><td>アカウント合算 100,000 回/日</td><td>サイトごとに 100,000 回になるわけではない。日次ピークで確認</td></tr><tr><td>Pages build</td><td>アカウント共通 Free 500 回/月・同時 1、1 回 20 分まで</td><td>サイト分割で枠は増えず、更新先が増えると消費が増える</td></tr><tr><td>DB・認証・送信・保管</td><td>上の Supabase Free 枠内</td><td>配信分割だけでは DB の利用枠は増えない</td></tr></tbody></table></div>
+<p class="source-note"><a href="https://developers.cloudflare.com/pages/platform/limits/">Pages の上限</a>／<a href="https://developers.cloudflare.com/pages/configuration/monorepos/">同一リポの配信</a>／<a href="https://developers.cloudflare.com/pages/functions/pricing/">Functions の料金</a>。同じリポという採用済み方針を保つため、5 件を超える配信計画では Git 連携以外も含めた方法と追加運用費を C1 で確かめます。</p>
+<div class="card"><h3>$5 が必要になるのは、どんなときか</h3><p>Free の処理回数や CPU の枠では必要な動作を維持できないときに、Workers Paid を比較します。静的配信だけならリクエストは無料・無制限ですが、<b>現行の学校 HTML はメンテナンス等の middleware を通る構成</b>なので、全アクセスを静的無料とは数えられません。</p><p>料金を下げるために処理を外す場合も、メンテナンス表示、直接 URL からの表示、検索除外などの機能を保って検証します。Paid は account 月 $5 から、月 1,000 万回＋3,000 万 CPU ms が基本枠です。</p><p class="source-note"><a href="https://developers.cloudflare.com/workers/platform/pricing/">Workers 料金と超過単価</a>／<a href="https://developers.cloudflare.com/pages/functions/routing/">Functions の呼出し経路</a>。現契約と実利用量は未確認です。</p></div>
+<details class="detail"><summary>有料拡張の代替：Workers Static Assets と build</summary><p>Workers Static Assets は Free 20,000 / Paid 100,000 files/version、単一ファイル 25 MiB。Paid の増枠には Wrangler 4.34.0 以上が必要です。Pages の構成を移す工数が別にかかり、run_worker_first の経路は動的実行枠です。今回の無料分割を進めるために移行必須とはしません。<a href="https://developers.cloudflare.com/workers/platform/limits/">上限</a>／<a href="https://developers.cloudflare.com/workers/static-assets/billing-and-limitations/">課金</a></p><p>Pages の build は「回数」、Workers Builds は「分」で課金・枠を管理します。Workers Builds は Free 3,000 分/月、Paid 6,000 分/月と超過 $0.005/分。配信方法を切り替えるときは生成時間も含めて比較します。<a href="https://developers.cloudflare.com/workers/ci-cd/builds/limits-and-pricing/">Workers Builds 料金</a></p></details>
+<h2 id="capacity">05　現行生成物と、分割する理由</h2><div class="grid two"><div class="card"><h3>高校・高専版の既存生成物</h3><div class="metric">11,718 / 20,000 files</div><div class="capacity-bar" role="img" aria-label="Pages Free ファイル数枠の58.59パーセント"><span style="width:58.59%"></span></div><p>計 564,266,800 bytes、約 538 MiB。これは配信ファイルの合計で、DB サイズではありません。</p></div><div class="card"><h3>全校 API の 1 ファイル</h3><div class="metric">21.40 / 25 MiB</div><div class="capacity-bar" role="img" aria-label="単一ファイル枠の85.59パーセント"><span style="width:85.59%"></span></div><p>22,437,140 bytes。学校種別を増やす前に、全校版をどう扱うか決める必要があります。</p></div></div><p class="evidence">2026-09-27 に既存 <code>web/dist</code> を観測。最新 build や本番との一致を確認した結果ではありません。API は <code>api/v1/schools.json</code>。1 MiB = 1,048,576 bytes。</p>
+<details class="detail"><summary>合成シナリオ：今の全校ファイルへ学校を足し続けた場合</summary><div class="table-scroll"><table><thead><tr><th>追加校数の仮定</th><th>ファイル数</th><th>全校 API</th></tr></thead><tbody><tr><td>現観測</td><td>11,718</td><td>21.40 MiB</td></tr><tr><td>＋1,000 校</td><td>13,718</td><td>25.60 MiB</td></tr><tr><td>＋5,000 校</td><td>21,718</td><td>42.43 MiB</td></tr><tr><td>＋20,000 校</td><td>51,718</td><td>105.51 MiB</td></tr></tbody></table></div><p class="note">実在校数や将来需要の予測ではありません。現構造を維持し、追加 1 校あたり HTML＋JSON の 2 ファイル、全校 API は現平均 4,409.82 bytes/校と仮定。地域や画像の増加は別です。配信ファイル数に余裕があっても、全校 API が先に超過し得ます。</p></details>
+<div class="card"><span class="proposal">API の設計案・未採用</span><h3>全国の大きな 1 ファイルを、分割先すべてに配らない</h3><p>既存の v1 API を突然別形式にせず、今の利用者との互換性を守ります。新しい学校種別は、v2 等の新しい窓口で種別・地域・必要属性ごとの分割を設計します。</p><p>公開前に各配信物のファイル数と最大 bytes を検査し、東西でも大きすぎるなら区分を見直します。<b>「東西なら必ず無料枠に入る」とは、全学校種別の生成容量を測る前には約束しません。</b></p></div>
+<h2 id="migration">06　無料でも必要な運用と、移行時の確認</h2><div class="flow-grid"><div class="mini"><b>更新する</b><p>1 回生成したデータを種別・地域へ分割し、同じ世代で配布。変更のないサイトを不要に build しない設定を検討します。</p></div><div class="mini"><b>確かめる</b><p>学校 ID とデータ世代を照合。旧 API を残す配信先にも同じ内容を届け、キャッシュによる古さと配信不一致を区別します。</p></div><div class="mini"><b>失敗したら止める</b><p>片側だけ更新された場合は次の切替を止め、整合する版へ戻す手順を用意。復旧時間は検証で測ります。</p></div></div>
+<div class="grid two"><div class="card"><h3>ログインとゲストの救済</h3><p>匿名のお気に入り・メモ等も DB に保存されます。旧サイトでアカウントへ連携し、新サイトで同じアカウントへ再ログインする流れを確認します。</p><p>旧 callback だけでなく、その後に戻る旧トップ・連携画面・必要な JS とデータを一体で残します。家族招待はリンクからの再開を検証します。</p><p class="note">中心地点は保存成功済みなら DB 復元対象。言語・ズーム等の端末設定は別途扱います。実アカウント検収は未実施です。</p></div><div class="card"><h3>予告と復旧</h3><p>予告 → ゲスト連携猶予 → 切替 → 観察を分けます。現行の「28 日の移転表示」は切替後の案内であり、事前の猶予期間ではありません。</p><p>ログイン不可、保存内容に到達不可、API 不一致、転送ループ、広範な 404 は切替停止条件。恒久転送後は新サイトも維持し、逆向きの恒久転送で戻しません。</p></div></div>
+<div class="card"><h3>構成確定までに確認するもの</h3><p><b>容量:</b> 各学校種別と地域の実データを生成した場合のファイル数・最大 bytes。学校種別の詳細分類は別途検討します。</p><p><b>利用と費用:</b> Cloudflareの現契約・日次処理ピーク・配布方法、Supabaseの利用者データ実サイズ・MAU・送信量・Storage。原本移設後と現状の容量を分けて測る。</p><p><b>運用:</b> 自動バックアップがない Free での復元手順、休止条件、複数配信の更新と復旧。確認結果を計画へ残します。</p><p class="note">この資料は設計方針と試算の更新です。ローカル原本への移設、参照整合性の変更、新API、配信設定の変更は未実施です。</p></div>
+<h2 id="decided">07　採用済み 3 件と、旧 URL 論点の保留</h2><div class="card decision accepted" id="q-Q0" data-accepted="true"><p><span class="accepted-id qid">Q0</span><b>次の作業をいつ始めるか</b></p><div class="acceptedbar">回答済み・採用済み（2026-09-27 添付回答）／再回答不要</div><div class="opts" data-q="Q0"><label class="opt"><input type="radio" name="Q0" data-key="p1" checked disabled><span class="lbl"><span class="opt-main">この資料への回答後、C1 の調査へ進む</span><span class="opt-sub">C1 の調査は着手済み。公開日は未決定です。</span></span></label></div><p class="note">この回答は資料に記録済みです。ブラウザ保存の復元・削除でも維持します。</p><p class="backlink"><a href="#qlist">↑ 判断の一覧へ戻る</a></p></div><div class="card decision accepted" id="q-A2" data-accepted="true"><p><span class="accepted-id qid">A2</span><b>総合入口のコードをどこで管理するか</b></p><div class="acceptedbar">回答済み・採用済み（2026-09-27 添付回答）／再回答不要</div><div class="opts" data-q="A2"><label class="opt"><input type="radio" name="A2" data-key="p1" checked disabled><span class="lbl"><span class="opt-main">同じリポ内に総合入口を置く</span><span class="opt-sub">学校と入口の生成・配信単位は分離する方針です。</span></span></label></div><p class="note">この回答は資料に記録済みです。ブラウザ保存の復元・削除でも維持します。</p><p class="backlink"><a href="#qlist">↑ 判断の一覧へ戻る</a></p></div><div class="card decision accepted" id="q-B1" data-accepted="true"><p><span class="accepted-id qid">B1</span><b>private 側のブランド対応をいつ進めるか</b></p><div class="acceptedbar">回答済み・採用済み（2026-09-27 添付回答）／再回答不要</div><div class="opts" data-q="B1"><label class="opt"><input type="radio" name="B1" data-key="p1" checked disabled><span class="lbl"><span class="opt-main">学校・総合入口の準備期間に両リポを対応する</span><span class="opt-sub">両リポの対応を同じ準備期間に進めます。同時公開は要求しません。</span></span></label></div><p class="note">この回答は資料に記録済みです。ブラウザ保存の復元・削除でも維持します。</p><p class="backlink"><a href="#qlist">↑ 判断の一覧へ戻る</a></p></div><div class="card decision legacy" id="q-A1" data-deferred="true"><p><span class="accepted-id qid">A1</span><b>高校入口の URL は、配信構成を決めてから再検討する</b></p><div class="acceptedbar">判断保留・今回は回答不要</div><p>以前の「/high-school/ 配下か、現行パスのままか」という 2 択では、学校種別のサブドメイン案を扱えません。配信構成 P1 の判断後に、既存高校版の移行先と旧リンクの対応を確定します。</p><details class="detail"><summary>前版の選択下書き・メモを見る（履歴として保持）</summary><p class="note">前版で選択を保存していた場合に表示します。採用済みの意味ではなく、新しい P1 の回答にも流用しません。</p><div class="opts" data-q="A1"><label class="opt"><input type="radio" name="A1" data-key="p1" disabled><span class="lbl"><span class="opt-main">/high-school/ 配下に検索・地図をまとめる</span></span></label><label class="opt"><input type="radio" name="A1" data-key="p2" disabled><span class="lbl"><span class="opt-main">検索・地図は現行パスを維持する</span></span></label></div><label for="memo-A1" class="note">前版から引き継いだメモ</label><textarea class="memo" id="memo-A1" readonly>費用・上限が分からないため、A1 は判断保留。</textarea></details><p class="backlink"><a href="#qlist">↑ 今回の判断へ戻る</a></p></div>
+<details class="detail"><summary>これまで採用した総合入口・ブランドの方針と、後続テーマ</summary><div class="grid two"><div><h3>採用した方針</h3><ul><li>総合入口から学校・学習・暮らしの公開済みサービスへ案内する。</li><li>学校を探す機能は、将来すべての学校種別を用意する。</li><li>大学・専門学校などの詳細分類と比較項目は別途検討する。</li><li>表示名・ロゴと URL・学校 ID・保存内容を分離する。</li><li>両リポでブランドを差し替えられる設定と検証を用意する。</li><li>商標の定点観測を続け、必要時に人が変更を判断する。</li></ul></div><div><h3>後で具体化するもの</h3><ul><li>学校種別の追加順、サブドメイン名、地域境界。</li><li>公開日、予告とゲスト連携猶予、検収担当。</li><li>新ブランド候補、必要なら別途ドメイン移行。</li><li>Grok Bot の巡回頻度・保存・通知・取得失敗時の運用。</li></ul><p class="note">Grok Bot は未設定。自動改名・自動公開はしません。新名称の決定を今回の配信設計の前提にはしません。</p></div></div></details>
+<div class="card glossary"><h3>用語の確認</h3><dl><dt>配信先・Pages</dt><dd>生成したページやデータを届ける場所。</dd><dt>サブドメイン</dt><dd>学校種別などで分ける Web の住所。同じブランドでも住所は分けられます。</dd><dt>DB・Supabase</dt><dd>ログイン情報や保存内容、利用者ごとの保存内容を管理する場所。</dd><dt>API・JSON</dt><dd>プログラム向けのデータ窓口と、そのファイル形式。</dd><dt>origin</dt><dd>ブラウザが区別するサイトの単位。サブドメインが違うと別になります。</dd><dt>Functions・Workers</dt><dd>アクセスを受けて動かす処理。単にファイルを届ける通信とは枠が異なります。</dd><dt>build</dt><dd>コードとデータから公開するファイルを生成する作業。</dd><dt>MAU・egress</dt><dd>月間のアクティブ利用者数と、サービスから送り出すデータ量。</dd></dl></div>
+<h2 id="summary">08　回答を保存・共有する</h2><div class="card" id="summarySection"><p>新しい回答は P1 だけです。Q0・A2・B1 は採用済み、A1 は保留と履歴を出力します。回答はこの端末の同じブラウザに保存され、外部へ送信しません。</p><p class="note">同じファイル名・同じ開き方で保存内容を復元します。確実に残すには Markdown を保存してください。採用済み記録と A1 の履歴は、P1 の下書き消去でも残します。</p><div class="toolbar"><button onclick="generateSummary()">決定サマリを出力</button><button class="ghost" onclick="copySummary()">クリップボードにコピー</button><button onclick="generateMarkdown()">Markdown 形式で出力</button><button class="ghost" onclick="downloadMarkdown()">.md ファイル保存</button><button class="ghost" onclick="window.print()">印刷 / PDF 保存</button><button class="ghost" onclick="clearAnswers()">P1 の下書きだけ消す</button></div><p class="note" id="saveState" aria-live="polite">採用済み 3 件を記録。P1 は未選択、A1 は保留です。</p><label for="summaryBox" class="note">出力された回答</label><textarea id="summaryBox" placeholder="回答と保留履歴がここにまとまります。"></textarea></div>
+<div class="card source-list"><h3>仕様と計画の参照先</h3><ul><li><a href="plan_subdomain-entry-school-migration_c1_sqlite-static-source.md">SQLite原本・静的生成・利用者DB分離の実装計画</a></li><li><a href="plan_subdomain-entry-school-migration.md">総合入口と学校サブドメインへの移行計画</a></li><li><a href="reference_portal-grand-design.md">採用した総合入口のグランドデザイン</a></li><li><a href="design_portal-grand-design_2026-09-27.html">採用済みデザインの HTML</a></li><li><a href="reference_manabi-map-operating-rules.md#brand-portability">ブランド差替えと定点観測の共通ルール</a></li></ul><p class="note">公開可能な技術仕様と、この資料での設計案のみを記載しています。非公開サービスの実測容量・利用量・管理画面の値は転載していません。コード・本番設定・契約の現状を、今回の提案で変更したものとして扱いません。</p></div></main>
+<script>
+var ACCEPTED={Q0:'p1',A2:'p1',B1:'p1'};
+var BASE_A1_MEMO='費用・上限が分からないため、A1 は判断保留。';
+var STORE_KEY='review-sheet:'+(location.pathname.split('/').pop()||'sheet');
+var legacyData={r:{},t:{}};
+function allInputs(name){return Array.prototype.slice.call(document.querySelectorAll('.opts input[name="'+name+'"]'));}
+function enforceAccepted(){
+ Object.keys(ACCEPTED).forEach(function(name){allInputs(name).forEach(function(i){i.checked=i.dataset.key===ACCEPTED[name];i.disabled=true;});});
+ allInputs('A1').forEach(function(i){i.disabled=true;});
+}
+function pickedKey(name){var i=allInputs(name).find(function(i){return i.checked;});return i?i.dataset.key:null;}
+function pickedLabel(name){return textOfChecked(name);}
+function applyConditions(){enforceAccepted();}
+function isSkipped(){return false;}
+function indexOfInput(i){return allInputs(i.name).indexOf(i);}
+function markSaved(){
+ var el=document.getElementById('saveState');
+ if(el)el.textContent='採用済み 3 件は資料に記録。P1: '+(pickedKey('P1')?'下書きを選択済み':'未選択')+' ／ A1: 保留（前版の履歴を維持）。';
+}
+function restoreAnswers(){
+ try{
+  var raw=localStorage.getItem(STORE_KEY);
+  if(raw){
+   var data=JSON.parse(raw);
+   if(data&&typeof data==='object'&&!Array.isArray(data))legacyData=data;
+   ['A1','P1'].forEach(function(name){
+    var v=(legacyData.r||{})[name];
+    if(name==='P1'&&legacyData.version!==3)return;
+    var inputs=allInputs(name);
+    var indexes=Array.isArray(v)?v:[v];
+    inputs.forEach(function(i,idx){i.checked=indexes.indexOf(idx)>=0;});
+   });
+   ['memo-A1','memo-P1'].forEach(function(id){
+    var t=document.getElementById(id);
+    if(Object.prototype.hasOwnProperty.call(legacyData.t||{},id)&&typeof legacyData.t[id]==='string')t.value=legacyData.t[id];
+   });
+  }
+ }catch(e){/* 壊れた保存データでも資料を表示する */}
+ enforceAccepted();markSaved();
+}
+function saveAnswers(){
+ enforceAccepted();
+ try{
+  var data=JSON.parse(JSON.stringify(legacyData));
+  data.version=3;data.r=data.r||{};data.t=data.t||{};data.forecastModel=2;data.forecast={};document.querySelectorAll('[data-forecast]').forEach(function(e){data.forecast[e.id]=e.value;});
+  ['Q0','A2','B1','A1','P1'].forEach(function(name){
+   var inputs=allInputs(name),idx=inputs.findIndex(function(i){return i.checked;});
+   if(idx>=0)data.r[name]=idx;else delete data.r[name];
+  });
+  ['memo-A1','memo-P1'].forEach(function(id){data.t[id]=document.getElementById(id).value;});
+  localStorage.setItem(STORE_KEY,JSON.stringify(data));legacyData=data;markSaved();
+ }catch(e){document.getElementById('saveState').textContent='この環境では自動保存できません。閉じる前にサマリを保存してください。採用済み 3 件は資料に残ります。';}
+}
+function clearAnswers(){
+ if(!confirm('P1 の下書きとメモだけ消します。採用済み 3 件と A1 の履歴は残します。よろしいですか?'))return;
+ allInputs('P1').forEach(function(i){i.checked=false;});
+ document.getElementById('memo-P1').value='';document.getElementById('summaryBox').value='';
+ saveAnswers();
+}
+function pickRecommended(){
+ var n=0;if(!pickedKey('P1')){allInputs('P1')[0].checked=true;n=1;}
+ saveAnswers();alert(n?'P1 におすすめを入れました。契約・公開への承認にはなりません。':'P1 は選択済みです。回答を維持しました。');
+}
+function textOfChecked(name){
+ var checked=allInputs(name).filter(function(i){return i.checked;});
+ return checked.length?checked.map(function(i){return i.closest('.opt').querySelector('.opt-main').innerText.trim();}).join(' ／ '):null;
+}
+function titleOf(card){
+ var e=card.querySelector('p').cloneNode(true);
+ e.querySelectorAll('.qid,.tag,.tm,.cr').forEach(function(n){n.remove();});
+ return e.innerText.replace(/\s+/g,' ').trim();
+}
+function rows(){
+ enforceAccepted();
+ return Array.prototype.map.call(document.querySelectorAll('.card.decision'),function(card){
+  var id=card.querySelector('.qid').innerText.trim(),memo=card.querySelector('.memo');
+  var choice=textOfChecked(id),state;
+  if(id==='A1')state='判断保留：配信構成 P1 の確定後に再検討。前版下書き: '+(choice||'未選択');
+  else state=(ACCEPTED[id]?'採用済み: ':'回答の下書き: ')+(choice||'未選択');
+  return {id:id,title:titleOf(card),state:state,memo:memo?memo.value.trim():''};
+ });
+}
+function generateSummary(){
+ var out=['=== 総合入口・学校移行・ブランド運用 決定サマリ ===','出力日時(端末側): '+new Date().toLocaleString('ja-JP'),'この出力は設計の検討回答です。有料契約・DB 移設・本番切替の実行指示ではありません。',''];
+ rows().forEach(function(r){out.push('['+r.id+'] '+r.title,'  '+r.state);if(r.memo)out.push('  メモ: '+r.memo);out.push('');});
+ out.push('',forecastText());document.getElementById('summaryBox').value=out.join('\n');
+}
+function escapePipe(s){return String(s).replace(/\|/g,String.fromCharCode(92)+'|').replace(/\r?\n/g,' ');}
+function generateMarkdown(){
+ var out=['# 総合入口・学校移行・ブランド運用 決定記録','','> 出力日時(端末側): '+new Date().toLocaleString('ja-JP'),'','有料契約・DB 移設・本番切替の実行指示ではありません。','','| ID | 論点 | 状態・回答 |','|---|---|---|'];
+ var data=rows();data.forEach(function(r){out.push('| '+r.id+' | '+escapePipe(r.title)+' | '+escapePipe(r.state)+' |');});
+ data.forEach(function(r){if(r.memo)out.push('','### '+r.id+' メモ','',r.memo);});
+ out.push('',forecastText());document.getElementById('summaryBox').value=out.join('\n');
+}
+function copySummary(){
+ generateSummary();var b=document.getElementById('summaryBox');b.select();
+ if(navigator.clipboard)navigator.clipboard.writeText(b.value).then(function(){alert('コピーしました。');},function(){alert('出力欄を手動でコピーしてください。');});
+ else alert('出力欄を手動でコピーしてください。');
+}
+function downloadMarkdown(){
+ generateMarkdown();var url=URL.createObjectURL(new Blob([document.getElementById('summaryBox').value],{type:'text/markdown;charset=utf-8'}));
+ var a=document.createElement('a');a.href=url;a.download='review_portal-school-brand_2026-09-27_decisions.md';document.body.appendChild(a);a.click();a.remove();setTimeout(function(){URL.revokeObjectURL(url);},1000);
+}
+document.addEventListener('DOMContentLoaded',function(){restoreAnswers();applyConditions();});
+document.addEventListener('change',function(e){if(e.target&&e.target.matches('.opts input'))saveAnswers();});
+document.addEventListener('input',function(e){if(e.target&&e.target.id==='memo-P1')saveAnswers();});
+
+// Forecast inputs are synthetic planning assumptions, never live account usage.
+var forecastDefaults={};
+document.querySelectorAll('[data-forecast]').forEach(function(e){forecastDefaults[e.id]=e.value;});
+function forecastNumber(id){var e=document.getElementById('fc-'+id);return e.checkValidity()&&e.value!==''?Number(e.value):NaN;}
+function forecastFormat(n){return Number(n).toLocaleString('ja-JP',{maximumFractionDigits:1});}
+function forecastBar(id,value,limit,unit){
+ var ratio=value/limit*100,color=ratio>100?'red':ratio>80?'amber':'';
+ var fill=document.getElementById('fc-'+id+'-fill'),m=document.getElementById('fc-'+id+'-meter');
+ fill.style.width=Math.min(100,Math.max(0,ratio))+'%';fill.className='forecast-fill '+color;
+ m.setAttribute('aria-valuenow',String(Math.min(100,ratio)));m.setAttribute('aria-valuetext',forecastFormat(value)+' / '+forecastFormat(limit)+unit+'、'+forecastFormat(ratio)+'％');
+ document.getElementById('fc-'+id+'-value').textContent=forecastFormat(value)+' / '+forecastFormat(limit)+unit+'（'+forecastFormat(ratio)+'％）';
+ return ratio;
+}
+function forecastCapacity(total,parts,files,overhead){return Math.ceil(total/parts)*files+overhead;}
+function forecastStatus(id,files,asset){var ratio=Math.max(files/20000,asset/25);document.getElementById('fc-'+id+'-status').textContent=ratio>1?'赤：この構成では上限超過':ratio>.8?'黄：枠内だが余裕が少ない':'緑：想定容量は余裕あり';forecastBar(id,files,20000,' files');forecastBar(id+'-asset',asset,25,' MiB');}
+var forecastLast=null;
+function updateForecast(){
+ var values={},invalid=false;document.querySelectorAll('[data-forecast]').forEach(function(e){values[e.id.slice(3)]=forecastNumber(e.id.slice(3));if(!Number.isFinite(values[e.id.slice(3)]))invalid=true;});
+ var summary=document.getElementById('fc-summary');
+ if(invalid){summary.textContent='入力範囲内の整数を入れると再計算します。下のバーは直前の有効な条件での結果です。';summary.classList.add('bad-input');forecastLast=null;document.querySelectorAll('.forecast-card').forEach(function(e){e.querySelectorAll('.forecast-bar,.forecast-result,.forecast-status').forEach(function(n){n.style.opacity='.25';});});return;}
+ summary.classList.remove('bad-input');document.querySelectorAll('.forecast-bar,.forecast-result,.forecast-status').forEach(function(e){e.style.opacity='';});var v=values,M=1048576;
+ var groups=['primary','middle','high','other'],schools=0,schoolSites=0,maxFiles=0,maxSchool=0;
+ groups.forEach(function(k){schools+=v[k];schoolSites+=v[k+'-parts'];var n=Math.ceil(v[k]/v[k+'-parts']);maxSchool=Math.max(maxSchool,n);maxFiles=Math.max(maxFiles,2*n+1526+Math.ceil(n/1000));});
+ var api= Math.max(22437140/M,Math.min(1000,maxSchool)*4409.82/M);
+ forecastStatus('school',maxFiles,api);
+ document.querySelector('#fc-school-status').parentNode.querySelector('h3').textContent='学校全種別：'+forecastFormat(schools)+'校の想定';
+ document.getElementById('fc-school-result').textContent=schoolSites+'サイトへ分ける案。最大学校数は約'+forecastFormat(maxSchool)+'校/site。APIを小分けする前提で、1site約9,232校が上限、80％目安なら約7,233校。';
+ document.getElementById('fc-school-before').textContent='全種別を1サイトへ集約すると約'+forecastFormat(2*schools+1526+Math.ceil(schools/1000))+' files。新APIの1,000校chunkは約4.21MiB（16.8％）ですが、既存v1一括APIを維持するため、最大ファイルのバーは21.40MiB（85.6％）を含みます。この旧APIをさらに増量する場合は別途再計算。';
+ var kfiles=forecastCapacity(v.kanji,v['kanji-parts'],8,200);forecastStatus('kanji',kfiles,4);
+ document.getElementById('fc-kanji-result').textContent='1サイトで最大2,475字／80％目安1,975字。現在の分割先数なら合計'+forecastFormat(2475*v['kanji-parts'])+'字までのファイル枠。';
+ document.getElementById('fc-kanji-before').textContent='分割なし：'+forecastFormat(v.kanji*8+200)+' files（'+forecastFormat((v.kanji*8+200)/200)+'％）。最大ファイル4MiBは仮定で、音声の長さ等から生成後に確認。';
+ document.querySelector('#fc-karuta-status').parentNode.querySelector('h3').textContent='かるた：'+forecastFormat(v.karuta)+'種類 × '+forecastFormat(v['karuta-cards'])+'枚の想定';
+ var cunit=v['karuta-cards']*4,cfiles=forecastCapacity(v.karuta,v['karuta-parts'],cunit,200);forecastStatus('karuta',cfiles,.5);
+ document.getElementById('fc-karuta-result').textContent='全'+forecastFormat(v.karuta*v['karuta-cards'])+'枚。1サイトで最大'+Math.floor(19800/cunit)+'種類／80％目安'+Math.floor(15800/cunit)+'種類。無料上限内へ最低'+Math.ceil(v.karuta/Math.max(1,Math.floor(19800/cunit)))+'分割'+(cunit>19800?'。ただし1種類が枠を超えるため種類内の分割も必要':'')+'。';
+ document.getElementById('fc-karuta-before').textContent='分割なし：'+forecastFormat(v.karuta*cunit+200)+' files（'+forecastFormat((v.karuta*cunit+200)/200)+'％）。画像・音声を含む1枚4filesの前提。';
+ document.querySelector('#fc-land-status').parentNode.querySelector('h3').textContent='土地情報：'+forecastFormat(v.land)+'地域・'+forecastFormat(v.land*v['land-records'])+'件の想定';
+ var lfiles=forecastCapacity(v.land,v['land-parts'],8,200),landAsset=Math.max(v['land-records']*2048/M,.5);forecastStatus('land',lfiles,landAsset);
+ document.getElementById('fc-land-result').textContent='全'+forecastFormat(v.land*v['land-records'])+'件。1サイト最大2,475地域／80％目安1,975地域。地域JSONは1地域12,800件で25MiBに達します。';
+ document.getElementById('fc-land-before').textContent='分割なし：'+forecastFormat(v.land*8+200)+' files（'+forecastFormat((v.land*8+200)/200)+'％）。地域JSONが大きくなる場合は、サイト分割とは別にJSONを小分けします。';
+ var sites=schoolSites+v['kanji-parts']+v['karuta-parts']+v['land-parts']+1;
+ var fileOK=maxFiles<=20000&&kfiles<=20000&&cfiles<=20000&&lfiles<=20000&&landAsset<=25;
+ summary.textContent='この想定：学校'+forecastFormat(schools)+'校、漢字'+forecastFormat(v.kanji)+'字、かるた'+forecastFormat(v.karuta*v['karuta-cards'])+'枚、土地'+forecastFormat(v.land*v['land-records'])+'件。合計'+sites+'配信先（入口を含む）。'+(fileOK?'分割・API小分け後の配信容量は無料枠内です。':'赤の配信先は分割方法またはデータ形式の変更が必要です。')+' DBと処理の判定は次のバーを見てください。';
+ document.getElementById('fc-eastwest').textContent='小学校'+forecastFormat(v.primary)+'校の比較：東西2分割は約'+forecastFormat(2*Math.ceil(v.primary/2)+1526+Math.ceil(Math.ceil(v.primary/2)/1000))+' files/site、3分割は約'+forecastFormat(2*Math.ceil(v.primary/3)+1526+Math.ceil(Math.ceil(v.primary/3)/1000))+' files/site。均等分割・API小分けの仮定。';
+ var requests=v.visits*v.calls;forecastBar('requests',requests,100000,'回/日');
+ document.getElementById('fc-requests-result').textContent=v.calls?('同じ処理回数なら合計'+forecastFormat(Math.floor(100000/v.calls))+'訪問/日で上限。現在の仮定からあと'+forecastFormat(Math.max(0,Math.floor(100000/v.calls)-v.visits))+'訪問/日の余裕。'):'動的処理0回の仮定。この経路の静的リクエストに10万回の上限は適用しません。';
+ var uploads=sites*v.builds,builds=uploads*v['remote-build'];forecastBar('builds',builds,500,'回/月');
+ document.getElementById('fc-builds-result').textContent=sites+'サイト×'+v.builds+'更新＝'+uploads+'公開/月。'+(v['remote-build']?'Cloudflareで生成する比較では'+builds+'builds/月。毎日30回なら'+sites*30+'builds/月。':'ローカル生成の主案ではCloudflare buildは0回。毎日更新でも公開回数とCloudflare build回数は別です。');
+ document.getElementById('fc-projects').textContent='Pages上限100件に対し'+sites+'件。'+(v['remote-build']?'Git直接連携は同一リポ標準5件なので配布方式の検討が必要。':'Wranglerで生成済み成果物を配る案。同一リポGit連携5件の方式とは別で、既存自動公開の停止・切替と権限管理を設計します。');
+ var base=v['db-base'],dbSchool=base+v['db-users']*v['db-user']/1000;
+ forecastBar('db-school',dbSchool,500,' MB');
+ var remain=Math.max(0,500-base),safeRemain=Math.max(0,400-base);
+ document.getElementById('fc-db-school-result').textContent='共通'+forecastFormat(base)+'MB＋利用者'+forecastFormat(v['db-users']*v['db-user']/1000)+'MB＝'+forecastFormat(dbSchool)+'MB。学校・土地の件数による原本加算は0。'+(v['db-user']?'同じ保存量なら上限約'+forecastFormat(Math.floor(remain*1000/v['db-user']))+'人、80％目安は約'+forecastFormat(Math.floor(safeRemain*1000/v['db-user']))+'人。':'1人あたり0KBの仮定。');
+ var localMaster=schools*.01+v.land*v['land-records']*2048/1e6+v.kanji*8192/1e6+v.karuta*v['karuta-cards']*2048/1e6;
+ var localTotal=localMaster*v['local-copies']/1000;forecastBar('db-land',localTotal,v['local-budget'],' GB');
+ document.getElementById('fc-db-land-result').textContent='原本DBは約'+forecastFormat(localMaster/1000)+'GB、'+v['local-copies']+'本分で約'+forecastFormat(localTotal)+'GB。学校・土地・教材を増やすとここが増え、Supabaseの原本容量は増えません。';
+ var egress=v.active*v.egress/1e6+v['egress-base']/1000;forecastBar('egress',egress,5,' GB/月');forecastBar('mau',v.active,50000,'人/月');
+ var maxUsers=v.egress?Math.max(0,Math.floor((5e6-v['egress-base']*1000)/v.egress)):null;
+ document.getElementById('fc-egress-result').textContent='通常送信は'+forecastFormat(egress)+'GB/月。'+(maxUsers!==null?'同じ使い方なら約'+forecastFormat(maxUsers)+'人/月で送信上限。':'利用者あたりの送信0KBという仮定。')+'認証人数より送信や保存が先に上限へ達する場合があります。';
+ var commonOK=requests<=100000&&builds<=500&&sites<=100&&egress<=5&&v.active<=50000;
+ document.getElementById('fc-verdict').textContent=(fileOK&&commonOK&&dbSchool<=500?'この仮定では配信容量・処理回数・利用者DBが無料枠内。学校や土地の原本件数を理由にSupabaseへ課金する必要はありません。':'この入力条件ではオンライン無料枠に超過があるため、赤の項目の容量・回数を見直します。')+'原本はローカルへ分離し、個人の保存はオンラインに維持します。'+(localTotal>v['local-budget']?'ローカル原本用の作業予算も超過しています。':'ローカルの実際の空き容量と生成時間は未確認です。')+'参照の付替え・管理編集の移行が終わるまでは、現在の原本DBを削除しません。';
+ forecastLast={values:v,sites:sites,schoolFiles:maxFiles,kanjiFiles:kfiles,karutaFiles:cfiles,landFiles:lfiles,requests:requests,builds:builds,uploads:uploads,dbSchool:dbSchool,localMaster:localMaster,localTotal:localTotal,egress:egress};
+}
+function forecastText(){if(!forecastLast)return '容量試算：入力未確定。';return '容量試算（仮定値・実使用量ではない）\n'+document.getElementById('fc-summary').textContent+'\n'+document.getElementById('fc-verdict').textContent+'\n入力条件: '+JSON.stringify(forecastLast.values)+'\n計算結果: '+JSON.stringify(forecastLast);}
+function resetForecast(){Object.keys(forecastDefaults).forEach(function(id){document.getElementById(id).value=forecastDefaults[id];});updateForecast();saveAnswers();}
+function restoreForecast(){try{var d=JSON.parse(localStorage.getItem(STORE_KEY)||'{}');if(d.forecast)Object.keys(forecastDefaults).forEach(function(id){if(typeof d.forecast[id]==='string')document.getElementById(id).value=d.forecast[id];});if(d.forecastModel!==2)document.getElementById('fc-egress-base').value='50';}catch(e){}updateForecast();}
+document.querySelectorAll('[data-forecast]').forEach(function(e){e.addEventListener('input',function(){updateForecast();saveAnswers();});});
+restoreForecast();
+</script></body></html>

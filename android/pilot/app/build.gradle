@@ -1,0 +1,56 @@
+import groovy.json.JsonOutput
+import groovy.json.JsonSlurper
+
+plugins {
+    id 'com.android.application'
+}
+
+// Keep the trial URL explicit: a future portal at '/' must not silently become
+// the school app's entry point. Reconfirm pilot.json when the school site moves.
+def pilot = new JsonSlurper().parse(rootProject.file('pilot.json'))
+if (!(pilot.applicationId instanceof String) ||
+        !(pilot.applicationId ==~ /[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+\.pilot/)) {
+    throw new GradleException('The trial applicationId must end in .pilot')
+}
+def launchUri = new URI(pilot.startUrl as String)
+if (launchUri.scheme != 'https' || !launchUri.host || launchUri.rawUserInfo != null ||
+        launchUri.rawQuery != null || launchUri.rawFragment != null || launchUri.port != -1) {
+    throw new GradleException('startUrl must be a public HTTPS URL without credentials, query, fragment or port')
+}
+if (!(pilot.appName instanceof String) || pilot.appName.trim().isEmpty() ||
+        pilot.appName.any { it in ['"', "'", '&', '<', '>','\\', '\n', '\r'] }) {
+    throw new GradleException('Use a plain appName without XML or resource escape characters')
+}
+def siteOrigin = "https://${launchUri.host}"
+def assetStatements = JsonOutput.toJson([
+    [relation: ['delegate_permission/common.handle_all_urls'],
+     target: [namespace: 'web', site: siteOrigin]]
+])
+
+android {
+    namespace 'com.ishizakahiroshi.school.pilot'
+    compileSdk 36
+
+    defaultConfig {
+        applicationId pilot.applicationId
+        minSdk 23
+        targetSdk 36
+        versionCode 2
+        versionName '0.1.1-pilot'
+        manifestPlaceholders = [pilotStartUrl: pilot.startUrl, pilotHost: launchUri.host]
+        resValue 'string', 'app_name', pilot.appName
+        // Android string resources require escaping JSON quotes.
+        resValue 'string', 'asset_statements', assetStatements.replace('"', '\\"')
+    }
+
+    // A pilot is not a Play release. No release signing or publishing tasks are
+    // configured here. The debug certificate must not be trusted by production.
+    buildTypes {
+        debug { debuggable true }
+        release { minifyEnabled false }
+    }
+}
+
+dependencies {
+    implementation 'com.google.androidbrowserhelper:androidbrowserhelper:2.7.3'
+}
