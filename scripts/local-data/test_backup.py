@@ -343,12 +343,14 @@ class BackupTests(unittest.TestCase):
                     db.execute("PRAGMA journal_mode=WAL")
                     db.execute("PRAGMA wal_autocheckpoint=0")
                     counter = 0
-                    ready.set()
                     while not stop.is_set():
                         db.execute("BEGIN IMMEDIATE")
                         version = f"synthetic-writer-{counter}"
                         db.execute("UPDATE source_metadata SET dataset_version=?,source_version=?", (version, version))
                         db.commit()
+                        # The fixture's original versions differ. Signal only
+                        # after the first matching pair is actually committed.
+                        ready.set()
                         counter += 1
             except BaseException as exc: errors.append(exc); ready.set()
         worker = threading.Thread(target=write)

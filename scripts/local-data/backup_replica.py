@@ -33,6 +33,8 @@ def _canonical(value):
 
 
 def _path(value):
+    # On POSIX, abspath would turn a Windows UNC spelling into a local name.
+    _require(not os.fspath(value).startswith(("\\\\", "//")), "network paths are not supported")
     path = Path(value)
     _require(".." not in path.parts, "parent traversal is not allowed")
     _require(not path.drive or path.is_absolute(), "drive-relative paths are not supported")

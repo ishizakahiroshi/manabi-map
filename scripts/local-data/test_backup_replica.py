@@ -70,6 +70,13 @@ class ReplicaTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             replica.replicate_backup(self.source, self.destination, apply=1)
 
+    def test_raw_unc_is_rejected_before_platform_path_resolution(self):
+        for raw in (r"\\synthetic-host\synthetic-share\attempt", "//synthetic-host/synthetic-share/attempt"):
+            with self.subTest(raw=raw), patch.object(replica.os.path, "abspath") as resolve:
+                with self.assertRaisesRegex(ValueError, "network paths"):
+                    replica._path(raw)
+                resolve.assert_not_called()
+
     def test_copy_manifest_last_and_idempotent_without_cloud_claim(self):
         writer, seen = replica._write_new, []
         def observe(path, data, owned):

@@ -393,7 +393,10 @@ class CoreTests(unittest.TestCase):
         before = self.state()
         with closing(store.connect(self.db)) as lock:
             lock.execute("BEGIN IMMEDIATE")
-            self.rejected(self.payload)
+            # Do not use rejected(): its raw read_bytes open/close releases
+            # this process's POSIX advisory lock on the same SQLite file.
+            # Compare state only after the lock has been rolled back below.
+            self.ingest(self.payload, ok=False)
             lock.rollback()
         self.assertEqual(before, self.state())
         self.payload["dataset_version"] = "committed-before-report"
