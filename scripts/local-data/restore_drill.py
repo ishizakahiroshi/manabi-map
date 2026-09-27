@@ -1,7 +1,7 @@
 """Inactive, owned-new-target restore runner with explicit reviewed inputs.
 
-No connection implementation is shipped. Adapter receipts are attestations that
-a future adapter must obtain from the actual target, not configuration flags.
+restore_pg_adapter supplies explicit PostgreSQL connections. Adapter receipts
+must come from the actual target, not configuration flags.
 transaction() must cover dump/ACL restoration and validation atomically. A target
 which cannot do that is rejected; non-atomic provider restore is unsupported.
 On failure, destruction is attempted only for the exact created ownership lease.

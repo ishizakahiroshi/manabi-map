@@ -1,7 +1,8 @@
 """Inactive, injected transport for an explicitly selected restore generation.
 
 There is no CLI, network, filesystem, environment lookup, key loading or built-in
-encryption. A separately reviewed adapter must supply authenticated encryption
+encryption in this core. restore_transport_adapters supplies explicit age and
+create-only storage adapters. An adapter must supply authenticated encryption
 and atomic create-only storage. Codec identifiers are metadata, not proof that
 the codec is secure. Test codecs must never be wired into an operational adapter.
 

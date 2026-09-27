@@ -1,4 +1,4 @@
-"""Inactive snapshot orchestration. No concrete DB adapter, CLI or credentials.
+"""Inactive snapshot orchestration. No CLI or implicit credentials.
 
 Adapter contract: protect(scope) owns a non-MVCC freeze until context exit;
 snapshot() holds a READ ONLY/REPEATABLE READ export until context exit. collect
@@ -6,7 +6,8 @@ must import that snapshot before any read; dump must use the same snapshot.
 check() raises on lost ownership/liveness. inventory() covers the agreed frozen
 sequence/role/DDL/provider state. Every method receives a monotonic deadline.
 The core checks elapsed time between calls, not a hard interrupt of a blocked
-adapter. A future real adapter must enforce subprocess/network deadlines itself.
+adapter. restore_pg_adapter supplies explicit PostgreSQL connections and hard
+subprocess deadlines; its reviewed scope and external freeze remain prerequisites.
 """
 
 from time import monotonic

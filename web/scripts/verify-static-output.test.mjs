@@ -4,7 +4,9 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import test from 'node:test'
-import { gzipSync } from 'node:zlib'
+import { gzipSync, gunzipSync } from 'node:zlib'
+import { produceSchoolRelease } from './lib/school-release-producer.mjs'
+import { validateSchoolRelease } from './lib/school-release.mjs'
 
 import {
   isDetailSchool,
@@ -441,6 +443,33 @@ async function syntheticDist() {
   ].join('\n'))
   return dir
 }
+
+test('complete synthetic distribution passes the actual producer field gate and creates a validated release receipt', async (t) => {
+  const dir = await syntheticDist()
+  t.after(() => rm(dir, { recursive: true, force: true }))
+  const manifestPath = join(dir, 'schools-manifest.json')
+  const manifest = JSON.parse(await readFile(manifestPath, 'utf8'))
+  manifest.generatedAt = '2026-08-06T00:00:00.000Z'
+  await writeFile(manifestPath, JSON.stringify(manifest))
+  const payload = JSON.parse(gunzipSync(await readFile(join(dir, manifest.url.slice(1)))))
+  for (const row of payload.schools) { row.record_key = `school-${row.id}`; row.is_integrated = false }
+  const generatorSnapshot = Buffer.from(JSON.stringify(payload))
+  await writeFile(join(dir, manifest.url.slice(1)), gzipSync(generatorSnapshot))
+  const schools = payload.schools.map((row) => toPublicSchoolRecord(row, payload.sourceCatalog, manifest.generatedAt))
+  for (const path of ['api/v1/schools.json', 'api/v1/schools/gunma.json']) {
+    const api = JSON.parse(await readFile(join(dir, path), 'utf8'))
+    api.schools = schools
+    await writeFile(join(dir, path), JSON.stringify(api))
+  }
+  const result = await produceSchoolRelease({ distDir: dir, generatorSnapshot, generation: 'synthetic-release',
+    candidateRevision: 'b'.repeat(40), evidence: 'synthetic' })
+  const receipt = validateSchoolRelease(result.raw, result.pin, result.artifacts)
+  assert.equal(receipt.evidence, 'synthetic')
+  assert.equal(receipt.generation, 'synthetic-release')
+  assert.ok(result.files.has('index.html'))
+  assert.ok(result.files.has('_routes.json'))
+  assert.equal(result.artifacts.has('index.html'), false)
+})
 
 test('gzip magic, manifest, sitemap, all pages and size gate pass together', async (t) => {
   const dir = await syntheticDist()

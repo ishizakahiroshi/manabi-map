@@ -1,5 +1,13 @@
 # 合成データ用のSQLite原本試作
 
+## 明示接続のPostgreSQL復元アダプター
+
+`restore_pg_adapter.py` は明示した接続先と期限を使い、同snapshotの採取、新規復元先の所有確認、transaction内外の照合を行う。`restore_pg_catalog.py` はPostgreSQL 18の明示allowlistからcatalog収集・ACL再生のSQL候補を生成する。候補のhashは提案値であり、独立レビュー後のpin採用、dumpのTOCと復元SQLのレビューを別に行う。未支持のobjectは無視せず拒否する。
+
+`restore_transport_adapters.py` の `AgeCodec` / `R2Store` / `FilesystemStore` は `restore_transport.prepare` → `publish` → `recover` に接続する。独立して保持したpinで復号前のサイズ・hashを検査し、復帰後は `restore_bundle.validate` へ渡す。環境からの認証探索や自動起動CLIはなく、既存workflowも切り替えない。
+
+保証は支持するDB部分に限る。非MVCCの全writer停止は外部controllerの責任で、freeze receipt自体はロックではない。役割は復元先に同一定義で存在する必要があり、role作成・パスワード・外部providerは扱わない。秘密を含むSQL、bundle、接続情報やidentityは公開fixtureやログへ保存しない。通常のoffline試験は `python -B -m unittest discover -s scripts/local-data -p "test_restore_*.py"`。合成試験の成功は実対象の復元検収を意味しない。
+
 ## C2 世代バックアップと復元
 
 学校schema 3の世代作成・検証・別場所への復元は`backup.py`、ローカル複製と削除しない保持候補の検査は`backup_replica.py`。既定はdry-run。実行方法と検証境界は[バックアップ契約](../../docs/reference_sqlite-backup-contract.md)を参照する。公開用snapshotと原本DBのバックアップは別物で、原本DBを配信フォルダへ置かない。Google Driveの同期や別媒体への実配置は、この合成実装だけでは完了しない。
