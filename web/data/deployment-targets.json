@@ -1,0 +1,17 @@
+{
+  "formatVersion": 1,
+  "targets": {
+    "school": {
+      "origin": "https://school.manabi-map.app",
+      "pagesProject": "manabi-map-school",
+      "outputDirectory": "dist-school-portal",
+      "kind": "school-directory"
+    },
+    "high-school": {
+      "origin": "https://high-school.manabi-map.app",
+      "pagesProject": "manabi-map-high-school",
+      "outputDirectory": "dist-high-school",
+      "kind": "high-school-app"
+    }
+  }
+}

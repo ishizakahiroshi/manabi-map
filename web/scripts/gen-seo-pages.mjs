@@ -1,6 +1,8 @@
 // ビルド後に実行する SEO ページ生成スクリプト。
 //
 //   node scripts/gen-seo-pages.mjs [--dist <dir>]
+// Synthetic-only local candidate: add --synthetic-candidate=<verified JSON candidate directory>.
+// This never relaxes the normal 1000-school production guard.
 //
 // dist/index.html をテンプレートに、以下を生成する:
 //   - dist/school/<id>/index.html（全校分。固有 title / description / OGP / canonical /
@@ -35,6 +37,7 @@ import {
   formatDatasetCoverage,
 } from './lib/public-api.mjs'
 import { SITE_ORIGIN } from './lib/site.mjs'
+import { createSeoDataReader } from './lib/school-seo-candidate.mjs'
 import { cityPageDescription } from './lib/city-breakdown.mjs'
 // 近隣校の選定・距離計算と選抜実績の集計・後継校の逆引きは React 側と同一実装を共有する
 // （tsx 経由で .ts を直 import（package.json の scripts が tsx で起動する。Node の type stripping には依存しない — Cloudflare Pages のビルドイメージは pnpm 同梱の preinstall Node しか使えないため）。フォーク禁止 —
@@ -65,6 +68,7 @@ const here = dirname(fileURLToPath(import.meta.url))
 const webRoot = join(here, '..')
 const distArgIndex = process.argv.indexOf('--dist')
 const distDir = distArgIndex >= 0 ? process.argv[distArgIndex + 1] : join(webRoot, 'dist')
+const { minimumExpected: MIN_EXPECTED, readData } = await createSeoDataReader(process.argv.slice(2), distDir)
 
 const rawTemplate = await readFile(join(distDir, 'index.html'), 'utf8')
 
@@ -77,21 +81,21 @@ const COVERAGE_PLACEHOLDER = '__COVERAGE__'
 // manifest が無い場合は従来の `schools.json` にフォールバックする。
 async function resolveSchoolsPath() {
   try {
-    const manifestText = await readFile(join(distDir, 'schools-manifest.json'), 'utf8')
+    const manifestText = await readData('schools-manifest.json', 'utf8')
     const manifest = JSON.parse(manifestText)
-    if (manifest?.url) return join(distDir, manifest.url.replace(/^\//, ''))
+    if (manifest?.url) return manifest.url.replace(/^\//, '')
   } catch (err) {
     if (err?.code !== 'ENOENT') throw err
   }
-  return join(distDir, 'schools.json')
+  return 'schools.json'
 }
 const schoolsPath = await resolveSchoolsPath()
-const schoolsFile = await readFile(schoolsPath)
+const schoolsFile = await readData(schoolsPath)
 const schoolsText = schoolsPath.endsWith('.gz') ? gunzipSync(schoolsFile).toString('utf8') : schoolsFile.toString('utf8')
 const schoolsPayload = JSON.parse(schoolsText)
 const schools = Array.isArray(schoolsPayload) ? schoolsPayload : schoolsPayload.schools
 if (!Array.isArray(schools)) throw new Error('schools payload has an unsupported format')
-const publicDataset = JSON.parse(await readFile(join(distDir, 'api', 'v1', 'dataset.json'), 'utf8'))
+const publicDataset = JSON.parse(await readData('api/v1/dataset.json', 'utf8'))
 
 // gen-schools-json.mjs は出典 object を sourceCatalog の index へ圧縮している。
 // 選抜実績の出典脚注に使うため、useSchools.ts の hydrateUnitSources と同様に
@@ -600,7 +604,7 @@ async function renderSchoolPage(school) {
   // 単体 JSON（gen-schools-json.mjs が dist へ出したもの）をそのまま渡して SSR する。
   // 同じ payload を #root の外へ埋め、ブラウザの初回 render でも同じ内容を描かせる。
   const payload = JSON.parse(
-    await readFile(join(distDir, 'school-data', `${school.id}.json`), 'utf8'),
+    await readData(`school-data/${school.id}.json`, 'utf8'),
   )
   const rendered = renderApp(`/school/${school.id}`, { schoolDetail: payload })
   return withRootContent(
@@ -619,7 +623,6 @@ const targets = schools.filter((s) => s.latitude != null && s.longitude != null)
 if (targets.length === 0) {
   throw new Error('gen-seo-pages: 生成対象 0 件。schools.json の取得に失敗している可能性あり')
 }
-const MIN_EXPECTED = 1000
 if (targets.length < MIN_EXPECTED) {
   throw new Error(
     `gen-seo-pages: 生成 ${targets.length} 件は下限 ${MIN_EXPECTED} 未満。データ大幅欠損の疑い`
@@ -687,7 +690,7 @@ if (activePrefectures.length === 0) {
  */
 async function readPrefIndex(pref, prefSchools) {
   const prefIndex = JSON.parse(
-    await readFile(join(distDir, 'school-data', `pref-index-${pref.slug}.json`), 'utf8'),
+    await readData(`school-data/pref-index-${pref.slug}.json`, 'utf8'),
   )
   if (prefIndex?.slug !== pref.slug || !Array.isArray(prefIndex.schools) || !Array.isArray(prefIndex.cities)) {
     throw new Error(`gen-seo-pages: pref-index が不正です: ${pref.slug}`)

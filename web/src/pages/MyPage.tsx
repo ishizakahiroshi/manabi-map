@@ -10,6 +10,7 @@ import type { useUserData } from '../hooks/useUserData'
 import { FamilyShareSheet } from '../components/FamilyShareSheet'
 import { SiteMoveGuestNotice } from '../components/SiteMoveNotice'
 import { countMyData } from '../lib/export'
+import './MyPage.css'
 
 interface Props {
   userData: ReturnType<typeof useUserData>
@@ -98,6 +99,11 @@ export function MyPage({ userData, favCount, noteCount }: Props) {
             <div className="sb-name">{displayName}</div>
             <div className="sb-stat">{t('nav.favStat', { fav: favCount, note: noteCount })}</div>
           </div>
+          {session && (
+            <button type="button" className="mypage-logout" onClick={() => void handleSignOut()}>
+              {t('nav.logout')}
+            </button>
+          )}
         </section>
 
         {!session && (
@@ -243,12 +249,6 @@ export function MyPage({ userData, favCount, noteCount }: Props) {
             })
           )}
         </section>
-
-        {session && (
-          <button className="mypage-logout" onClick={() => void handleSignOut()}>
-            {t('nav.logout')}
-          </button>
-        )}
       </main>
       <FamilyShareSheet open={familyOpen} onClose={() => setFamilyOpen(false)} />
     </div>

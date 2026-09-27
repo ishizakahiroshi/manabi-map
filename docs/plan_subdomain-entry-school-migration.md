@@ -17,7 +17,7 @@ ai_author_model_id: unknown
 ai_author_model_display: unknown
 ai_author_reasoning: unknown
 ai_author_model_source: unavailable
-ai_execution_refs: [AIX-20260927T012339619-802f5465, AIX-20260927T013035154-418add22, AIX-20260927T014245084-b8ed6267, AIX-20260927T020842634-377a5976, AIX-20260927T022021395-e4091a1f, AIX-20260927T023525215-afd3f979, AIX-20260927T025536733-91e225ce, AIX-20260927T033306106-5d29fec0, AIX-20260927T042101147-61a75c66, AIX-20260927T043840191-2ce59749, AIX-20260927T045329626-7282b173, AIX-20260927T045915321-c91c2c5c, AIX-20260927T133203809-1be98664, AIX-20260927T134321078-340d3dfa, AIX-20260927T224037255-d31ce0ae]
+ai_execution_refs: [AIX-20260927T012339619-802f5465, AIX-20260927T013035154-418add22, AIX-20260927T014245084-b8ed6267, AIX-20260927T020842634-377a5976, AIX-20260927T022021395-e4091a1f, AIX-20260927T023525215-afd3f979, AIX-20260927T025536733-91e225ce, AIX-20260927T033306106-5d29fec0, AIX-20260927T042101147-61a75c66, AIX-20260927T043840191-2ce59749, AIX-20260927T045329626-7282b173, AIX-20260927T045915321-c91c2c5c, AIX-20260927T133203809-1be98664, AIX-20260927T134321078-340d3dfa, AIX-20260927T224037255-d31ce0ae, AIX-20260927T233259210-a4511260]
 ---
 
 # [計画] 総合入口と学校サブドメインへの移行
@@ -26,12 +26,12 @@ ai_execution_refs: [AIX-20260927T012339619-802f5465, AIX-20260927T013035154-418a
 
 | C | 種別 | 内容 | 子 plan | 備考/注意点 | AI実行 | 実行モデル |
 |---|---|---|---|---|---|---|
-| C1 | planned | URL対応表・配信単位・容量を確定する | [SQLite原本・静的生成](plan_subdomain-entry-school-migration_c1_sqlite-static-source.md) | 調査中。料金・拡張・利用者引継ぎを比較し、未決のURLと配信方式を確定する | AIX-20260927T025536733-91e225ce; AIX-20260927T033306106-5d29fec0; AIX-20260927T042101147-61a75c66; AIX-20260927T043840191-2ce59749; AIX-20260927T045329626-7282b173; AIX-20260927T045915321-c91c2c5c; AIX-20260927T133203809-1be98664; AIX-20260927T134321078-340d3dfa | implementation: openai / unknown / unknown; implementation: openai / unknown / unknown; implementation: openai / unknown / unknown; implementation: openai / unknown / unknown; implementation: openai / unknown / unknown; implementation: openai / unknown / unknown; implementation: openai / gpt-6-sol / high; review: openai / unknown / unknown |
+| C1 | planned | URL対応表・配信単位・容量を確定する | [SQLite原本・静的生成](plan_subdomain-entry-school-migration_c1_sqlite-static-source.md) | ホストと別Pages方針は採用済み。経路ごとの互換動作・実Pages割当・容量・利用者引継ぎの未検収を詰める | AIX-20260927T025536733-91e225ce; AIX-20260927T033306106-5d29fec0; AIX-20260927T042101147-61a75c66; AIX-20260927T043840191-2ce59749; AIX-20260927T045329626-7282b173; AIX-20260927T045915321-c91c2c5c; AIX-20260927T133203809-1be98664; AIX-20260927T134321078-340d3dfa; AIX-20260927T233259210-a4511260 | implementation: openai / unknown / unknown; implementation: openai / unknown / unknown; implementation: openai / unknown / unknown; implementation: openai / unknown / unknown; implementation: openai / unknown / unknown; implementation: openai / unknown / unknown; implementation: openai / gpt-6-sol / high; review: openai / unknown / unknown; implementation: openai / unknown / unknown |
 | C2 | planned | 学校入口と高校版の経路・認証・SEOを整える | — | C1の確定表を画面・静的生成・Functionsへ同時反映 |  |  |
 | C3 | planned | 総合入口と旧URL互換配信を作る | — | C2のURL・公開API成果物を使用。独立した配信先で検収 |  |  |
 | C4 | planned | 並行公開・予告・切替・観察を行う | — | 本番反映は別途明示指示。失敗時は公開先と転送を戻す |  |  |
 
-実行順序: 総合入口のグランドデザイン確認済み → `C1 → C2 → C3 → C4`。C1は調査中・未完了、C2〜C4の実装・公開は未着手。2026-09-27、ユーザーが総合入口の方向性を採用し、将来の全学校種別への対応予定の明記を指示した。同日の検討シート回答で、Q0「C1調査へ進む」、A2「総合入口は同じリポ内」、B1「private側のブランド対応も学校・総合入口と同じ準備期間」を採用した。A1「高校入口のURL」は料金・上限・拡張の調査待ちで未決定。後続の包括承認は、この判断材料の調査・文書とHTMLの改訂を並列で進める指示として扱う。
+実行順序: 総合入口のグランドデザイン確認済み → `C1 → C2 → C3 → C4`。C1全体は未完了だが、2026-09-27に学校入口 `school.manabi-map.app` と高校入口 `high-school.manabi-map.app` の別Pages・別出力を採用した。高校をschool配下のサブディレクトリへ集約する案は不採用。同じリポ内で入口を管理するA2と、将来の全学校種別への対応予定を明記する方針は維持する。最新承認では候補のローカル実装・合成ビルド・検証・commitに着手し、C2の準備を先行する。本番配備・DNS・実認証・公開日は未承認/未検収であり、C2〜C4の完了とは扱わない。
 
 先行資料: [採用したグランドデザイン](reference_portal-grand-design.md)・[画面と構成のプレビュー](design_portal-grand-design_2026-09-27.html)。C3の設計基準とする。当面は現名称を継続し、総合入口と学校サービスの表示ブランドを独立して切り替えられる設計にする。新名称の決定を移行の前提にしない。変更時は候補の先行利用・商標の一次確認を行う。デザインの採用を本番移行の承認とは扱わない。
 
@@ -39,26 +39,28 @@ ai_execution_refs: [AIX-20260927T012339619-802f5465, AIX-20260927T013035154-418a
 
 ## 概要
 
-### 最新の再開入口: URL・Android受入調査の統合（2026-09-27）
+### 最新の再開入口: 別ホスト・別Pagesの採用（2026-09-27）
+
+正式入口の設計は、学校一覧が `https://school.manabi-map.app/`、高校・高専が `https://high-school.manabi-map.app/`。総合入口のapexも別配信にする。URLを分けるだけでなく、学校入口に高校の全HTML/JSONを同梱せず、Pagesプロジェクトと出力ディレクトリを分離する。ファイル上限は配信先単位なのでサブディレクトリでは枠を分けられない。設定候補は `web/data/deployment-targets.json`、ローカル生成は `web/scripts/build-school-candidates.mjs`、容量検査は `web/scripts/verify-deployment-capacity.mjs` を入口とする。設定内のプロジェクト名はローカル候補IDで、Cloudflare上の作成済み状態を表さない。既存 `web/data/site.json` は本番切替まで維持する。
 
 経路、認証・保存、Android、切替と復旧の調査成果を本書へ反映した。固定した入力に対する局所試験と合成の経路試験の成功は報告済みだが、新しい学校経路・総合入口・旧origin救済・公開TWAの実装と実環境検収は残る。この追記では試験を再実行しておらず、C1の確定完了やC2〜C4の完了にはしない。過去の移転準備とAndroid試作の実績も保持する。
 
-再開順は、**D1の正式URL・配信単位を確定 → D2の切替中の公開API世代を確定 → C2/C3の経路・旧認証救済・互換配信を実装 → Web検収 → Android検収 → D3の期間と復旧目標・公開日を判断**。D4の公開Android IDはWeb検収後に決める。旧計画の「同じパスを一括転送」を、新しい総合入口・高校入口へそのまま適用しない。今回の成果統合の包括承認を、未回答の選択肢の採用記録にはしない。
+再開順は、**採用済みD1で分離候補・容量を検証 → D2の切替中の公開API世代を確定 → C2/C3の旧認証救済・互換配信を実装 → Web検収 → Android検収 → D3の期間と復旧目標・公開日を判断**。D4の公開Android IDはWeb検収後に決める。旧計画の「同じパスを一括転送」を、新しい総合入口・高校入口へそのまま適用しない。D1の採用をD2〜D4の採用へ広げない。
 
-| ID / 決める時点 | 未採用の推奨案 | 選択が変えるもの |
+| ID / 決める時点 | 採用内容または未採用の推奨案 | 選択が変えるもの |
 |---|---|---|
-| D1 / C2着手前 | `https://school.manabi-map.app/high-school/`を高校・高専入口とし、詳細・地域・認証は学校origin直下。学校は既存Pages、総合入口は別出力・別Pages | 種別専用hostのroot案は配信枠を分けやすいがorigin・認証・DALの管理が増える。正式URLと配信単位は依然未決 |
-| D2 / C3配備設計前 | URL切替中は完成済み公開APIの世代G0を固定して両originへ配布。原本更新の公開は切替後 | 一時的なG0/G1混在を許容するなら許容時間・公開順・検知・復旧条件が必要。固定中の緊急修正は切替を中止して再検収 |
+| D1 / 採用済み | 学校入口 `https://school.manabi-map.app/` と高校・高専 `https://high-school.manabi-map.app/` は別Pages・別出力。総合入口も別配信 | 高校の詳細・地域・認証・データは高校originへ。容量枠を分離する。実プロジェクト割当、認証・DAL設定、DNSと切替は未実施 |
+| D2 / C3配備設計前 | URL切替中は完成済み公開APIの世代G0を固定して旧apexとhigh-schoolへ配布。原本更新の公開は切替後 | 一時的なG0/G1混在を許容するなら許容時間・公開順・検知・復旧条件が必要。固定中の緊急修正は切替を中止して再検収 |
 | D3 / C4公開日決定前 | 事前告知14日以上、切替後の旧origin救済・旧資産保持28日以上を設計上の下限候補とする | 長い候補は事前28日・切替後56日以上。利用状況と保管負担を確認して決める。復旧30分以内も未実測の目標候補。期間満了だけで旧保存を削除せず、旧APIは停止しない |
 | D4 / Web検収後、Android公開準備前 | 試作IDを残し、表示ブランドに依存しない公開用packageを別に確定する | 自分用試用を先行する案もある。公開用ID・署名・DAL・ストア登録の確定や実施はまだない |
 
 AIが詰める必須事項は、旧callback専用の学校シェル、旧originでの連携・招待再開、旧世代資産の参照関係、PWA scope、保守時の認証/DAL応答、API世代比較と片側失敗時の復旧。これらを「直すかどうか」の選択に戻さず、C2〜C4の実装・検収条件として扱う。以下の本文と公開コードから再調査でき、非公開の作業資料がなくても再開可能とする。
 
-`manabi-map.app` を学校探しと学習コンテンツの総合入口とし、既存の高校・高専検索を機能名のサブドメインへ移す。`school.manabi-map.app` と高校入口のパスは比較中の候補で、最終採用はC1に残る。既存の学校詳細、検索結果、お気に入り、家族メモ、公開APIを継続して使える移行にする。
+`manabi-map.app` を学校探しと学習コンテンツの総合入口とし、学校種別入口を `school.manabi-map.app`、既存の高校・高専検索を `high-school.manabi-map.app` へ置く。既存の学校詳細、検索結果、お気に入り、家族メモ、公開APIを継続して使える移行にする。
 
 本書は2026-09-27(日)時点の公開可能な実装計画。採用範囲は総合入口・学校サイトの配置・既存高校版の移行に限定する。全体戦略の内部資料、検討履歴、別サービスの事業判断・開発日程・構成詳細、非公開の実測利用者数は転記しない。実装担当は本書と公開リポジトリのコードから着手できる。
 
-現在はC1の調査と判断資料の改訂まで。コード、DNS、Cloudflare、認証設定、DBを変更していない。`due` は計画の再確認目安であり、公開予定日ではない。commit・push・tag・build・本番反映・DB操作はそれぞれユーザーの明示指示があるまで行わない。
+現在は分離候補のローカル実装・合成検証に着手している。DNS、Cloudflareの実配備、認証設定、本番DBは変更しない。`due` は計画の再確認目安であり、公開予定日ではない。今回のローカルbuild・commit承認をpush・tag・本番反映・実DB操作の承認に広げない。
 
 ## 現行構成と再利用する準備
 
@@ -88,14 +90,15 @@ AIが詰める必須事項は、旧callback専用の学校シェル、旧origin�
 
 **採用する仕様**: 総合入口と学校サイトを分ける。総合入口の「高校を探す」と共有・検索導線は目的の画面へ直接つなぐ。schoolトップは種別を選ぶだけの中間画面にせず検索も置く。学校種別の追加、データ統合、新DB、共通認証サーバーは今回実装しない。家族共有・お気に入り・認証・公開データのガードは維持する。
 
-**本計画の初期実装案（再比較中）**: 学校は既存Pagesを再利用し、総合入口は同じリポ内の別ビルド・別Pagesへ置く。高校入口を `/high-school/` にまとめる案に加え、2026-09-27の追加協議で学校種別ごとのサブドメイン・別Pagesと、大きな種別の地域別配信を比較対象にした。旧A1のパス二択は、配信構成の選択後に再確定する保留項目とする。下記の図・URL対応表は初期案の履歴を兼ねた候補であり、そのまま実装へ進む確定表ではない。新しいホスト名・東西の境界・分割数は未採用。総合入口を同じリポで管理するA2の採用は維持する。
+**採用した配信構成**: 学校入口・高校版・総合入口を同じリポの別ビルド・別Pagesへ置く。高校を `/high-school/` に集約する旧案は不採用。下記のURL表は採用ホストへ更新した実装基準であり、転送・認証・実配備が完了した証拠ではない。将来の学校種別追加に伴う地域境界や分割数は未決。既存Pagesをどの役割へ割り当てるかは、実配備時に管理設定と整合させる。
 
 ```text
 manabi-map.app/                 総合入口（新しいportal配信）
-  高校を探す ────────────────→ school.manabi-map.app/high-school/
+  高校を探す ────────────────→ high-school.manabi-map.app/
   学習コンテンツ ────────────→ kanji.manabi-map.app/ など公開確認済みの行き先
 school.manabi-map.app/          学校種別と検索を同じ画面に置く学校入口
-  high-school/                 既存高校版への直接入口（C1で確定）
+  高校・高専を探す ───────────→ high-school.manabi-map.app/
+high-school.manabi-map.app/     既存高校版（独立したPagesと出力）
   school/:id/                  高校・高専の安定IDによる詳細（共通経路案）
   api/v1/*                     学校の公開データ
 manabi-map.app/api/v1/*         旧クライアント向けの互換応答を維持
@@ -105,7 +108,7 @@ manabi-map.app/api/v1/*         旧クライアント向けの互換応答を維
 
 学校枠には「現在は高校・高専。今後、すべての学校種別を順次用意する予定です。」と表示する。大学・専門学校は進学先という共通の枠を持つが、分類・検索・見せ方の違いは別途検討する。全種別対応の方針は、今回の移行で全種別のデータ・機能を実装する指定ではない。
 
-## URL移行の初期対応表（C1で確定する案）
+## URL移行の対応表（採用ホスト、実環境未検収）
 
 ブランドと接続先の設定は分離する。表示名を変更しても下記のURL・学校ID・保存データは自動変更しない。将来ドメイン自体を移す必要が生じた場合は、origin設定・認証・転送・検索・利用者案内を別の移行として扱う。
 
@@ -114,20 +117,20 @@ manabi-map.app/api/v1/*         旧クライアント向けの互換応答を維
 | 現在のapex上の経路 | 最終配置案・互換動作 |
 |---|---|
 | `/` | 最終的に総合入口を200で返す。入口完成までの302を使う場合も恒久301にしない |
-| `/map`、`/search`、`/schools/` | schoolの `/high-school/map`、`/high-school/search`、`/high-school/` へ対応転送。地図座標・検索条件を保持 |
-| `/school/:id/` | schoolの同じ詳細パスへ301。高専も安定IDと実際の種別を保つ |
-| `/pref/:pref/`、`/pref/:pref/:city/` | schoolの同じパスへ301。当面は現行高校・高専データの地域ページ。全学校種を網羅すると表記しない |
-| `/favorites`、`/compare`、`/mypage`、`/dashboard` | schoolの同じパスへ。サーバー上のユーザーデータと管理者ガードを維持 |
-| `/family/join#token=…`、旧 `/family/join?token=…` | schoolの同じ経路へ。fragmentはサーバーに来ないため実ブラウザで確認。旧query形式、旧originでURLからtokenを除去したログイン待ち、リンク再開も別ケースとして検証 |
-| `/auth/callback` | 通常の一括転送から除外。移転期間中は旧originで認証を完了できるようにし、終了後はschoolで再開する案内へ。認証code・verifier・セッションを新originへ転送しない |
-| `/legal/*`、`/guide/*`、`/about/`、`/press/`、`/data/` | 既存の学校向け内容はschoolの同じパスへ301。総合入口独自の説明・規約が必要なら別パスを明示して衝突を防ぐ |
+| `/map`、`/search`、`/schools/` | high-schoolの同じパスへ対応転送。地図座標・検索条件を保持 |
+| `/school/:id/` | high-schoolの同じ詳細パスへ301。高専も安定IDと実際の種別を保つ |
+| `/pref/:pref/`、`/pref/:pref/:city/` | high-schoolの同じパスへ301。当面は現行高校・高専データの地域ページ。全学校種を網羅すると表記しない |
+| `/favorites`、`/compare`、`/mypage`、`/dashboard` | high-schoolの同じパスへ。サーバー上のユーザーデータと管理者ガードを維持 |
+| `/family/join#token=…`、旧 `/family/join?token=…` | high-schoolの同じ経路へ。fragmentはサーバーに来ないため実ブラウザで確認。旧query形式、旧originでURLからtokenを除去したログイン待ち、リンク再開も別ケースとして検証 |
+| `/auth/callback` | 通常の一括転送から除外。移転期間中は旧originで認証を完了できるようにし、終了後はhigh-schoolで再開する案内へ。認証code・verifier・セッションを新originへ転送しない |
+| `/legal/*`、`/guide/*`、`/about/`、`/press/`、`/data/` | 既存の学校向け内容はhigh-schoolの同じパスへ301。総合入口独自の説明・規約が必要なら別パスを明示して衝突を防ぐ |
 | `/api/v1/*` | 両originで同一世代の公開JSONを200 + CORSで返す。転送を前提にしない |
 | `/api/admin/*`、`/api/csp-report` | 一括301から除外。旧画面の存続期間中は従来の認可・POSTを維持、終了後は明示的な終了応答。portalで管理APIを複製しない |
 | `/school-data/*`、各種索引JSON、`/assets/*`、画像、manifest、配布PDF等 | 旧タブと外部参照を棚卸し。存続期間中は旧版アセットとデータを維持し、その後も必要な公開資産は対応URLへ。portal用同名ファイルとの衝突に注意 |
-| `/robots.txt`、`/sitemap.xml`、`/llms.txt` | apexは総合入口用、schoolは学校用。apexの旧サイトマップを無条件転送しない |
+| `/robots.txt`、`/sitemap.xml`、`/llms.txt` | apexは総合入口用、schoolは学校入口用、high-schoolは高校版用。apexの旧サイトマップを無条件転送しない |
 | 存在しない経路 | 404。SPAシェルや総合入口を200で返さない |
 
-`/high-school/` は既存版の利用入口とし、高専の型やIDを高校へ変える指定ではない。画面には「高校・高専」の収録範囲を表示する。詳細・地域・認証・APIまで機械的にprefixを付けない。schoolの旧 `/map` 等を並行公開した場合も、最終経路への互換導線を用意する。
+高校入口のhost名は、高専の型やIDを高校へ変える指定ではない。画面には「高校・高専」の収録範囲を表示する。既存高校版の詳細・地域・認証・APIに `/high-school/` prefixを付けない。schoolは軽量な検索・種別入口として高校版へ送客し、高校版のデータを二重配備しない。表の公開APIを返す「両origin」は旧apexとhigh-schoolを指す。
 
 ## C1: URL対応表・配信単位・容量の確定
 
@@ -135,23 +138,23 @@ manabi-map.app/api/v1/*         旧クライアント向けの互換応答を維
 
 `App.tsx` の全Route、`functions/_middleware.ts` のSPA_ROUTES、`gen-seo-pages.mjs` の全出力、`web/public/` の資産、`functions/api/` のエンドポイントを照合し、上表を実装用の対応表にする。既存移転計画と差がある「パス変更」「portal公開時のapex」「API維持」「認証例外」を確定し、重複する実行指示を残さない。
 
-学校のPages Rootはリポ直下、buildは既存学校用、出力は `web/dist` を基本とする。portalは新設予定 `web/portal/` をRootにし、専用出力を配信する案を検証する。これにより学校の `functions/` をportalへ誤配備しない。Pages上の実際のRoot・build・環境変数名・Custom domains・Preview・DNS・証明書を読み取り確認し、設定名と変更前後だけ記録する。秘密値は書かない。
+現行学校のPages Rootはリポ直下、出力は `web/dist`。新候補では学校入口を `web/school-portal/` から `dist-school-portal`、高校版を `dist-high-school` へ分離する。高校用 `functions/` は静的成果物とは別に管理し、学校入口へ誤配備しない。候補buildのFunctionsソースコピーは本番bundleの完成を意味しない。実配備のRoot・build・環境変数名・Custom domains・Preview・DNS・証明書は別途確認し、設定名と変更前後だけ記録する。
 
 ### 2026-09-27の追加調査と未確定事項
 
 対象の学校Pagesプロジェクトの管理画面で、Rootはリポ直下、buildは `cd web && pnpm install && pnpm build`、出力は `web/dist`、本番ブランチは `main`、自動デプロイ有効、build watchのIncludeは `*` と確認した。同プロジェクトのCustom domainsではapexの接続とSSL有効を確認し、schoolドメインは未登録だった。これは当該プロジェクトの観測範囲であり、他プロジェクトの存在やDNS全体の状態を確定するものではない。同じリポにportalを追加するときは、学校とportalのどちらを再生成する変更か、build watchと共通データ・設定の依存関係も決める。
 
-未確認: Supabase/OAuthの実効許可戻り先、DNS全体、schoolの実接続、実ログイン・連携・招待、両originの本番API照合、契約・請求の細部。公開日、事前告知・旧セッション救済期間、APIの公開順・許容する一時的世代差、復旧目標時間も未決定である。これらを未確認のまま本番公開可とはしない。
+未確認: Supabase/OAuthの実効許可戻り先、DNS全体、schoolとhigh-schoolの実接続、実ログイン・連携・招待、旧apexとhigh-schoolの本番API照合、契約・請求の細部。公開日、事前告知・旧セッション救済期間、APIの公開順・許容する一時的世代差、復旧目標時間も未決定である。これらを未確認のまま本番公開可とはしない。
 
-ソースで確認した更新経路は `SchoolDetailSheet.tsx` → `trigger-snapshot-rebuild` → 単一のPages deploy hook。応答の成功はhookの受付成功であり、公開完了ではない。学校データ生成ごとに `generated_at` が付くため、別々のDB再取得からschoolとportalを生成しても同じ世代になる保証はない。C3で一度生成した成果物を両候補へ配る案と、一つの配信元で互換APIを返す案を比較する。後者に新基盤・課金が必要なら構成差を判断資料へ示す。
+ソースで確認した更新経路は `SchoolDetailSheet.tsx` → `trigger-snapshot-rebuild` → 単一のPages deploy hook。応答の成功はhookの受付成功であり、公開完了ではない。学校データ生成ごとに `generated_at` が付くため、別々のDB再取得からhigh-schoolと旧apexの互換APIを生成しても同じ世代になる保証はない。C3で一度生成した公開API成果物を両候補へ配る案と、一つの配信元で互換APIを返す案を比較する。軽量なschool入口へ学校データは複製しない。後者に新基盤・課金が必要なら構成差を判断資料へ示す。
 
 利用者引継ぎについては、匿名利用者を含む保存データがDBにあること、中心地点のDB復元、家族招待のorigin単位の待機状態を確認した。詳細はC2の表を受入条件の正本とする。コードを読めたことと実際に引き継げたことは分け、外部設定確認と実認証はC4前に残す。
 
 料金・上限の比較条件として、Pages Freeは1サイト20,000ファイル、単一ファイル25 MiB。これは現在の契約がFreeとの確認ではない。残存distの上限との差8,282は追加可能校数ではなく、単一ファイルの全校APIも別に増加を見積もる。学校別HTML + 詳細JSON + 地域 + 共通資産で見積もり、旧HTMLを新旧二重生成せず、互換URLは転送で扱う。URLに `/high-school/` を付けても配信先のファイル上限は分かれない。将来の規模で不足する場合は配信分割を別途検討する。[公式上限](https://developers.cloudflare.com/pages/platform/limits/)
 
-### 費用・将来拡張の比較結果（推奨案、未採用）
+### 費用・将来拡張の初期比較履歴（当時の推奨案）
 
-今回の移行は同じリポ内の学校・portalを別Pagesへ配信する案を推奨する。Workersへの基盤移行と全学校種別のデータ拡張は、この移行の必須作業にはしない。リポの置き場、配信先、URLの階層は別の設計項目であり、A2の採用だけで有料契約や配信方式まで確定したとは扱わない。
+初期比較では同じリポ内の学校・portalを別Pagesへ配信する案を推奨した。採用済みのホストと配信単位は冒頭のD1を正本とする。Workersへの基盤移行と全学校種別のデータ拡張は、この移行の必須作業にはしない。リポの置き場、配信先、URLの階層は別の設計項目であり、A2の採用だけで有料契約や配信方式まで確定したとは扱わない。
 
 Pages有料プランの100,000ファイル枠は、Workers Paidの実行枠とは別。Pages側には `PAGES_WRANGLER_MAJOR_VERSION=4` が必要で、単一ファイル25 MiBの上限は残る。Workers Static AssetsもFree 20,000 / Paid 100,000ファイルで単体25 MiB。後者の増枠にはWrangler 4.34以降が必要。実契約がどのPagesへ適用されるかは未確認。[Pages上限](https://developers.cloudflare.com/pages/platform/limits/)・[Workers静的配信](https://developers.cloudflare.com/workers/static-assets/billing-and-limitations/)
 
@@ -209,17 +212,17 @@ Supabase公式比較ではFreeはDB 500 MB/プロジェクト、月間アクテ�
 
 0 USDの成立を判定するため、現行のSupabaseプラン・組織/プロジェクト数・DB実容量（索引と認証等を含む）・通常/キャッシュ転送の当月値と日次傾向・認証利用者数（匿名を含む）・Storage・Edge Functions・Realtimeの利用量、バックアップ/復元と非活動時の停止条件を確認する。Cloudflareは動的リクエストの日次ピーク・CPU・build回数・各候補生成物を確認する。現時点では実利用量・現請求は未取得。将来校数や転送量を仮定した試算と、観測した数値は分ける。Supabaseを別DBへ置換する場合は認証・RLS・家族共有・バックアップの移植も必要であり、静的配信の分割案に黙って含めない。
 
-### 2026-09-27 M1: 実装前の判断表（未採用の具体案）
+### 2026-09-27 M1: 実装前の判断表（URL採用反映）
 
 今日の調査は初期対応表を具体化するためのソース突合。ライブ設定確認・候補生成・動作検収ではない。現在もsite.jsonはapex、SITE_MOVE.switchDateはnull。候補ホスト定数を採用の証拠とせず、C1全体は未完了のまま。
 
 | 判断項目 | 具体案と推奨理由 | 残る判断・確認 |
 |---|---|---|
-| 高校・高専入口 | 案A: school.manabi-map.app/high-school/と共通詳細パス。種別入口をまとめやすい。案B: 種別専用ホストのrootから検索し別Pagesへ分割。容量を種別ごとに分けやすい。既存高校の移行はAを推奨するが未採用 | Aはprefix経路/SSR/生成の対応が増え、Bは配信・origin・認証の管理が増える。高専のtype=kosenとIDを維持。最終URL/配信単位はユーザー判断待ち |
-| 配信 | 同じリポで学校は既存Pages、portalは別出力・別Pages。学校Functionsはrepo rootに維持。将来はSQLiteの同一候補をWrangler配布 | portalの新規方式、既存Git自動公開との競合解消、hook更新先は未決。過去の管理画面観測を現在の実効設定と扱わない |
-| 旧リンク | 初期対応表どおりパス単位301。地図/検索条件、学校UUID、高専、pref、市、保存画面、家族招待を保持。apex rootはportal 200 | 新URL確定後に全表を確定。fragment/token・末尾slash・未知404・旧資産/既存タブは未検収。callback/APIを包括転送しない |
-| 公開API | 旧apexの/api/v1/*をJSONの200で継続し、新学校側と同じ完成成果物を配る案を推奨。全配列・県別形式・CORS維持 | 公開順・許容世代差・部分失敗時の戻し担当/時間は未決。新種別をv1へ無告知で追加しない |
-| callback | 新学校originの/auth/callbackを許可。旧originで開始した認証は旧origin内で完了。code/verifier/sessionを転送しない | AuthContextの4経路はlocation.originを使用。Supabase許可URL/Site URL、Google/LINE側callbackの実効値、旧認証猶予期間は未確認。provider→SupabaseとSupabase→アプリを区別 |
+| 高校・高専入口 | 採用済み: `high-school.manabi-map.app/`、学校入口は `school.manabi-map.app/`。別Pages・別出力でファイル容量枠を分離する | 高専のtype=kosenとIDを維持。URLは再判断しない。実認証・配備・切替は未検収 |
+| 配信 | 同じリポで学校入口・高校版・総合入口を別出力・別Pages。高校Functionsはrepo rootに維持。将来はSQLiteの同一候補をWrangler配布 | 既存Pages割当、新規方式、Git自動公開との競合解消、hook更新先は未決。過去の管理画面観測を現在の実効設定と扱わない |
+| 旧リンク | 初期対応表どおりパス単位301。地図/検索条件、学校UUID、高専、pref、市、保存画面、家族招待を保持。apex rootはportal 200 | 採用したhigh-schoolへの対応表を全経路で検収する。fragment/token・末尾slash・未知404・旧資産/既存タブは未検収。callback/APIを包括転送しない |
+| 公開API | 旧apexの/api/v1/*をJSONの200で継続し、high-schoolと同じ完成成果物を配る案を推奨。全配列・県別形式・CORS維持 | 公開順・許容世代差・部分失敗時の戻し担当/時間は未決。新種別をv1へ無告知で追加しない |
+| callback | high-school originの/auth/callbackを許可。旧originで開始した認証は旧origin内で完了。code/verifier/sessionを転送しない | AuthContextの4経路はlocation.originを使用。Supabase許可URL/Site URL、Google/LINE側callbackの実効値、旧認証猶予期間は未確認。provider→SupabaseとSupabase→アプリを区別 |
 | 公開条件 | 新旧認証・保存・招待、全URL、API同世代、復旧を確認後に公開日を決める | 日付/猶予/復旧時間、DNS/契約/容量、hook対応は未確認。ドメインと実原本の切替は別工程 |
 
 依存: URL/配信の採用 → 経路・認証・互換実装 → Preview/実認証検収 → 公開日/猶予確定 → 別指示による公開。判断の再確認日は本書dueで、公開日ではない。改修対象の目安はC2〜C4、工数は未見積り。URL非依存のSQLite合成試作は進める。
@@ -232,20 +235,20 @@ Direct Uploadはローカル成果物の配布経路。新規プロジェクト�
 
 SupabaseのredirectToは許可URLへ登録する。productionは正確なURL指定を推奨する公式説明を参照したが、実設定値は未取得。[Redirect URLs](https://supabase.com/docs/guides/auth/redirect-urls)
 
-親レビューで判断表の差分と公式3資料を再確認した。AuthContextの4か所が現在のoriginを戻り先に使うこともソースで照合した。URLの採用、実設定の確認、認証や配信の動作検収は引き続き未実施。
+親レビューで判断表の差分と公式3資料を再確認した。AuthContextの4か所が現在のoriginを戻り先に使うこともソースで照合した。URLはその後のユーザー指示で採用済み。実設定の確認、実認証や本番配信の動作検収は引き続き未実施。
 
 ## C2: 学校入口と既存高校版の移行準備
 
 ### 受入調査で確定した追加条件（2026-09-27）
 
 - **旧callbackの転送除外だけでは不足する。** 調査時の `functions/_middleware.ts` はcallbackへ `ASSETS.fetch('/')` の本文を返し、`AuthCallbackPage.tsx` は成功後に `/` へ戻る。rootを総合入口に置換するとcallbackにも総合入口HTMLが返る合成反例を確認した。旧origin専用の学校認証シェル・必要資産・完了後の新origin再ログイン案内を用意し、認証開始から完了まで旧origin内で成立させる。これは本番障害の観測記録ではない。
-- 未採用の `/high-school/*` と総合入口の経路は調査時点で未実装。URL採用後、Routerの全宣言と静的生成、Functions、公開API、データ・資産、manifest、robots/sitemap、DALまで対応表へ含める。GET/HEAD、末尾slash、query、日本語path、未知URL/学校IDの404、fragmentは別々に検収する。
+- `/high-school/*` prefixは不採用。採用したhigh-school hostでRouterの全宣言と静的生成、Functions、公開API、データ・資産、manifest、robots/sitemap、DALまで対応表へ含める。GET/HEAD、末尾slash、query、日本語path、未知URL/学校IDの404、fragmentは別々に検収する。
 - 匿名連携の旧origin救済を切替後も使えるようにする。現行の旧host予告は切替日の翌日以降に終了するため、その表示期間に依存しない。招待token除去後の旧origin pendingは新originから読めないので、元リンクの再開と旧origin救済を案内する。中心地点は画面表示後の非同期DB保存が成功し、再ログイン・再起動後も復元されるところまで確認する。
-- PWAの開始URLを高校prefixへ変えるときはscopeを明示し、origin直下の学校詳細・callback・家族招待を含める。旧PWA/旧APKが総合入口へ着地する場合の学校案内・更新導線も検収する。開始URLの変更だけで移行完了としない。
+- PWAの開始originをhigh-schoolへ変えるときはscopeを明示し、同originの学校詳細・callback・家族招待を含める。旧PWA/旧APKが総合入口へ着地する場合の学校案内・更新導線も検収する。開始URLの変更だけで移行完了としない。
 
 ### 2026-09-27 M1からの引継ぎ
 
-直前のC1判断表を確定してから着手する。以下に残るschoolやhigh-schoolの記述は初期候補に沿った実装説明であり、URL採用済みを示すものではない。
+正式ホストの採用に沿って分離候補の実装を進める。旧callback・公開API世代・実認証・配備設定を残したままC2全体を完了にしない。以後、学校入口はschool、既存高校版の認証・詳細・保存はhigh-school originを意味する。
 
 実装担当は着手時のAI実行記録へ残す。外部表示の棚卸し責任は運営者、実査担当は実施記録に残す。共通の変更対象台帳は作者環境の `docs/local/reference_brand-and-naming.md`。公開仕様と下記の完了条件は、その非公開文書がなくても読めるものとする。
 
@@ -257,7 +260,7 @@ school `/` に種別と検索を配置し、高校入口に現在の検索・地
 
 経路設定をRouter、内部リンク、共有URL、QR、JSON-LD、canonical、sitemap、OpenAPI、llmsへ反映する。`origin` にパスを混ぜない。SSRの `data-mm-route` とclient経路を一致させ、`isPrerenderedForRoute` の判定・初回storage復元・静的importの不変条件を維持する。SPA fallbackは既存middlewareで扱い、全パスの200化をしない。
 
-ゲストには移転前のGoogle/LINE連携を案内し、連携済み利用者にはschoolでの再ログインを案内する。既存の `switchDate` は公開日合意までnullを維持する。`noticeDays: 28` は切替後のお知らせ表示期間であり、事前告知やゲスト救済の猶予日数ではない。ログイン開始originとcallbackを一致させる。
+ゲストには移転前のGoogle/LINE連携を案内し、連携済み利用者にはhigh-schoolでの再ログインを案内する。既存の `switchDate` は公開日合意までnullを維持する。旧 `site-move.ts` のschool向け設定はまだ有効化せず、実切替の実装時に採用したhigh-schoolへ更新する。`noticeDays: 28` は切替後のお知らせ表示期間であり、事前告知やゲスト救済の猶予日数ではない。ログイン開始originとcallbackを一致させる。
 
 | 引継ぎ対象 | 現行コードから分かる条件 | 移行時の確認 |
 |---|---|---|
@@ -268,7 +271,7 @@ school `/` に種別と検索を配置し、高校入口に現在の検索・地
 | 家族招待 | `FamilyJoinPage.tsx` はfragment優先で旧queryも読取。tokenをURLから除去し、ログイン往復用pendingを旧originへ10分保存する | 新旧URL、token除去後のログイン待ち、期限切れ、リンク再開を分けて確認。旧originのpendingが新originに移ったとは扱わない |
 | マイデータJSON | `lib/export.ts` のダウンロードは可読データで内部IDを含まない | 保存用控えとして扱う。これだけで自動復元・移行ができるとは案内しない |
 
-旧認証の猶予中はcallback単体でなく、その画面と連携完了に必要な旧JS/CSS・manifest・学校データ・APIの受け皿を維持する。既存タブが遅延importや古いハッシュ付きJSONを要求するケースを合成データで試す。`gen-schools-json.mjs` は旧ハッシュ付きJSONを生成時に掃除するため、必要な旧資産の保持期間・配置・終了応答を明示する。apexとschoolの間で認証code、verifier、セッションを転送する仕組みは追加しない。
+旧認証の猶予中はcallback単体でなく、その画面と連携完了に必要な旧JS/CSS・manifest・学校データ・APIの受け皿を維持する。既存タブが遅延importや古いハッシュ付きJSONを要求するケースを合成データで試す。`gen-schools-json.mjs` は旧ハッシュ付きJSONを生成時に掃除するため、必要な旧資産の保持期間・配置・終了応答を明示する。apexとhigh-schoolの間で認証code、verifier、セッションを転送する仕組みは追加しない。
 
 変更予定ファイル: `web/data/site.json`・C1の経路設定、`web/src/App.tsx`・`AppTree.tsx`・`main.tsx`・`entry-server.tsx`、`web/src/pages/` の上表該当ページ（学校入口は新設。`AuthCallbackPage.tsx`・`FamilyJoinPage.tsx`を含む）、`web/src/components/Sidebar.tsx`・`SiteFooter.tsx`・`BottomTabBar.tsx`・`HeroQrCode.tsx`・`SchoolDetailSheet.tsx`、`web/data/site-footer-links.json`、`web/src/hooks/useFamilyShare.ts`・`useSiteMoveNotice.ts`・`useUserData.ts`、`web/src/contexts/AuthContext.tsx`・`AppContext.tsx`・`I18nContext.tsx`、`web/src/data/site-move.ts`、`web/src/components/SiteMoveNotice.tsx`、`web/src/lib/siteMove.ts`・`ssrRoute.ts`・`mapView.ts`・`export.ts`、`web/src/i18n/ja.ts`・`en.ts`、`web/public/manifest.webmanifest`。既に不変条件を満たすファイルは確認と既存テストの再利用にとどめる。
 
@@ -294,12 +297,12 @@ D2の方針に沿って候補SHA・両配備ID・公開データ世代・全API�
 
 新設予定 `web/portal/` に軽量な総合入口を作る。「高校を探す」を高校入口へ直結し、schoolトップへのリンクも用意する。画面上の利用目的・公開状態・問い合わせ先を明確にし、未公開サービスのカードは状態表示だけにする。学校のSupabase clientや全国データを初期ロードしない。
 
-portal用のHTML・CSS・ブランド設定・robots・sitemap・404・セキュリティヘッダーを独立させる。旧 `/api/v1/*` は学校生成時の同一成果物をportal出力へ同期する方式を第一案とする。学校側の更新時にportalの互換APIも更新する手順・検査を組み込む。APIは移転のために終了しない。
+portal用のHTML・CSS・ブランド設定・robots・sitemap・404・セキュリティヘッダーを独立させる。旧 `/api/v1/*` は高校版生成時の同一成果物をapexのportal出力へ同期する方式を第一案とする。high-school側の更新時にapexの互換APIも更新する手順・検査を組み込む。APIは移転のために終了しない。
 
 同期案を採る場合は次の公開手順を実装する。具体的な公開方式と許容時間はC1で確定し、二つの配信先を原子的に切り替えられるとは仮定しない。
 
-1. 公開データを一度だけ生成し、候補SHA、データ世代、対象ファイルの内容ハッシュ、生成時刻を記録する。学校とportalが別々にDBを再取得して同世代と見なす処理はしない。
-2. 同じ成果物を両候補へ組み込み、CORS・MIME・gzip・キャッシュ・スキーマ・内容を事前検査する。候補検査に片方でも失敗したら両方とも公開せず、現在の公開版を維持する。
+1. 公開データを一度だけ生成し、候補SHA、データ世代、対象ファイルの内容ハッシュ、生成時刻を記録する。高校版と旧apexの互換APIが別々にDBを再取得して同世代と見なす処理はしない。
+2. 同じ成果物をhigh-schoolと旧apexの互換API候補へ組み込み、CORS・MIME・gzip・キャッシュ・スキーマ・内容を事前検査する。軽量なschool入口へ学校データを複製しない。候補検査に片方でも失敗したら両方とも公開せず、現在の公開版を維持する。
 3. 事前に決めた順で公開し、配備完了を確認する。deploy hookの受付成功だけで完了と記録しない。片方が成功して他方が失敗した場合は後続操作を止め、成功側を記録済みの旧成果物へ戻し、両方の旧世代を照合する。再試行と切戻しの時間上限・担当を公開前に決める。
 4. 両originの公開APIを照合する。現行の固定URLは `max-age=3600` なので、配信先の最新応答と利用者のブラウザに残る旧キャッシュを分けて確認する。配信先の世代不一致を単にキャッシュのせいにして終了しない。
 
@@ -331,20 +334,20 @@ hard maintenanceは調査時点ではcallbackも503にするため、旧認証�
 
 ### 作業内容
 
-1. 本番操作の明示指示後、学校へschoolドメインを追加し、DNS・TLS・Supabaseの許可戻り先・必要なOAuth設定・管理用Edge Functionの許可originをそろえる。学校は既存DBを使う。プレビューと本番の設定差を確認する。
+1. 本番操作の明示指示後、高校版へhigh-schoolドメイン、軽量な学校入口へschoolドメインをそれぞれ接続する。高校版のDNS・TLS・Supabaseの許可戻り先・必要なOAuth設定・管理用Edge Functionの許可originをそろえる。高校版は既存DBを使う。プレビューと本番の設定差を確認する。
 2. canonicalは旧apexのまま並行動作を検収する。Google・LINEのログインと連携、ゲスト、お気に入り、家族メモ、中心地点、管理操作、招待リンクを確認する。事前告知開始・学校の切替・旧セッション救済終了・apexのportal接続を別の段階として、日付・猶予・終了条件を決めてから告知を公開する。認証や保存データへの到達に未解決事項が残れば、終了日だけを根拠に救済経路を閉じない。
-3. 旧originで始めた認証は旧originで完了させる。PKCEはローカルのverifierを必要とするため、callbackのcodeだけschoolへ送っても引継ぎにはならない。これは現行storage実装と[Supabase PKCE仕様](https://supabase.com/docs/guides/auth/sessions/pkce-flow)からの設計判断。ゲスト連携用の旧ページ・資産・callbackと、認証後に戻る画面・必要APIを保持する期間・例外経路を決め、終了条件を満たすまでapexをportalへ付け替えない。既存callbackは `/` へ戻すため、apexトップの転送開始と旧フロー完了を同時に成立させる方法を検証する。
-4. schoolの最終origin・経路・SEOを含む候補を検証して公開し、同SHAとデータ世代の反映を確認する。旧学校URLを最終URLへ転送するが、救済期間のcallback・連携・招待・戻り先・必要資産は確定済みの例外経路として維持する。総合入口未接続中のapex `/` を302にする場合も旧フローを壊さないことが前提となる。
-5. 猶予終了後、互換APIを含むportalの候補を検収し、apexをportalへ接続する。`/` の一時302を解除し総合入口200を確認する。期限後の旧callbackはcodeやerror値を転送せず、schoolでログインを再開する案内を返す。旧ゲスト状態が自動移行したと案内しない。
+3. 旧originで始めた認証は旧originで完了させる。PKCEはローカルのverifierを必要とするため、callbackのcodeだけhigh-schoolへ送っても引継ぎにはならない。これは現行storage実装と[Supabase PKCE仕様](https://supabase.com/docs/guides/auth/sessions/pkce-flow)からの設計判断。ゲスト連携用の旧ページ・資産・callbackと、認証後に戻る画面・必要APIを保持する期間・例外経路を決め、終了条件を満たすまでapexをportalへ付け替えない。既存callbackは `/` へ戻すため、apexトップの転送開始と旧フロー完了を同時に成立させる方法を検証する。
+4. high-schoolの最終origin・経路・SEOを含む候補を検証して公開し、同SHAとデータ世代の反映を確認する。旧学校URLを最終URLへ転送するが、救済期間のcallback・連携・招待・戻り先・必要資産は確定済みの例外経路として維持する。総合入口未接続中のapex `/` を302にする場合も旧フローを壊さないことが前提となる。
+5. 猶予終了後、互換APIを含むportalの候補を検収し、apexをportalへ接続する。`/` の一時302を解除し総合入口200を確認する。期限後の旧callbackはcodeやerror値を転送せず、high-schoolでログインを再開する案内を返す。旧ゲスト状態が自動移行したと案内しない。
 6. 学校のサイトマップ、Analytics、GSC、旧URL・新URLの状態を確認する。ルートが総合入口として残るため、全サイト一括移転ツールの適用を前提にしない。2週間の観察を開始し、旧リンクからの到達、404、認証失敗、API更新、検索登録を記録する。
 
 変更予定ファイル: `web/data/site.json`・`web/src/data/site-move.ts`（値の切替）、`README.md`・`DATA.md`・`portfolio.md`・`docs/reference_manabi-map-operating-rules.md`、`web/public/legal/`・`web/public/guide/deviation-with-care.md`・`web/public/press/`（配布PDF/QRも旧URL誘導を点検）、`web/data/dataset-claims.json`・`web/src/data/ad-slots.ts`・`web/src/lib/export.ts`、`scripts/export-dataset.mjs`・`scripts/dashboard-snapshot.mjs`・`scripts/admission/official-fetch.mjs`、`web/scripts/smoke-beacon.mjs`・`check-payload-budget.mjs`、本書の切替結果。既に設定参照になっている箇所は重複改修しない。外部のSNS投稿・告知送信は本計画の実行に含めない。
 
 ### 完了条件・戻し方
 
-総合入口200、高校直リンク、旧学校URLの対応転送、認証・保存・招待・API互換、学校とportalそれぞれのcanonical/sitemapが実環境で成立する。クエリ・fragment保持は合成値でブラウザ確認する。Functionsの実行範囲は `_routes.json` のexclude優先を踏まえて確認する。[公式Routing仕様](https://developers.cloudflare.com/pages/functions/routing/)
+総合入口200、高校直リンク、旧学校URLの対応転送、認証・保存・招待・API互換、school・high-school・apexのportalそれぞれのcanonical/sitemapが実環境で成立する。クエリ・fragment保持は合成値でブラウザ確認する。Functionsの実行範囲は `_routes.json` のexclude優先を踏まえて確認する。[公式Routing仕様](https://developers.cloudflare.com/pages/functions/routing/)
 
-切替直前に旧Pages配備ID・候補SHA・ドメイン接続・zoneルール・認証戻り先・origin設定・互換API世代を控える。認証不能、保存済みデータへ到達不能、API内容不一致、ループ、広範な404なら先へ進まない。apexを旧配信へ戻し、追加転送を解除し、旧origin設定・SEOを再配信する。schoolからapexへの逆301は作らず、既にキャッシュされた旧→school転送の利用者用にschoolも稼働を維持する。利用者DBの原本移設はドメイン切替と分離する。ドメイン復旧時に利用者データを過去へ巻き戻さない。学校原本移設は後述の参照・バックアップ手順を別途検証する。
+切替直前に旧Pages配備ID・候補SHA・ドメイン接続・zoneルール・認証戻り先・origin設定・互換API世代を控える。認証不能、保存済みデータへ到達不能、API内容不一致、ループ、広範な404なら先へ進まない。apexを旧配信へ戻し、追加転送を解除し、旧origin設定・SEOを再配信する。high-schoolからapexへの逆301は作らず、既にキャッシュされた旧→high-school転送の利用者用にhigh-schoolも稼働を維持する。利用者DBの原本移設はドメイン切替と分離する。ドメイン復旧時に利用者データを過去へ巻き戻さない。学校原本移設は後述の参照・バックアップ手順を別途検証する。
 
 両配信先の一方だけが更新された場合はC3の部分失敗手順を使い、コードだけでなくデータ世代・ドメイン・転送・認証設定も記録した状態にそろえる。切替前に作業担当、判定担当、各段階の停止条件、目標復旧時間、旧配備へ戻せることを確認する。復旧所要時間は現時点では未測定。Previewの復旧確認と本番での実施証跡を区別する。
 
@@ -354,7 +357,7 @@ hard maintenanceは調査時点ではcallbackも503にするため、旧認証�
 
 ## 検証
 
-実装時のコマンド: `cd web` 後 `pnpm typecheck`・`pnpm lint`・`pnpm test`。buildの明示指示後に学校・portalの各buildと `pnpm verify:static`、ファイル総数・単体サイズを確認する。文書検査はリポ直下で `node scripts/check-claude-md.mjs`。新設portalの具体的なbuild/testコマンドはC3でpackage.jsonへ登録する。
+実装時のコマンド: `cd web` 後 `pnpm typecheck`・`pnpm lint`・`pnpm test`。buildの明示指示後に学校入口・高校版・総合入口の各buildを検証し、高校版は `pnpm verify:static`、各配信先はファイル総数・単体サイズを確認する。文書検査はリポ直下で `node scripts/check-claude-md.mjs`。新設の総合入口portalの具体的なbuild/testコマンドはC3でpackage.jsonへ登録する。
 
 受入確認はURL表の全行について「HTTP状態・Location・最終URL・表示内容・認証状態・API世代」を記録する。テストとCIだけで実ログインや画面検収済みとはしない。Preview検証を本番検証へ読み替えない。
 
