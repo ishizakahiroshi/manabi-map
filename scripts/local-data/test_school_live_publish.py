@@ -365,6 +365,35 @@ class PublisherTests(unittest.TestCase):
         self.publisher.fetch = legacy
         with self.assertRaises(pub.PublishError): self.publisher.observe(self.context, self.control)
 
+    def test_bounded_get_retries_only_transient_transport_reads(self):
+        calls = []
+        def transient(url, **options):
+            calls.append(options['timeout'])
+            if len(calls) < 3:
+                raise pub.TransportReadError('invented transient')
+            return {'status': 200, 'headers': {}, 'body': b'invented'}
+        self.publisher.fetch = transient
+        result = self.publisher._gets([('https://invented.example/test', {}, 3, 20)], self.control)
+        self.assertEqual(result[0]['body'], b'invented')
+        self.assertEqual(len(calls), 3)
+        self.assertTrue(all(0 < timeout <= 3 for timeout in calls))
+
+    def test_bounded_get_does_not_retry_status_body_cap_or_other_failure(self):
+        request = [('https://invented.example/test', {}, 3, 4)]
+        for outcome in ('status', 'cap', 'other'):
+            calls = []
+            def fetch(url, **options):
+                calls.append(url)
+                if outcome == 'status': return {'status': 503, 'headers': {}, 'body': b'x'}
+                if outcome == 'cap': return {'status': 200, 'headers': {}, 'body': b'oversize'}
+                raise pub.PublishError('invented nontransport refusal')
+            self.publisher.fetch = fetch
+            if outcome == 'status':
+                self.assertEqual(self.publisher._gets(request, self.control)[0]['status'], 503)
+            else:
+                with self.assertRaises(pub.PublishError): self.publisher._gets(request, self.control)
+            self.assertEqual(len(calls), 1)
+
 
 if __name__ == "__main__":
     unittest.main()
