@@ -23,6 +23,8 @@
 
 interface Env {
   MAINTENANCE_MODE?: string;
+  /** Explicit legacy-apex candidate binding; absent on existing production. */
+  LEGACY_SCHOOL_SHELL?: string;
   ASSETS: { fetch: (input: Request | string | URL) => Promise<Response> };
 }
 
@@ -141,7 +143,8 @@ export const onRequest = async (context: Context): Promise<Response> => {
   // GET / HEAD 以外(POST 等)を HTML 200 にすり替えない。
   const isReadRequest = request.method === "GET" || request.method === "HEAD";
   if (isReadRequest && isSpaRoute(pathname)) {
-    const shell = await env.ASSETS.fetch(new URL(SPA_SHELL_PATH, request.url));
+    const legacy = env.LEGACY_SCHOOL_SHELL === "1";
+    const shell = await env.ASSETS.fetch(new URL(legacy ? "/legacy-school/" : SPA_SHELL_PATH, request.url));
     // シェルが取れないときは従来どおりの応答へ落とす(勝手に 200 を作らない)。
     if (!shell.ok) {
       return next();
@@ -149,10 +152,15 @@ export const onRequest = async (context: Context): Promise<Response> => {
     // _headers 由来のヘッダ(CSP 等)を落とさないよう、本文と一緒にそのまま引き継ぐ。
     const headers = new Headers(shell.headers);
     headers.set("content-type", "text/html; charset=utf-8");
+    if (legacy) {
+      headers.set("cache-control", "no-store");
+      headers.set("referrer-policy", "no-referrer");
+      headers.set("x-robots-tag", "noindex");
+    }
     if (hasSharedLocationQuery(searchParams)) {
       headers.set("x-robots-tag", "noindex");
     }
-    return new Response(shell.body, { status: 200, headers });
+    return new Response(request.method === "HEAD" ? null : shell.body, { status: 200, headers });
   }
 
   return next();

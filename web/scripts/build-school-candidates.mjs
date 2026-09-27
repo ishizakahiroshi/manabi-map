@@ -6,6 +6,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 import { checkedFile, checkedOutput } from './lib/school-candidate.mjs'
 import { parseSchoolSnapshot } from './lib/school-source.mjs'
 import { verifyDeploymentCapacity } from './verify-deployment-capacity.mjs'
+import { createApexCandidate, retainLegacyAssets, verifyCompatibilityGeneration } from './lib/apex-candidate.mjs'
 
 const webRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const repoRoot = dirname(webRoot)
@@ -44,11 +45,11 @@ export function candidateEnvironment(source = process.env) {
 export function parseCandidateArgs(args) {
   const result = {}
   for (const arg of args) {
-    const match = /^--(snapshot|manifest|output-root)=(.+)$/.exec(arg)
+    const match = /^--(snapshot|manifest|output-root|legacy-assets)=(.+)$/.exec(arg)
     if (!match || result[match[1]]) throw new Error('Explicit unique snapshot, manifest and output-root arguments are required')
     result[match[1]] = match[2]
   }
-  if (Object.keys(result).length !== 3) throw new Error('Explicit synthetic snapshot and manifest are required')
+  if (!['snapshot', 'manifest', 'output-root'].every((key) => result[key])) throw new Error('Explicit synthetic snapshot and manifest are required')
   return result
 }
 
@@ -96,13 +97,20 @@ export async function buildSchoolCandidates(options) {
   for (const artifact of receipt.artifacts) await copy(join(dataCandidate, artifact.path), join(isolatedWeb, 'public', artifact.path))
   const schoolOutput = join(output, targets.school.outputDirectory)
   const highSchoolOutput = join(output, targets['high-school'].outputDirectory)
+  if (targets.apex?.origin !== 'https://manabi-map.app' || targets.apex.outputDirectory !== 'dist-apex-portal') throw new Error('Explicit independent apex target required')
+  const apexOutput = join(output, targets.apex.outputDirectory)
   run(vite, ['build', '--config', 'vite.school-portal.config.ts', '--outDir', schoolOutput])
   run(vite, ['build', '--config', 'vite.high-school-candidate.config.ts', '--outDir', highSchoolOutput])
+  // Keep the client shell before the SEO pass inserts homepage-only SSR state.
+  const schoolShell = await fs.readFile(join(highSchoolOutput, 'index.html'), 'utf8')
   run(vite, ['build', '--config', 'vite.high-school-candidate.config.ts', '--ssr', 'src/entry-server.tsx', '--outDir', 'dist-ssr'])
   run(tsx, ['scripts/gen-seo-pages.mjs', '--dist', highSchoolOutput, `--synthetic-candidate=${dataCandidate}`])
   run(join(isolatedWeb, 'scripts/verify-static-output.mjs'), ['--dist', highSchoolOutput, '--max-file-mib', '25'])
+  await createApexCandidate({ highSchoolOutput, apexOutput, portalRoot: join(webRoot, 'apex-portal'), schoolShell })
+  const legacyAssets = options['legacy-assets'] ? await retainLegacyAssets(options['legacy-assets'], apexOutput) : { synthetic: true, retained: 0 }
+  const compatibility = await verifyCompatibilityGeneration(dataCandidate, [apexOutput, highSchoolOutput])
   const capacity = {}
-  for (const [targetId, distDir] of [['school', schoolOutput], ['high-school', highSchoolOutput]]) {
+  for (const [targetId, distDir] of [['school', schoolOutput], ['high-school', highSchoolOutput], ['apex', apexOutput]]) {
     const check = await verifyDeploymentCapacity({ distDir, targetId, config })
     if (!check.valid) throw new Error(`Candidate capacity gate failed: ${targetId}`)
     capacity[targetId] = { valid: check.valid, fileCount: check.fileCount, totalBytes: check.totalBytes,
@@ -110,11 +118,13 @@ export async function buildSchoolCandidates(options) {
       remainingFiles: check.remainingFiles, warnings: check.warnings }
   }
   const result = { formatVersion: 1, synthetic: true, deploymentPerformed: false,
-    targets, capacity, inputArtifactsSha256: receipt.artifactsSha256,
-    functions: { source: 'source/functions', attachedTo: 'high-school', deployed: false },
+    targets, capacity, compatibility, legacyAssets, inputArtifactsSha256: receipt.artifactsSha256,
+    functions: { source: 'source/functions', attachedTo: ['high-school', 'apex'], deployed: false,
+      candidateBindings: { apex: { LEGACY_SCHOOL_SHELL: '1' } } },
     limitations: ['Pages project names are local candidate labels; confirm actual resources before deployment.',
       'Functions and production bindings are not included in the static high-school directory.',
-      'Synthetic auth values cannot verify OAuth, persistence, old-origin callbacks or Android.',
+      'Synthetic auth values cannot verify real OAuth, persistence or Android. Callback mocks are separate evidence.',
+      'Historical retention is synthetic-only; a verified inventory of actual deployed chunks is required before real cutover.',
       'The legacy notice remains disabled; existing production origin is unchanged.',
       'Historical PDFs and outbound references are retained; they are not migration acceptance evidence.'] }
   await fs.writeFile(join(output, 'candidate-build.json'), JSON.stringify(result, null, 2) + '\n', { flag: 'wx' })

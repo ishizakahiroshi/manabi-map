@@ -387,6 +387,8 @@ export const ja: MessageTree = {
   authCallback: {
     processing: 'ログイン処理中です…',
     backToTop: 'トップに戻る',
+    backToLegacy: '旧URLのマイページへ戻る',
+    legacyIdentityAlreadyExists: 'このアカウントは既に別のユーザーで登録されています。\n旧URLのマイページへ戻って連携状態を確認してください。ゲストで保存した情報を残すには、ログアウトする前に連携先のアカウントをご確認ください。',
     identityAlreadyExists:
       'このアカウントは既に別のユーザーで登録されています。\n一度ログアウトしてから、トップの「ログイン」→「LINE で続ける」で直接ログインしてください。',
     timeout: 'ログイン処理がタイムアウトしました。通信環境を確認してもう一度お試しください。',
@@ -680,7 +682,7 @@ export const ja: MessageTree = {
     accepting: '参加処理中です…',
     accepted: '家族グループに参加しました。お気に入り一覧へ移動します…',
     acceptFail: '参加できませんでした。リンクが期限切れか、既に無効になっている可能性があります。',
-    needLoginJoin: '参加するにはログインが必要です。ログイン後、もう一度この招待リンクを開いてください。',
+    needLoginJoin: '参加するにはログインが必要です。ログイン後、この確認画面へ戻ります。戻らない場合は、招待リンクをもう一度開いてください。',
     anonJoin: '匿名（ゲスト）のままでは招待を受け取れません。LINE または Google でログインしてください。',
     lineLogin: 'LINEでログイン',
     googleLogin: 'Google で続ける',

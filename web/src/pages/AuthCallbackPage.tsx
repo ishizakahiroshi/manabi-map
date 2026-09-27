@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useI18n } from '../contexts/I18nContext'
 import { supabase } from '../lib/supabase'
+import { callbackFailure, consumeAuthReturn, isLegacySchoolShell } from '../lib/siteMoveRecovery'
 
 /**
  * OAuth コールバック。PKCE フローの code 交換は supabase-js の
@@ -14,15 +15,15 @@ export function AuthCallbackPage() {
   const navigate = useNavigate()
   const { t } = useI18n()
   const [failure, setFailure] = useState<null | { code: string; description: string }>(null)
+  const legacy = isLegacySchoolShell()
+  const fallback = legacy ? '/mypage' : '/'
 
   useEffect(() => {
     // OAuth 失敗時は Supabase が /auth/callback?error=...&error_code=...&error_description=... で返す。
     // linkIdentity で identity_already_exists のケースがサイレント失敗になる問題への対処。
-    const params = new URLSearchParams(window.location.search)
-    const errorCode = params.get('error_code')
-    const errorDescription = params.get('error_description') ?? ''
-    if (errorCode) {
-      setFailure({ code: errorCode, description: errorDescription })
+    const error = callbackFailure(window.location.search, window.location.hash)
+    if (error) {
+      setFailure(error)
       return
     }
 
@@ -31,37 +32,40 @@ export function AuthCallbackPage() {
       if (done) return
       if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED') {
         done = true
-        navigate('/', { replace: true })
+        navigate(consumeAuthReturn(legacy), { replace: true })
       }
     })
     // 既にセッションがある場合（リロード等）も戻す
     void supabase.auth.getSession().then(({ data }) => {
       if (!done && data.session) {
         done = true
-        navigate('/', { replace: true })
+        navigate(consumeAuthReturn(legacy), { replace: true })
       }
+    }).catch(() => {
+      if (!done) { done = true; setFailure({ code: 'session_error', description: '' }) }
     })
     const timeout = setTimeout(() => {
-      if (!done) setFailure({ code: 'timeout', description: '' })
+      if (!done) { done = true; setFailure({ code: 'timeout', description: '' }) }
     }, 10000)
     return () => {
+      done = true
       sub.subscription.unsubscribe()
       clearTimeout(timeout)
     }
-  }, [navigate])
+  }, [navigate, legacy])
 
   if (failure) {
     const message =
       failure.code === 'identity_already_exists'
-        ? t('authCallback.identityAlreadyExists')
+        ? t(legacy ? 'authCallback.legacyIdentityAlreadyExists' : 'authCallback.identityAlreadyExists')
         : failure.code === 'timeout'
           ? t('authCallback.timeout')
           : t('authCallback.generic', { detail: failure.description || failure.code })
     return (
       <div className="content" style={{ textAlign: 'center', paddingTop: 80 }}>
         <p style={{ whiteSpace: 'pre-line' }}>{message}</p>
-        <button className="cta" onClick={() => navigate('/', { replace: true })}>
-          {t('authCallback.backToTop')}
+        <button className="cta" onClick={() => navigate(fallback, { replace: true })}>
+          {t(legacy ? 'authCallback.backToLegacy' : 'authCallback.backToTop')}
         </button>
       </div>
     )

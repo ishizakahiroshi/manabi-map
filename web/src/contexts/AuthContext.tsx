@@ -2,6 +2,7 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
 import type { Session } from '@supabase/supabase-js'
 import { supabase, LINE_PROVIDER } from '../lib/supabase'
+import { isLegacySchoolShell, rememberAuthReturn } from '../lib/siteMoveRecovery'
 
 export type UserKind = 'line' | 'google' | 'anon' | null
 
@@ -66,6 +67,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   const signInLINE = async () => {
+    rememberAuthReturn(location.pathname)
     const { error } = await supabase.auth.signInWithOAuth({
       // Supabase Custom OIDC Provider（identifier: custom:line）。
       // supabase-js の Provider 型 union に custom provider が無いため cast する。
@@ -76,6 +78,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   const signInGoogle = async () => {
+    rememberAuthReturn(location.pathname)
     const { error } = await supabase.auth.signInWithOAuth({
       // Supabase 標準の Google provider。LINE とは別アカウント扱い（自動統合しない）。
       provider: 'google',
@@ -85,6 +88,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   const linkLINE = async () => {
+    rememberAuthReturn('/mypage')
     const { error } = await supabase.auth.linkIdentity({
       provider: LINE_PROVIDER as 'google',
       options: { redirectTo: `${location.origin}/auth/callback` },
@@ -93,6 +97,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   const linkGoogle = async () => {
+    rememberAuthReturn('/mypage')
     const { error } = await supabase.auth.linkIdentity({
       provider: 'google',
       options: { redirectTo: `${location.origin}/auth/callback` },
@@ -120,6 +125,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         signOut,
       }}
     >
+      {isLegacySchoolShell() && (
+        <aside role="note" style={{ padding: '16px 20px', background: '#fff7e6', color: '#493c25', borderBottom: '1px solid #e5d5b7', lineHeight: 1.7 }}>
+          <strong>学校サイトの旧URLで手続きを続けています。</strong>
+          <p style={{ margin: '4px 0' }}>ゲストで保存した情報は、このブラウザの旧URLでLINEまたはGoogleと連携してから、新しい学校サイトで同じアカウントにログインしてください。招待の確認・参加もこの画面で続けられます。</p>
+          <a href="/mypage">旧URLのマイページで連携する</a>
+          <p style={{ margin: '4px 0' }}>新しい学校サイトは公開確認後にご案内します。ログイン情報を別のURLへ送ることはありません。</p>
+        </aside>
+      )}
       {children}
     </AuthContext.Provider>
   )

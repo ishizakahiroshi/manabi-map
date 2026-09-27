@@ -1,6 +1,12 @@
 {
   "formatVersion": 1,
   "targets": {
+    "apex": {
+      "origin": "https://manabi-map.app",
+      "pagesProject": "manabi-map-apex",
+      "outputDirectory": "dist-apex-portal",
+      "kind": "apex-portal"
+    },
     "school": {
       "origin": "https://school.manabi-map.app",
       "pagesProject": "manabi-map-school",

@@ -5,6 +5,7 @@ import { useI18n } from '../contexts/I18nContext'
 import { useFamilyShare } from '../hooks/useFamilyShare'
 import { supabase } from '../lib/supabase'
 import { OAuthButton } from '../components/OAuthButton'
+import { isLegacySchoolShell } from '../lib/siteMoveRecovery'
 
 const PENDING_KEY = 'mm.pending_family_invite'
 const PENDING_TTL_MS = 10 * 60 * 1000
@@ -129,11 +130,13 @@ type JoinStatus =
  * - リンクを開いただけでは受諾しない。参加先のグループ名を表示し、
  *   「参加する」を押したときだけ受諾 RPC を発行する（誤タップ・自動遷移での参加を防ぐ）。
  * - 未ログイン（匿名含む）なら LINE / Google ログインを促す。ログインは
- *   /auth/callback → トップへ戻る仕様のため、トークンは localStorage に退避し、
- *   ログイン後にこのリンクを再度開けば受諾できる旨を案内する。
+ *   トークンを旧originのlocalStorageに退避し、callbackからtoken無しのこのページへ戻る。
+ *   storageが使えない場合も、招待リンクを開き直して確認から再開できる。
  */
 export function FamilyJoinPage() {
   const navigate = useNavigate()
+  const homePath = isLegacySchoolShell() ? '/mypage' : '/'
+  const homeLabel = homePath === '/mypage' ? 'authCallback.backToLegacy' : 'family.backTop'
   const routerLocation = useLocation()
   const { session, kind, signInLINE, signInGoogle } = useAuth()
   const { acceptInvite } = useFamilyShare()
@@ -206,8 +209,8 @@ export function FamilyJoinPage() {
   /** 参加しない選択。退避したトークンも捨てて、リンクを開く前の状態に戻す。 */
   const declineJoin = useCallback(() => {
     clearPendingToken()
-    navigate('/', { replace: true })
-  }, [navigate])
+    navigate(homePath, { replace: true })
+  }, [navigate, homePath])
 
   const doLogin = useCallback(
     async (provider: 'line' | 'google') => {
@@ -235,8 +238,8 @@ export function FamilyJoinPage() {
       {status === 'no-token' && (
         <>
           <p>{t('family.inviteBad')}</p>
-          <button className="cta" onClick={() => navigate('/', { replace: true })}>
-            {t('family.backTop')}
+          <button className="cta" onClick={() => navigate(homePath, { replace: true })}>
+            {t(homeLabel)}
           </button>
         </>
       )}
@@ -244,8 +247,8 @@ export function FamilyJoinPage() {
       {status === 'invalid' && (
         <>
           <p>{t('family.inviteUnavailable')}</p>
-          <button className="cta" onClick={() => navigate('/', { replace: true })}>
-            {t('family.backTop')}
+          <button className="cta" onClick={() => navigate(homePath, { replace: true })}>
+            {t(homeLabel)}
           </button>
         </>
       )}
@@ -272,8 +275,8 @@ export function FamilyJoinPage() {
       {status === 'error' && (
         <>
           <p>{t('family.acceptFail')}</p>
-          <button className="cta" onClick={() => navigate('/', { replace: true })}>
-            {t('family.backTop')}
+          <button className="cta" onClick={() => navigate(homePath, { replace: true })}>
+            {t(homeLabel)}
           </button>
         </>
       )}

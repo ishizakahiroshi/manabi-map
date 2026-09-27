@@ -70,6 +70,9 @@
 
 .center { text-align: center; }
 
+/* ふりがなの上端が「はじめる」の影へ重ならないよう、このリンクだけに余白を取る。 */
+.welcome-school-link { margin-top: 16px; }
+
 /* C9・子 plan「作業内容」0-1: 最後の確認で見つかった問題 1。英語など日本語以外のとき、下のタブの
    文言を包む <span lang="en">（i18n/I18nProvider.tsx の t()）に、index.css の
    `.bottom-tab span { font-size: 1.1rem; line-height: 1; }`（アイコンの絵文字用）が子孫セレクタで

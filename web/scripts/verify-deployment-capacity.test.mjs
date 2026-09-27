@@ -13,6 +13,14 @@ const config = () => ({ formatVersion: 1, targets: { school: { ...directory }, '
 const entry = (path, bytes = 10) => ({ path, bytes })
 const schoolFiles = (count) => [entry('index.html'), entry('schools-manifest.json'), ...Array.from({ length: count - 2 }, (_, i) => entry(`school/${i}/index.html`))]
 
+test('apex requires compatibility data and a dedicated shell without duplicate SEO pages', () => {
+  const apex = { kind: 'apex-portal' }
+  const files = [entry('index.html'), entry('portal.css'), entry('legacy-school/index.html'), entry('schools-manifest.json'), entry('api/v1/schools.json'), entry('assets/previous.js')]
+  assert.equal(assessInventory(files, apex).valid, true)
+  assert.equal(assessInventory(files.filter((f) => !f.path.startsWith('legacy-school/')), apex).valid, false)
+  for (const path of ['school/id/index.html', 'pref/tokyo/index.html', 'kanji/index.html']) assert.equal(assessInventory([...files, entry(path)], apex).valid, false)
+})
+
 test('file count is per output: exact budget accepted and one extra rejected', () => {
   assert.equal(assessInventory(schoolFiles(20_000), school).valid, true)
   const rejected = assessInventory(schoolFiles(20_001), school)

@@ -6,7 +6,7 @@ import { hasSharedLocationQuery, isSpaRoute, onRequest } from './_middleware.ts'
 function makeContext(
   pathname: string,
   maintenance = '1',
-  options: { method?: string; nextStatus?: number; shellStatus?: number } = {},
+  options: { method?: string; nextStatus?: number; shellStatus?: number; legacy?: boolean } = {},
 ) {
   const nextResponse = new Response('synthetic-next', { status: options.nextStatus ?? 200 })
   const assetPaths: string[] = []
@@ -22,6 +22,7 @@ function makeContext(
       }),
       env: {
         MAINTENANCE_MODE: maintenance,
+        LEGACY_SCHOOL_SHELL: options.legacy ? '1' : undefined,
         ASSETS: {
           fetch: async (input: Request | string | URL) => {
             const assetPath = new URL(input.toString()).pathname
@@ -229,4 +230,30 @@ test('isSpaRoute matches the App.tsx routes and nothing else', () => {
   for (const pathname of [...PRERENDERED_PATHS, '/nonexistent-xyz', '/auth', '/family']) {
     assert.equal(isSpaRoute(pathname), false, pathname)
   }
+})
+
+test('legacy apex serves a dedicated shell and keeps the independent root untouched', async () => {
+  for (const pathname of ['/auth/callback?code=synthetic', '/family/join?token=synthetic', '/family/join', '/mypage', '/favorites']) {
+    const fixture = makeContext(pathname, '0', { legacy: true })
+    const result = await onRequest(fixture.context)
+    assert.equal(fixture.assetPath, '/legacy-school/')
+    assert.equal(result.status, 200)
+    assert.equal(result.headers.get('location'), null)
+    assert.equal(result.headers.get('cache-control'), 'no-store')
+    assert.equal(result.headers.get('referrer-policy'), 'no-referrer')
+    assert.equal(result.headers.get('x-robots-tag'), 'noindex')
+  }
+  for (const pathname of ['/', '/api/v1/schools.json', '/assets/previous-chunk.js', '/unknown']) {
+    const fixture = makeContext(pathname, '0', { legacy: true, nextStatus: pathname === '/unknown' ? 404 : 200 })
+    assert.strictEqual(await onRequest(fixture.context), fixture.nextResponse)
+  }
+})
+
+test('legacy HEAD is bodyless, POST passes through and unavailable shell never becomes portal success', async () => {
+  const head = makeContext('/auth/callback', '0', { legacy: true, method: 'HEAD' })
+  assert.equal(await (await onRequest(head.context)).text(), '')
+  const post = makeContext('/auth/callback', '0', { legacy: true, method: 'POST', nextStatus: 405 })
+  assert.equal((await onRequest(post.context)).status, 405)
+  const unavailable = makeContext('/auth/callback', '0', { legacy: true, shellStatus: 404, nextStatus: 404 })
+  assert.equal((await onRequest(unavailable.context)).status, 404)
 })

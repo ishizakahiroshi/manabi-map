@@ -38,6 +38,7 @@ import {
 } from './lib/public-api.mjs'
 import { SITE_ORIGIN } from './lib/site.mjs'
 import { createSeoDataReader } from './lib/school-seo-candidate.mjs'
+import { jsonLdScript } from './lib/json-ld.mjs'
 import { cityPageDescription } from './lib/city-breakdown.mjs'
 // 近隣校の選定・距離計算と選抜実績の集計・後継校の逆引きは React 側と同一実装を共有する
 // （tsx 経由で .ts を直 import（package.json の scripts が tsx で起動する。Node の type stripping には依存しない — Cloudflare Pages のビルドイメージは pnpm 同梱の preinstall Node しか使えないため）。フォーク禁止 —
@@ -218,9 +219,9 @@ function renderHead(html, { title, description, url }) {
   return out
 }
 
-/** JSON-LD を head 閉じタグ直前に注入する。"</script" で script が閉じないようエスケープ。 */
+/** JSON-LD を head 閉じタグ直前に注入し、HTMLのscript解析状態への干渉を防ぐ。 */
 function withJsonLd(html, jsonLd) {
-  const script = `<script type="application/ld+json">${JSON.stringify(jsonLd).replaceAll('</', '<\\/')}</script>`
+  const script = jsonLdScript(jsonLd)
   return replaceOrThrow(html, /<\/head>/, () => `    ${script}\n  </head>`, 'head 閉じタグ')
 }
 

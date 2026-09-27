@@ -72,7 +72,7 @@ export function CityPage({ userData }: Props) {
   const pref = slug ? prefectureBySlug(slug) : null
   const goBack = useGoBack(slug ? `/pref/${slug}` : '/schools')
 
-  const boot = initialCityState(slug, city, pref?.name)
+  const boot = useMemo(() => initialCityState(slug, city, pref?.name), [slug, city, pref?.name])
   const [schools, setSchools] = useState<PrefListSchool[]>(() => boot.schools)
   const [cityCounts, setCityCounts] = useState<CityCount[] | null>(() => boot.cityCounts)
   const [loading, setLoading] = useState(() => boot.cityCounts == null)

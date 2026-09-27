@@ -677,6 +677,55 @@ test('a pref page missing __MM_INITIAL__ script is rejected (plan_ssr-hydration 
   )
 })
 
+test('malformed __MM_INITIAL__ JSON is rejected on pref, city and school pages (F-33)', async (t) => {
+  const dir = await syntheticDist()
+  t.after(() => rm(dir, { recursive: true, force: true }))
+  for (const parts of [
+    ['pref', 'gunma', 'index.html'],
+    ['pref', 'gunma', '前橋市', 'index.html'],
+    ['school', 'synthetic-b', 'index.html'],
+  ]) {
+    const path = join(dir, ...parts)
+    const original = await readFile(path, 'utf8')
+    for (const body of ['{"schools":', '', 'null', '[]', 'true', '"synthetic"']) {
+      await writeFile(path, original.replace(
+        /(<script type="application\/json" id="__MM_INITIAL__">)[\s\S]*?(<\/script>)/,
+        (_, open, close) => `${open}${body}${close}`,
+      ))
+      await assert.rejects(
+        verifyStaticOutput({ distDir: dir, maxFileBytes: 1024 * 1024 }),
+        /invalid #__MM_INITIAL__ initial data JSON/,
+        `${parts.join('/')} accepted ${JSON.stringify(body)}`,
+      )
+    }
+    await writeFile(path, original)
+  }
+  // The same complete synthetic output succeeds again when all payloads are restored.
+  await verifyStaticOutput({ distDir: dir, maxFileBytes: 1024 * 1024 })
+})
+
+test('initial data requires one complete script and accepts escaped script text (F-33)', async (t) => {
+  const dir = await syntheticDist()
+  t.after(() => rm(dir, { recursive: true, force: true }))
+  const path = join(dir, 'school', 'synthetic-b', 'index.html')
+  const original = await readFile(path, 'utf8')
+  const script = original.match(/<script type="application\/json" id="__MM_INITIAL__">[\s\S]*?<\/script>/)[0]
+  for (const replacement of [script + script, script + script.replace('</script>', ''), script.replace('</script>', ''),
+    '<script type="application/json" id="__MM_INITIAL__">{"text":"</script>"}</script>']) {
+    await writeFile(path, original.replace(script, replacement))
+    await assert.rejects(
+      verifyStaticOutput({ distDir: dir, maxFileBytes: 1024 * 1024 }),
+      /invalid #__MM_INITIAL__ initial data JSON/,
+    )
+  }
+  const data = JSON.parse(script.slice(script.indexOf('>') + 1, -'</script>'.length))
+  data.syntheticExample = '</script>'
+  const serialized = JSON.stringify(data).replace(/</g, '\\u003c')
+  await writeFile(path, original.replace(script,
+    `<script type="application/json" id="__MM_INITIAL__">${serialized}</script>`))
+  await verifyStaticOutput({ distDir: dir, maxFileBytes: 1024 * 1024 })
+})
+
 test('a top page missing SSR home-content class is rejected (plan_ssr-hydration C5)', async (t) => {
   const dir = await syntheticDist()
   t.after(() => rm(dir, { recursive: true, force: true }))

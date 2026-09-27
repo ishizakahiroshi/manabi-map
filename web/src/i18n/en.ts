@@ -385,6 +385,8 @@ export const en: MessageTree = {
   authCallback: {
     processing: 'Signing you in…',
     backToTop: 'Back to top',
+    backToLegacy: 'Return to My Page on the old site',
+    legacyIdentityAlreadyExists: 'This account is already linked to another user.\nReturn to My Page on the old site to check your linked account. Before signing out, check the account you are linking to so you can retain your guest data.',
     identityAlreadyExists:
       'This account is already linked to another user.\nPlease log out first, then use “Continue with LINE” from the top page to sign in directly.',
     timeout: 'Sign-in timed out. Please check your connection and try again.',
@@ -678,7 +680,7 @@ export const en: MessageTree = {
     accepting: 'Joining…',
     accepted: 'Joined the family group. Opening favorites…',
     acceptFail: 'Could not join. The link may be expired or invalid.',
-    needLoginJoin: 'Log in first, then open this invite link again.',
+    needLoginJoin: 'Log in to return to this confirmation screen. If you do not return automatically, open the invite link again.',
     anonJoin: 'Guests cannot accept an invitation. Log in with LINE or Google first.',
     lineLogin: 'Log in with LINE',
     googleLogin: 'Continue with Google',

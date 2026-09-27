@@ -26,7 +26,7 @@ export function WelcomePage() {
       <Link className="cta" to={ROUTES.profileNew}>
         {t('wel.start')}
       </Link>
-      <p className="center">
+      <p className="center welcome-school-link">
         <a className="link-btn" href={APP_CONFIG.schoolUrl} target="_blank" rel="noopener">
           {t('wel.school')}
         </a>

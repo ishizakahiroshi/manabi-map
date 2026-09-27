@@ -1,19 +1,10 @@
 // Supabase ランタイム疎通スモークテスト（ローカル実行専用・CI 不使用）
-// 実値は web/.env.local から読む。キー・トークンは一切標準出力に出さない。
-import { readFileSync } from 'node:fs'
-import { fileURLToPath } from 'node:url'
-import { dirname, join } from 'node:path'
+// MANABI_MAP_ENV_DIR（未設定時 web/）と環境変数から読む。キー・トークンは出力しない。
 import { createClient } from '@supabase/supabase-js'
+import { loadSmokeConfig } from './lib/smoke-config.mjs'
 
-const here = dirname(fileURLToPath(import.meta.url))
-const env = Object.fromEntries(
-  readFileSync(join(here, '..', '.env.local'), 'utf8')
-    .split(/\r?\n/)
-    .filter((l) => l.includes('='))
-    .map((l) => l.split(/=(.*)/s).slice(0, 2)),
-)
-
-const supabase = createClient(env.VITE_SUPABASE_URL, env.VITE_SUPABASE_ANON_KEY)
+const { url, anonKey } = loadSmokeConfig()
+const supabase = createClient(url, anonKey)
 
 const results = []
 

@@ -7,7 +7,7 @@ import { parseArgs } from 'node:util'
 export const FREE_FILE_LIMIT = 20_000
 export const ASSET_BYTE_LIMIT = 25 * 1024 * 1024
 const configPath = fileURLToPath(new URL('../data/deployment-targets.json', import.meta.url))
-const kinds = new Set(['school-directory', 'high-school-app'])
+const kinds = new Set(['school-directory', 'high-school-app', 'apex-portal'])
 
 export function validateTargets(config) {
   if (config?.formatVersion !== 1 || !config.targets || Array.isArray(config.targets)) throw new Error('Unknown deployment target format')
@@ -61,9 +61,11 @@ export function assessInventory(files, target, { maxFiles = FREE_FILE_LIMIT, max
     if (forbiddenPath(file.path)) errors.push(`Private/source asset in output: ${file.path}`)
     if (target.kind === 'school-directory' && !directoryAsset(file.path)) errors.push(`School directory contains a non-portal asset: ${file.path}`)
     if (target.kind === 'high-school-app' && /^(?:school-portal|kanji)(?:\/|$)/i.test(file.path)) errors.push(`Other application output in high school: ${file.path}`)
+    if (target.kind === 'apex-portal' && /^(?:school|schools|pref|kanji|school-portal)\//i.test(file.path)) errors.push(`Other page output in apex: ${file.path}`)
   }
   if (!names.has('index.html')) errors.push('Output must contain index.html')
   if (target.kind === 'high-school-app' && !names.has('schools-manifest.json')) errors.push('High school output must contain schools-manifest.json')
+  if (target.kind === 'apex-portal' && (!names.has('legacy-school/index.html') || !names.has('schools-manifest.json'))) errors.push('Apex compatibility shell and generation are required')
   if (files.length > maxFiles) errors.push(`File count exceeds ${maxFiles}: ${files.length}`)
   return {
     valid: errors.length === 0, fileCount: files.length, totalBytes, largest,

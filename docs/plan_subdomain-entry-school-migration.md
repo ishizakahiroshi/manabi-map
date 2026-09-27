@@ -6,7 +6,7 @@ tags: [subdomain, school, portal, migration]
 owner: ishizakahiroshi
 review_status: draft
 related: [docs/reference_portal-grand-design.md, docs/design_portal-grand-design_2026-09-27.html, docs/plan_subdomain-entry-school-migration_c1_sqlite-static-source.md]
-last_reviewed: 2026-09-27
+last_reviewed: 2026-09-28
 due: 2026-10-04
 work_id: WK-20260927T012339619-12c91aa3
 ai_provenance_version: 1
@@ -38,6 +38,8 @@ ai_execution_refs: [AIX-20260927T012339619-802f5465, AIX-20260927T013035154-418a
 協議資料: [総合入口・学校移行・ブランド運用の検討シート](review_portal-school-brand_2026-09-27.html)。既回答を引き継ぎ、費用・配信上限・将来拡張・利用者引継ぎ・更新同期・復旧を比較する。ブラウザ内で新たに選んだ回答は、共有して採用内容を本書へ反映するまで検討記録として扱う。資料の改訂とC1調査の実施を、C1の確定完了やC2〜C4の実装・本番承認と同一視しない。
 
 ## 概要
+
+2026-09-28 ローカル候補の追加: 旧apexの認証・家族招待・保存画面を専用学校シェルへ解決する `LEGACY_SCHOOL_SHELL` bindingと、同origin内の安全な認証復帰先を実装した。総合入口は `web/apex-portal/` の独立出力とし、公開確認前のサービスリンクは無効にする。候補buildは完成した同一合成世代の15公開artifactを旧apex/high-schoolで照合し、過去の合成chunk保持・片側欠損/改変の拒否・前世代からの復元を検査する。school 5 / high-school 87 / apex 70 filesで容量・混入gateを通過した。合成providerを使う実React画面でcallback成功・各失敗・timeout・家族招待待機の再開を確認し、総合入口はPC/スマホで実視認した。実OAuth、実旧asset全件、CloudflareのFunctions bundle/header適用、両Pagesの実世代切替とrollbackは別検収。D2の公開順/世代差許容とD3の救済期間/復旧目標は未採択のまま、C1〜C4全体の状態を変更しない。
 
 ### 最新の再開入口: 別ホスト・別Pagesの採用（2026-09-27）
 
