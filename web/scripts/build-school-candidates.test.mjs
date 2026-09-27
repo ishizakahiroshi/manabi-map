@@ -1,10 +1,27 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import fs from 'node:fs'
+import { dirname, join, normalize, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { allowedCandidateSource, candidateEnvironment, parseCandidateArgs } from './build-school-candidates.mjs'
 
+const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
+
 test('candidate source allowlist excludes env, generated datasets, private config and dependencies', () => {
-  for (const path of ['web/.env', 'web/.env.local', '.git/config', 'web/src/.secret.ts', 'web/data/credential.json', 'web/public/schools.json', 'web/node_modules/a/index.js', 'docs/local/plan.md']) assert.equal(allowedCandidateSource(path), false, path)
-  for (const path of ['web/src/App.tsx', 'web/src/index.css', 'web/scripts/gen-schools-json.mjs', 'web/data/site.json', 'web/data/brands.json', 'functions/_middleware.ts']) assert.equal(allowedCandidateSource(path), true, path)
+  for (const path of ['web/.env', 'web/.env.local', '.git/config', 'web/src/.secret.ts', 'web/data/credential.json', 'web/public/schools.json', 'web/node_modules/a/index.js', 'docs/local/plan.md', 'functions/_middleware.test.ts', 'functions/api/csp-report.test.ts', 'functions/api/admin/_auth.test.ts', 'functions/__tests__/helper.ts']) assert.equal(allowedCandidateSource(path), false, path)
+  for (const path of ['web/src/App.tsx', 'web/src/index.css', 'web/scripts/gen-schools-json.mjs', 'web/data/site.json', 'web/data/brands.json', 'web/data/deployment-targets.json', 'functions/_middleware.ts', 'functions/_school-migration.ts']) assert.equal(allowedCandidateSource(path), true, path)
+})
+
+test('runtime Functions JSON dependency resolves inside the allowlisted source inventory', () => {
+  const importer = 'functions/_school-migration.ts'
+  const source = fs.readFileSync(join(repoRoot, importer), 'utf8')
+  const imports = [...source.matchAll(/from\s+['"]([^'"]+\.json)['"]/g)].map((match) => match[1])
+  assert.ok(imports.length > 0, 'the runtime Functions JSON dependency must be exercised')
+  for (const relative of imports) {
+    const target = normalize(join(dirname(importer), relative)).replaceAll('\\', '/')
+    assert.equal(allowedCandidateSource(target), true, `${importer} -> ${target}`)
+    assert.equal(fs.existsSync(join(repoRoot, target)), true)
+  }
 })
 
 test('candidate environment cannot inherit real Vite values, env directory or Node preload', () => {

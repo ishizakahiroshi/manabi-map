@@ -137,7 +137,7 @@ test('mocked build executes isolated phases in order and copies only public gene
   await fs.writeFile(join(fixture.root, 'observed-generation.json'), canonical(fixture.receipt))
   const phases = []
   t.mock.method(childProcess, 'execFileSync', (executable, args, options) => {
-    if (executable === 'git') return 'web/package.json\0web/vite.config.ts\0web/data/site.json\0'
+    if (executable === 'git') return 'web/package.json\0web/vite.config.ts\0web/data/site.json\0web/data/deployment-targets.json\0functions/_school-migration.ts\0functions/api/csp-report.test.ts\0'
     assert.ok(args[0].startsWith('--max-old-space-size='))
     assert.equal(options.env.VITE_SCHOOLS_SOURCE, 'static')
     assert.equal(options.env.NODE_OPTIONS, undefined)
@@ -175,6 +175,12 @@ test('mocked build executes isolated phases in order and copies only public gene
     'generation-time': fixture.pins.generatedAt, 'candidate-revision': fixture.pins.candidateRevision })
   assert.deepEqual(phases, ['generation', 'client', 'ssr', 'seo', 'static'])
   assert.equal(receipt.deploymentPerformed, false)
+  assert.ok(receipt.sourceFiles.some((entry) => entry.path === 'web/data/deployment-targets.json'))
+  assert.ok(receipt.sourceFiles.some((entry) => entry.path === 'functions/_school-migration.ts'))
+  assert.ok(!receipt.sourceFiles.some((entry) => entry.path === 'functions/api/csp-report.test.ts'))
+  assert.equal(hash(await fs.readFile(join(output, 'source/web/data/deployment-targets.json'))),
+    receipt.sourceFiles.find((entry) => entry.path === 'web/data/deployment-targets.json').sha256)
+  await assert.rejects(fs.stat(join(output, 'source/functions/api/csp-report.test.ts')), { code: 'ENOENT' })
   assert.ok(receipt.publicArtifacts.every((entry) => !/private|snapshot|source\//.test(entry.path)))
   assert.equal(receipt.publicArtifacts.length, fixture.files.size + 1)
   await assert.rejects(fs.stat(join(output, 'source/web/public/private-source')), { code: 'ENOENT' })

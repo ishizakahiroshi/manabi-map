@@ -24,7 +24,7 @@ const staticFiles = [
 ]
 const topFiles = new Set(['web/package.json', 'web/index.html', 'web/vite.config.ts',
   'web/tsconfig.json', 'web/tsconfig.app.json', 'web/tsconfig.node.json', 'web/tsconfig.functions.json'])
-const dataFiles = new Set(['site.json', 'brands.json', 'site-footer-links.json', 'prefectures.json', 'municipalities.json', 'dataset-claims.json', 'book-ads-source.json'])
+const dataFiles = new Set(['site.json', 'brands.json', 'site-footer-links.json', 'prefectures.json', 'municipalities.json', 'dataset-claims.json', 'book-ads-source.json', 'deployment-targets.json'])
 
 export function allowedCandidateSource(path) {
   if (path.split('/').some((part) => part.startsWith('.')) || path.includes('\\')) return false
@@ -32,7 +32,8 @@ export function allowedCandidateSource(path) {
   if (path.startsWith('web/data/')) return dataFiles.has(path.slice('web/data/'.length))
   if (path.startsWith('web/src/')) return ['.ts', '.tsx', '.css', '.svg'].includes(extname(path))
   if (path.startsWith('web/scripts/')) return extname(path) === '.mjs'
-  if (path.startsWith('functions/')) return extname(path) === '.ts'
+  if (path.startsWith('functions/')) return extname(path) === '.ts' &&
+    !/(?:^|\/)[^/]+\.(?:test|spec)\.ts$/.test(path) && !path.split('/').includes('__tests__')
   return false
 }
 
@@ -82,7 +83,7 @@ export async function buildSchoolCandidates(options) {
   // A synthetic brand trial changes only the isolated source; the checkout stays unchanged.
   const brandConfig = validateBrands(JSON.parse(await fs.readFile(options.brands ? inputs[2] : join(isolatedWeb, 'data/brands.json'), 'utf8')))
   await fs.writeFile(join(isolatedWeb, 'data/brands.json'), JSON.stringify(brandConfig, null, 2) + '\n')
-  for (const path of ['data/deployment-targets.json', 'vite.school-portal.config.ts', 'vite.high-school-candidate.config.ts', 'school-portal/index.html', 'school-portal/style.css']) {
+  for (const path of ['vite.school-portal.config.ts', 'vite.high-school-candidate.config.ts', 'school-portal/index.html', 'school-portal/style.css']) {
     await copy(join(webRoot, path), join(isolatedWeb, path))
   }
   for (const path of staticFiles) await copy(join(webRoot, 'public', path), join(isolatedWeb, 'public', path))
