@@ -1,4 +1,11 @@
 ---
+cover:
+  path: portfolio/overview-2026-09-28.jpg
+  alt: {ja: "manabi-map の紹介動画", en: "manabi-map overview video"}
+video:
+  provider: youtube
+  id: "L4ztkux57QY"
+  durationSeconds: 20
 schemaVersion: 1
 color: "#4aa3a0"
 initials: "mm"
