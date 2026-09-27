@@ -452,11 +452,13 @@ class SchoolLivePublisher:
 
     def _find(self, marker, control):
         matched = []
-        for page in range(1, 11):
-            rows = self._api(f"/deployments?env=production&per_page=100&page={page}", control)
+        # Cloudflare Pages empirically rejects per_page=50/100 with 8000024;
+        # 20 is accepted. Preserve the same bounded 1,000-row search window.
+        for page in range(1, 51):
+            rows = self._api(f"/deployments?env=production&per_page=20&page={page}", control)
             need(type(rows) is list)
             matched.extend(row for row in rows if row.get("deployment_trigger", {}).get("metadata", {}).get("commit_message") == marker)
-            if len(rows) < 100:
+            if len(rows) < 20:
                 break
         need(len(matched) == 1, "deployment marker missing or ambiguous; do not redeploy")
         return matched[0]

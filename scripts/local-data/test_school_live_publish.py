@@ -206,6 +206,21 @@ class PublisherTests(unittest.TestCase):
         with self.assertRaises(pub.PublishError): self.publisher.recover(self.context, self.control)
         self.assertEqual(self.uploads, 1)
 
+    def test_deployment_marker_on_second_20_row_page(self):
+        marker = "school-live:invented:" + "a" * 64
+        queried = []
+        def api(suffix, control):
+            queried.append(suffix)
+            if suffix.endswith("page=1"):
+                return [{"deployment_trigger": {"metadata": {"commit_message": "other"}}} for _ in range(20)]
+            if suffix.endswith("page=2"):
+                return [{"deployment_trigger": {"metadata": {"commit_message": marker}}}]
+            self.fail("unexpected page")
+        self.publisher._api = api
+        self.assertEqual(self.publisher._find(marker, self.control)["deployment_trigger"]["metadata"]["commit_message"], marker)
+        self.assertEqual(queried, ["/deployments?env=production&per_page=20&page=1",
+                                    "/deployments?env=production&per_page=20&page=2"])
+
     def test_changed_html_is_not_normalized_and_no_anchor_is_created(self):
         self.deployed(); self.tamper_path = "/"
         with self.assertRaises(pub.PublishError): self.publisher.observe(self.context, self.control)
