@@ -1,6 +1,7 @@
 import type { Locale, MessageTree } from './types'
 import { en } from './en'
 import { ja } from './ja'
+import { schoolBrand } from '../lib/brand'
 
 const CATALOG: Record<Locale, MessageTree> = { ja, en }
 
@@ -23,10 +24,7 @@ export function formatMessage(
   vars?: Record<string, string | number>,
 ): string {
   if (!vars) return template
-  return Object.entries(vars).reduce(
-    (text, [k, v]) => text.replaceAll(`{${k}}`, String(v)),
-    template,
-  )
+  return template.replace(/\{([^{}]+)\}/g, (token, key: string) => Object.hasOwn(vars, key) ? String(vars[key]) : token)
 }
 
 export function createTranslator(locale: Locale) {
@@ -34,6 +32,6 @@ export function createTranslator(locale: Locale) {
   return function t(key: string, vars?: Record<string, string | number>): string {
     const raw = resolveMessage(tree, key)
     if (raw == null) return key
-    return formatMessage(raw, vars)
+    return formatMessage(raw, { ...vars, serviceBrand: schoolBrand.name, serviceDisplayName: schoolBrand.displayName[locale] })
   }
 }

@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useMemo } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useApp } from '../contexts/AppContext'
 import { useI18n } from '../contexts/I18nContext'
 import { useGoBack } from '../hooks/useGoBack'
@@ -8,6 +8,7 @@ import { trackEvent } from '../lib/analytics'
 import type { School } from '../types/school'
 
 const MAX_RESULTS = 50
+const MAX_QUERY_LENGTH = 120
 
 function normalize(s: string): string {
   return s
@@ -30,7 +31,17 @@ export function SchoolSearchPage() {
   const { setHome } = useApp()
   const { t } = useI18n()
   const { schools, loading, error } = useSchools()
-  const [q, setQ] = useState('')
+  const [searchParams, setSearchParams] = useSearchParams()
+  // The school directory submits a plain GET form. URL state also survives back/forward.
+  const q = (searchParams.get('q') ?? '').slice(0, MAX_QUERY_LENGTH)
+  const setQ = (value: string) => {
+    setSearchParams((current) => {
+      const next = new URLSearchParams(current)
+      if (value) next.set('q', value.slice(0, MAX_QUERY_LENGTH))
+      else next.delete('q')
+      return next
+    }, { replace: true })
+  }
 
   const results = useMemo(() => {
     const query = normalize(q.trim())
@@ -67,6 +78,7 @@ export function SchoolSearchPage() {
             className="input"
             autoComplete="off"
             autoFocus
+            maxLength={MAX_QUERY_LENGTH}
             placeholder={t('schoolSearch.placeholder')}
             value={q}
             onChange={(e) => setQ(e.target.value)}

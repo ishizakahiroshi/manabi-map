@@ -930,6 +930,9 @@ body {
   font-family: var(--display); font-weight: 800; font-size: 1rem;
 }
 .school-cluster span { line-height: 1; }
+.school-cluster--lv1 { background: color-mix(in srgb, var(--accent) 35%, white); color: var(--ink); }
+.school-cluster--lv2 { background: color-mix(in srgb, var(--accent) 65%, white); color: var(--ink); }
+.school-cluster--lv4 { background: color-mix(in srgb, var(--accent) 100%, black 25%); color: #fff; width: 48px; height: 48px; font-size: 0.85rem; }
 .marker-cluster { background: transparent; }
 .marker-cluster div { background: transparent; }
 .pin.home .label { padding: 2px 8px; border-radius: 999px; }

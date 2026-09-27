@@ -336,11 +336,23 @@ function assertSsrMarker(html, pageLabel, expectedClass) {
   }
 }
 
-/** C3 の成果物・初期データ埋め込み script が載っていることを検査する。
+/** C3 の成果物・初期データがブラウザでJSONとして読めることを検査する。
  * トップは初期データが不要なため対象外。県ページ・学校詳細は必須。 */
 function assertInitialDataScript(html, pageLabel) {
-  if (!/<script type="application\/json" id="__MM_INITIAL__">/.test(html)) {
+  const openings = [...html.matchAll(/<script type="application\/json" id="__MM_INITIAL__">/g)]
+  if (openings.length === 0) {
     throw new Error(`${pageLabel} is missing #__MM_INITIAL__ initial data script (SSR hydration source)`)
+  }
+  const scripts = [...html.matchAll(/<script type="application\/json" id="__MM_INITIAL__">([\s\S]*?)<\/script\s*>/g)]
+  try {
+    if (openings.length !== 1 || scripts.length !== 1) throw new Error('expected one complete script')
+    const data = JSON.parse(scripts[0][1])
+    if (data === null || typeof data !== 'object' || Array.isArray(data)) {
+      throw new Error('expected an initial data object')
+    }
+  } catch {
+    // Do not include payload text or JSON.parse diagnostics in build logs.
+    throw new Error(`${pageLabel} has invalid #__MM_INITIAL__ initial data JSON (SSR hydration source)`)
   }
 }
 
@@ -476,7 +488,7 @@ function findForbiddenKey(value, forbiddenKeys, path = '$') {
   return null
 }
 
-function assertNoInternalSchoolFields(value, relativePath) {
+export function assertNoInternalSchoolFields(value, relativePath) {
   const leakPath = findForbiddenKey(value, INTERNAL_SCHOOL_FIELDS)
   if (leakPath) {
     throw new Error(`internal school field found in ${relativePath} at ${leakPath}`)

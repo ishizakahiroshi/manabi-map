@@ -3,6 +3,7 @@ import { defineConfig, type Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { gitVersion } from '@ishizakahiroshi/vite-plugin-git-version'
+import { renderBrandHtml, brandManifest } from './scripts/lib/brands.mjs'
 
 // 学校サイトの住所（origin）の正本は web/data/site.json（読み方は scripts/lib/site.mjs と同じ）。
 // index.html の canonical・OGP・JSON-LD は住所の部分を __SITE_ORIGIN__ と書いておき、ここで差し込む
@@ -24,8 +25,28 @@ function siteOriginHtml(): Plugin {
             `index.html に ${SITE_ORIGIN_PLACEHOLDER} が無い（住所は web/data/site.json から差し込む）`,
           )
         }
-        return html.replaceAll(SITE_ORIGIN_PLACEHOLDER, site.origin)
+        return renderBrandHtml(html, 'high-school', undefined, { SITE_ORIGIN: site.origin })
       },
+    },
+  }
+}
+
+function brandManifestAsset(): Plugin {
+  const manifest = () => JSON.stringify(brandManifest(JSON.parse(
+    readFileSync(new URL('./public/manifest.webmanifest', import.meta.url), 'utf8'),
+  )))
+  let ssr = false
+  return {
+    name: 'school-brand-manifest',
+    configResolved(config) { ssr = Boolean(config.build.ssr) },
+    configureServer(server) {
+      server.middlewares.use('/manifest.webmanifest', (_req, res) => {
+        res.setHeader('Content-Type', 'application/manifest+json')
+        res.end(manifest())
+      })
+    },
+    generateBundle() {
+      if (!ssr) this.emitFile({ type: 'asset', fileName: 'manifest.webmanifest', source: manifest() })
     },
   }
 }
@@ -54,5 +75,6 @@ export default defineConfig({
     tailwindcss(),
     gitVersion({ logName: 'manabi-map' }),
     siteOriginHtml(),
+    brandManifestAsset(),
   ],
 })

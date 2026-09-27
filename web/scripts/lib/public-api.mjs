@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { SITE_ORIGIN } from './site.mjs'
+import { schoolBrand } from './brands.mjs'
 
 const datasetClaims = JSON.parse(
   readFileSync(new URL('../../data/dataset-claims.json', import.meta.url), 'utf8'),
@@ -60,7 +61,10 @@ const ORIGIN_TOKEN = '{origin}'
 if (!datasetClaims.attribution.includes(ORIGIN_TOKEN)) {
   throw new Error(`dataset-claims.json の attribution に ${ORIGIN_TOKEN} が無い（住所は web/data/site.json から入れる）`)
 }
-export const DATASET_ATTRIBUTION = datasetClaims.attribution.replaceAll(ORIGIN_TOKEN, SITE_ORIGIN)
+export function datasetAttribution(brand, origin) {
+  return datasetClaims.attribution.replace(/\{(origin|brand)\}/g, (_, key) => key === 'origin' ? origin : brand.displayName.ja)
+}
+export const DATASET_ATTRIBUTION = datasetAttribution(schoolBrand, SITE_ORIGIN)
 
 /** 公開県数が正典の全県数と一致するときだけ「全国」を名乗る。 */
 export function formatDatasetCoverage(prefectureCount, schoolCount, nationwidePrefectureCount) {
@@ -297,7 +301,7 @@ export function buildOpenApiDocument({ version, prefectureSlugs, origin = DATASE
   return {
     openapi: '3.1.0',
     info: {
-      title: 'Manabi Map 学校基本情報 API',
+      title: `${schoolBrand.name} 学校基本情報 API`,
       version,
       summary: '出典を追跡できる日本の高等学校・高等専門学校の基本情報。',
       description: [
@@ -313,7 +317,7 @@ export function buildOpenApiDocument({ version, prefectureSlugs, origin = DATASE
         '学校を序列化する用途（順位づけ・合否可能性の判定）には使えません。',
       ].join('\n'),
       license: { name: 'CC BY-SA 4.0', url: DATASET_LICENSE_URL },
-      contact: { name: 'Manabi Map', url: `${origin}/data/`, email: 'hello@manabi-map.app' },
+      contact: { name: schoolBrand.name, url: `${origin}/data/`, email: 'hello@manabi-map.app' },
     },
     externalDocs: {
       description: 'フィールド定義（全項目の型と収録条件）',

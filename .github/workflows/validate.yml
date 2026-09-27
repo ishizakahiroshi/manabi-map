@@ -9,9 +9,6 @@ on:
 permissions:
   contents: read
 
-env:
-  HAS_SUPABASE_BUILD_ACCESS: ${{ secrets.SUPABASE_ANON_KEY != '' }}
-
 concurrency:
   group: validate-web-${{ github.ref }}
   cancel-in-progress: true
@@ -48,6 +45,15 @@ jobs:
       - name: Install
         run: pnpm install --frozen-lockfile
 
+      # Compare the PR head with its common ancestor, not the synthetic merge
+      # checkout. Push events use the previous tip. No DB/secrets are accessed.
+      - name: Check grants in added migrations
+        working-directory: .
+        env:
+          MIGRATION_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          MIGRATION_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: node scripts/check-migration-grants.mjs --base "$MIGRATION_BASE_SHA" --head "$MIGRATION_HEAD_SHA"
+
       - name: Typecheck
         run: pnpm typecheck
 
@@ -57,51 +63,19 @@ jobs:
       - name: Test
         run: pnpm test
 
-      - name: Generate public school data
-        if: env.HAS_SUPABASE_BUILD_ACCESS == 'true'
-        env:
-          VITE_SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          # schools 系は anon で SELECT 可能（RLS: "Public read schools"）。個人データは
-          # RLS（auth.uid() = user_id）で保護されるため、公開データ生成は公開値の anon key
-          # で十分。service role のような全権限鍵は CI に載せない（DEP-CI-01）。
-          VITE_SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
-        run: pnpm gen:schools-json
+      # Always exercise the generator and Vite/SSR/SEO using invented data.
+      # No school DB, auth secret, or observed capture is needed in ordinary CI.
+      # Production data capacity and real account/UI acceptance stay separate.
+      - name: Prepare offline synthetic SQLite snapshot
+        run: |
+          mkdir "$RUNNER_TEMP/school-ci"
+          python -B ../scripts/local-data/prepare_school_ci.py --output "$RUNNER_TEMP/school-ci/input.json"
+          python -B ../scripts/local-data/store_school.py import --input "$RUNNER_TEMP/school-ci/input.json" --db "$RUNNER_TEMP/school-ci/source.sqlite" --apply
+          python -B ../scripts/local-data/store_school.py export --db "$RUNNER_TEMP/school-ci/source.sqlite" --output "$RUNNER_TEMP/school-ci/bundle"
 
-      - name: Build app
-        if: env.HAS_SUPABASE_BUILD_ACCESS == 'true'
-        env:
-          # Build-time placeholders only. Production receives its real public
-          # values from Cloudflare Pages; no service credential reaches Vite.
-          VITE_SUPABASE_URL: https://example.supabase.co
-          VITE_SUPABASE_ANON_KEY: ci-public-placeholder
-          VERSION_OVERRIDE: ci-${{ github.sha }}
-        run: pnpm exec vite build
+      - name: Build and verify synthetic app, SSR, SEO, and static output
+        run: |
+          node scripts/build-school-candidates.mjs --snapshot="$RUNNER_TEMP/school-ci/bundle/snapshot.json" --manifest="$RUNNER_TEMP/school-ci/bundle/manifest.json" --output-root="$RUNNER_TEMP/school-ci/build"
 
-      - name: Build SSR bundle
-        if: env.HAS_SUPABASE_BUILD_ACCESS == 'true'
-        env:
-          VITE_SUPABASE_URL: https://example.supabase.co
-          VITE_SUPABASE_ANON_KEY: ci-public-placeholder
-          VERSION_OVERRIDE: ci-${{ github.sha }}
-        run: pnpm build:ssr
-
-      - name: Generate SEO pages
-        if: env.HAS_SUPABASE_BUILD_ACCESS == 'true'
-        env:
-          VITE_SUPABASE_URL: https://example.supabase.co
-          VITE_SUPABASE_ANON_KEY: ci-public-placeholder
-          VERSION_OVERRIDE: ci-${{ github.sha }}
-        run: pnpm exec tsx scripts/gen-seo-pages.mjs
-
-      - name: Verify static output, SEO, gzip, and 25 MiB limit
-        if: env.HAS_SUPABASE_BUILD_ACCESS == 'true'
-        run: pnpm verify:static
-
-      # 通信量バジェット（docs/local/plan_data-usage-audit.md C5）。
-      # 「増えたら気づく」ための網であって、画面の良し悪しは測れない。
-      # 上限を上げる前に、その増加が利用者に必要かを plan で判断すること。
-      # 注意: 上の verify:static と同じく Supabase の build access が無いと丸ごと飛ぶ。
-      # 走ったかどうかはログの "payload budget" 行で確認する。
-      - name: Check payload budget
-        if: env.HAS_SUPABASE_BUILD_ACCESS == 'true'
-        run: pnpm check:budget
+      - name: Check synthetic app payload budget
+        run: node scripts/check-payload-budget.mjs --dist "$RUNNER_TEMP/school-ci/build/dist-high-school"

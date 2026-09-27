@@ -14,6 +14,8 @@ desktop.ini
 *.bak
 *.orig
 *.rej
+__pycache__/
+*.py[cod]
 
 # === AI ツールのローカル状態（トークンを含む可能性あり） ===
 .claude/

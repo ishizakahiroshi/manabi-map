@@ -100,7 +100,7 @@ export function PrefecturePage({ userData }: Props) {
   const fmt = useFormat()
   const pref = slug ? prefectureBySlug(slug) : null
 
-  const boot = initialPrefState(slug, pref?.name)
+  const boot = useMemo(() => initialPrefState(slug, pref?.name), [slug, pref?.name])
   const [prefSchools, setPrefSchools] = useState<PrefListSchool[]>(() => boot.schools)
   const [cityOrder, setCityOrder] = useState<string[] | null>(() => boot.cityOrder)
   const [loading, setLoading] = useState(() => boot.cityOrder == null)

@@ -1,3 +1,4 @@
+import { schoolBrand } from './brand'
 import site from '../../data/site.json'
 import type { School, Favorite, MineRecord, SchoolNote } from '../types/school'
 
@@ -48,7 +49,7 @@ const STATUS_LABEL: Record<string, string> = {
 
 const SHARING_LABEL: Record<string, string> = {
   private: '非公開（本人のみ）',
-  submit_to_manabi: 'Manabi Map 参考値の改善に匿名で提供することに同意',
+  submit_to_manabi: `${schoolBrand.name} 参考値の改善に匿名で提供することに同意`,
 }
 
 function hasMineContent(m: MineRecord | undefined): boolean {
@@ -117,7 +118,7 @@ export function buildMyData(schools: School[], u: UserDataSlice): MyDataExport {
 
   return {
     format_version: EXPORT_FORMAT_VERSION,
-    service: `Manabi Map (${site.origin})`,
+    service: `${schoolBrand.name} (${site.origin})`,
     exported_at: new Date().toISOString(),
     schools: entries,
   }

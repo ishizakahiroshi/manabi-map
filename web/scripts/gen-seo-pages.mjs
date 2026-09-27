@@ -1,6 +1,9 @@
+import { schoolBrand } from './lib/brands.mjs'
 // ビルド後に実行する SEO ページ生成スクリプト。
 //
 //   node scripts/gen-seo-pages.mjs [--dist <dir>]
+// Synthetic-only local candidate: add --synthetic-candidate=<verified JSON candidate directory>.
+// This never relaxes the normal 1000-school production guard.
 //
 // dist/index.html をテンプレートに、以下を生成する:
 //   - dist/school/<id>/index.html（全校分。固有 title / description / OGP / canonical /
@@ -35,6 +38,8 @@ import {
   formatDatasetCoverage,
 } from './lib/public-api.mjs'
 import { SITE_ORIGIN } from './lib/site.mjs'
+import { createSeoDataReader } from './lib/school-seo-candidate.mjs'
+import { jsonLdScript } from './lib/json-ld.mjs'
 import { cityPageDescription } from './lib/city-breakdown.mjs'
 // 近隣校の選定・距離計算と選抜実績の集計・後継校の逆引きは React 側と同一実装を共有する
 // （tsx 経由で .ts を直 import（package.json の scripts が tsx で起動する。Node の type stripping には依存しない — Cloudflare Pages のビルドイメージは pnpm 同梱の preinstall Node しか使えないため）。フォーク禁止 —
@@ -65,6 +70,7 @@ const here = dirname(fileURLToPath(import.meta.url))
 const webRoot = join(here, '..')
 const distArgIndex = process.argv.indexOf('--dist')
 const distDir = distArgIndex >= 0 ? process.argv[distArgIndex + 1] : join(webRoot, 'dist')
+const { minimumExpected: MIN_EXPECTED, readData } = await createSeoDataReader(process.argv.slice(2), distDir)
 
 const rawTemplate = await readFile(join(distDir, 'index.html'), 'utf8')
 
@@ -77,21 +83,21 @@ const COVERAGE_PLACEHOLDER = '__COVERAGE__'
 // manifest が無い場合は従来の `schools.json` にフォールバックする。
 async function resolveSchoolsPath() {
   try {
-    const manifestText = await readFile(join(distDir, 'schools-manifest.json'), 'utf8')
+    const manifestText = await readData('schools-manifest.json', 'utf8')
     const manifest = JSON.parse(manifestText)
-    if (manifest?.url) return join(distDir, manifest.url.replace(/^\//, ''))
+    if (manifest?.url) return manifest.url.replace(/^\//, '')
   } catch (err) {
     if (err?.code !== 'ENOENT') throw err
   }
-  return join(distDir, 'schools.json')
+  return 'schools.json'
 }
 const schoolsPath = await resolveSchoolsPath()
-const schoolsFile = await readFile(schoolsPath)
+const schoolsFile = await readData(schoolsPath)
 const schoolsText = schoolsPath.endsWith('.gz') ? gunzipSync(schoolsFile).toString('utf8') : schoolsFile.toString('utf8')
 const schoolsPayload = JSON.parse(schoolsText)
 const schools = Array.isArray(schoolsPayload) ? schoolsPayload : schoolsPayload.schools
 if (!Array.isArray(schools)) throw new Error('schools payload has an unsupported format')
-const publicDataset = JSON.parse(await readFile(join(distDir, 'api', 'v1', 'dataset.json'), 'utf8'))
+const publicDataset = JSON.parse(await readData('api/v1/dataset.json', 'utf8'))
 
 // gen-schools-json.mjs は出典 object を sourceCatalog の index へ圧縮している。
 // 選抜実績の出典脚注に使うため、useSchools.ts の hydrateUnitSources と同様に
@@ -115,13 +121,15 @@ const prefSlugByName = new Map(prefectures.map((p) => [p.name, p.slug]))
 // String.replace はマッチしなくても元の文字列を返す（＝無言で失敗する）ので、
 // 差し替えが起きたことを明示的に確認する。プレースホルダを消し忘れて
 // 本番の OGP カードに「__COVERAGE__」が出る事故を防ぐ。
-if (!rawTemplate.includes(COVERAGE_PLACEHOLDER)) {
+const coverageMeta = /(<meta property="og:description" content=")([^"]*)(")/
+if (!coverageMeta.exec(rawTemplate)?.[2].includes(COVERAGE_PLACEHOLDER)) {
   throw new Error(
     `gen-seo-pages: index.html に ${COVERAGE_PLACEHOLDER} が無い。` +
     'og:description の収録範囲プレースホルダが消えている可能性がある'
   )
 }
-const template = rawTemplate.replaceAll(COVERAGE_PLACEHOLDER, escapeHtml(coverageText(schools)))
+const template = rawTemplate.replace(coverageMeta, (_match, start, content, end) =>
+  start + content.replaceAll(COVERAGE_PLACEHOLDER, () => escapeHtml(coverageText(schools))) + end)
 
 function escapeHtml(value) {
   return String(value)
@@ -214,9 +222,9 @@ function renderHead(html, { title, description, url }) {
   return out
 }
 
-/** JSON-LD を head 閉じタグ直前に注入する。"</script" で script が閉じないようエスケープ。 */
+/** JSON-LD を head 閉じタグ直前に注入し、HTMLのscript解析状態への干渉を防ぐ。 */
 function withJsonLd(html, jsonLd) {
-  const script = `<script type="application/ld+json">${JSON.stringify(jsonLd).replaceAll('</', '<\\/')}</script>`
+  const script = jsonLdScript(jsonLd)
   return replaceOrThrow(html, /<\/head>/, () => `    ${script}\n  </head>`, 'head 閉じタグ')
 }
 
@@ -302,8 +310,8 @@ async function renderSchoolPage(school) {
   const departmentNames = (school.school_departments ?? []).map((d) => d.name).filter(Boolean)
   const hasDepartments = departmentNames.length > 0
   const title = hasDepartments
-    ? `${school.name}（${place}）の地図・アクセス・学科 | Manabi Map`
-    : `${school.name}（${place}）の地図・アクセス | Manabi Map`
+    ? `${school.name}（${place}）の地図・アクセス・学科 | ${schoolBrand.name}`
+    : `${school.name}（${place}）の地図・アクセス | ${schoolBrand.name}`
   const description = hasDepartments
     ? `${school.name}（${place}）の場所・学科情報。住所を入れると通える${typeLabel}が地図に表示され、` +
       '通学時間の目安の確認や見学メモの家族共有ができる無料の学校選びサービスです。'
@@ -511,7 +519,7 @@ async function renderSchoolPage(school) {
     `<dl>${dl}</dl>${officialLink}${lifecycleSection}` +
     admissionSection +
     neighborSection +
-    `<p>Manabi Map（まなびマップ）は、住所を入れると通える${typeLabel}が地図に表示される無料の学校選びサービスです。` +
+    `<p>${escapeHtml(schoolBrand.displayName.ja)}は、住所を入れると通える${typeLabel}が地図に表示される無料の学校選びサービスです。` +
     `お気に入り保存・見学メモ・家族での共有ができます。</p>` +
     `<p><a href="/">地図で通える学校をさがす</a></p></main>`
 
@@ -535,7 +543,7 @@ async function renderSchoolPage(school) {
     ...(alternateNames.length ? { alternateName: alternateNames } : {}),
     url,
     description,
-    image: `${SITE_ORIGIN}/og-hero.png`,
+    image: `${SITE_ORIGIN}${schoolBrand.shareImage}`,
     license: DATASET_LICENSE_URL,
     creditText: DATASET_ATTRIBUTION,
     address: {
@@ -600,7 +608,7 @@ async function renderSchoolPage(school) {
   // 単体 JSON（gen-schools-json.mjs が dist へ出したもの）をそのまま渡して SSR する。
   // 同じ payload を #root の外へ埋め、ブラウザの初回 render でも同じ内容を描かせる。
   const payload = JSON.parse(
-    await readFile(join(distDir, 'school-data', `${school.id}.json`), 'utf8'),
+    await readData(`school-data/${school.id}.json`, 'utf8'),
   )
   const rendered = renderApp(`/school/${school.id}`, { schoolDetail: payload })
   return withRootContent(
@@ -619,7 +627,6 @@ const targets = schools.filter((s) => s.latitude != null && s.longitude != null)
 if (targets.length === 0) {
   throw new Error('gen-seo-pages: 生成対象 0 件。schools.json の取得に失敗している可能性あり')
 }
-const MIN_EXPECTED = 1000
 if (targets.length < MIN_EXPECTED) {
   throw new Error(
     `gen-seo-pages: 生成 ${targets.length} 件は下限 ${MIN_EXPECTED} 未満。データ大幅欠損の疑い`
@@ -687,7 +694,7 @@ if (activePrefectures.length === 0) {
  */
 async function readPrefIndex(pref, prefSchools) {
   const prefIndex = JSON.parse(
-    await readFile(join(distDir, 'school-data', `pref-index-${pref.slug}.json`), 'utf8'),
+    await readData(`school-data/pref-index-${pref.slug}.json`, 'utf8'),
   )
   if (prefIndex?.slug !== pref.slug || !Array.isArray(prefIndex.schools) || !Array.isArray(prefIndex.cities)) {
     throw new Error(`gen-seo-pages: pref-index が不正です: ${pref.slug}`)
@@ -704,7 +711,7 @@ async function readPrefIndex(pref, prefSchools) {
 function renderPrefPage(pref, prefIndex) {
   const url = `${SITE_ORIGIN}/pref/${pref.slug}/`
   const count = prefIndex.schools.length
-  const title = `${pref.name}の高校一覧（${count} 校） | Manabi Map`
+  const title = `${pref.name}の高校一覧（${count} 校） | ${schoolBrand.name}`
   const description =
     `${pref.name}の高校一覧（${count} 校）。市区町村ごとに校名・設置区分・課程を掲載。` +
     '地図で場所を確認し、気になる学校の保存や家族での見学メモ共有ができる無料の学校選びサービスです。'
@@ -726,7 +733,7 @@ function renderPrefPage(pref, prefIndex) {
 function renderCityPage(pref, prefIndex, cityCounts, city, count) {
   const path = cityPagePath(pref.slug, city)
   const url = `${SITE_ORIGIN}${path}`
-  const title = `${city}の高校一覧（${count} 校） | Manabi Map`
+  const title = `${city}の高校一覧（${count} 校） | ${schoolBrand.name}`
   const cityEntries = prefIndex.schools.filter((entry) => entry.c === city)
   const description = cityPageDescription(pref.name, city, cityEntries)
   const payload = {
@@ -765,7 +772,7 @@ function renderSchoolsHubPage() {
   const heading = allCovered
     ? `全国の高校一覧（47 都道府県・${targets.length.toLocaleString('en-US')} 校）`
     : `高校一覧（${activePrefectures.length} 都道府県・${targets.length.toLocaleString('en-US')} 校）`
-  const title = `${heading} | Manabi Map`
+  const title = `${heading} | ${schoolBrand.name}`
   const description =
     `${coverageText(schools)}都道府県から高校一覧を開き、市区町村ごとの学校と地図を確認できます。` +
     'お気に入り保存・見学メモの家族共有ができる無料の学校選びサービスです。'
@@ -788,8 +795,8 @@ const ORGANIZATION_JSON_LD = {
   '@context': 'https://schema.org',
   '@type': 'Organization',
   '@id': `${SITE_ORIGIN}/#organization`,
-  name: 'Manabi Map',
-  alternateName: 'まなびマップ',
+  name: `${schoolBrand.name}`,
+  alternateName: schoolBrand.alternateName,
   url: `${SITE_ORIGIN}/`,
   email: 'hello@manabi-map.app',
   contactPoint: [
@@ -816,7 +823,7 @@ const ORGANIZATION_JSON_LD = {
 
 function renderDataPage() {
   const url = `${SITE_ORIGIN}/data/`
-  const title = '学校基本情報データセット・公開 API | Manabi Map'
+  const title = `学校基本情報データセット・公開 API | ${schoolBrand.name}`
   const datasetCoverage = formatDatasetCoverage(
     Number(publicDataset.prefecture_count),
     Number(publicDataset.school_count),
@@ -831,7 +838,7 @@ function renderDataPage() {
     '@context': 'https://schema.org',
     '@type': 'Dataset',
     '@id': `${url}#dataset`,
-    name: 'Manabi Map 学校基本情報データセット',
+    name: `${schoolBrand.name} 学校基本情報データセット`,
     description,
     url,
     license: DATASET_LICENSE_URL,
@@ -865,9 +872,9 @@ function renderDataPage() {
 
 function renderAboutPage() {
   const url = `${SITE_ORIGIN}/about/`
-  const title = 'このサービスについて | Manabi Map'
+  const title = `このサービスについて | ${schoolBrand.name}`
   const description =
-    'Manabi Map（まなびマップ）は親子で使う学校選びの地図ノートです。使い方・大切にしていること・' +
+    `${schoolBrand.displayName.ja}は親子で使う学校選びの地図ノートです。使い方・大切にしていること・` +
     'データの方針・作っている人・お問い合わせ先を紹介しています。'
   const withHead = renderHead(template, { title, description, url })
   return withRootContent(withJsonLd(withHead, ORGANIZATION_JSON_LD), renderApp('/about').html, '', '/about')
@@ -875,9 +882,9 @@ function renderAboutPage() {
 
 function renderPressPage() {
   const url = `${SITE_ORIGIN}/press/`
-  const title = '配布素材・プレスキット | Manabi Map'
+  const title = `配布素材・プレスキット | ${schoolBrand.name}`
   const description =
-    'Manabi Map（まなびマップ）のメディア関係者・教育関係者向け基礎情報。運営者・連絡先・配布素材・' +
+    `${schoolBrand.displayName.ja}のメディア関係者・教育関係者向け基礎情報。運営者・連絡先・配布素材・` +
     '掲載情報の訂正窓口（takedown@manabi-map.app）を公開しています。'
   const withHead = renderHead(template, { title, description, url })
   return withRootContent(withJsonLd(withHead, ORGANIZATION_JSON_LD), renderApp('/press').html, '', '/press')
@@ -886,7 +893,7 @@ function renderPressPage() {
 // --- 404（ソフト 404 の解消） ------------------------------------------------
 
 function render404Page() {
-  const title = 'ページが見つかりません | Manabi Map'
+  const title = `ページが見つかりません | ${schoolBrand.name}`
   const description =
     'お探しのページは見つかりませんでした。トップから住所を入れて地図でさがすか、都道府県一覧からお進みください。'
   // 404 は canonical を持たせない（存在しない URL がトップの canonical を名乗っていたのが
@@ -966,11 +973,11 @@ await writeFile(join(distDir, 'data', 'index.html'), renderDataPage())
 
 for (const { doc, title } of LEGAL_DOCS) {
   const url = `${SITE_ORIGIN}/legal/${doc}/`
-  const description = `Manabi Map（まなびマップ）の${title}。運営方針・データの扱い・お問い合わせ窓口を公開しています。`
+  const description = `${schoolBrand.displayName.ja}の${title}。運営方針・データの扱い・お問い合わせ窓口を公開しています。`
   // 本文は生 Markdown のまま React へ渡す（LegalPage が react-markdown で描く）。
   // node 側で HTML 化して流し込むと、React の出力と 1 文字でも違った時点で hydration が壊れる。
   const markdown = await readFile(join(distDir, 'legal', `${doc}.md`), 'utf8')
-  const withHead = renderHead(template, { title: `${title} | Manabi Map`, description, url })
+  const withHead = renderHead(template, { title: `${title} | ${schoolBrand.name}`, description, url })
   const rendered = renderApp(`/legal/${doc}`, {
     docMarkdown: { key: `legal/${doc}`, text: markdown },
   })
@@ -986,7 +993,7 @@ for (const guide of GUIDES) {
   const url = `${SITE_ORIGIN}/guide/${guide.slug}/`
   const markdown = await readFile(join(distDir, 'guide', `${guide.slug}.md`), 'utf8')
   const withHead = renderHead(template, {
-    title: `${guide.title} | Manabi Map`,
+    title: `${guide.title} | ${schoolBrand.name}`,
     description: guide.description,
     url,
   })
@@ -1062,7 +1069,7 @@ console.log(
 )
 
 const llms = [
-  '# Manabi Map（まなびマップ）',
+  `# ${schoolBrand.displayName.ja}`,
   '',
   '> 親子で使う、学校選びの地図ノート。学校を序列化せず、地図、見学、家族の対話を通じた進路検討を支援します。',
   '',

@@ -20,7 +20,7 @@
  * 使い方: node scripts/check-payload-budget.mjs [--dist dist] [--json]
  */
 import { readFileSync, readdirSync, statSync, existsSync } from 'node:fs'
-import { join, relative } from 'node:path'
+import { join, relative, resolve } from 'node:path'
 import { gzipSync } from 'node:zlib'
 import { fileURLToPath } from 'node:url'
 import { SITE_HOSTNAME } from './lib/site.mjs'
@@ -198,7 +198,7 @@ function collectHosts() {
 }
 
 function main() {
-  const distPath = join(WEB_ROOT, DIST)
+  const distPath = resolve(WEB_ROOT, DIST)
   if (!existsSync(distPath)) {
     console.error(`[budget] ${distPath} がありません。先に pnpm build を実行してください。`)
     process.exit(2)

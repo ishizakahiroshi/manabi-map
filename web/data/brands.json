@@ -1,0 +1,26 @@
+{
+  "high-school": {
+    "name": "Manabi Map",
+    "shortName": "Manabi Map",
+    "displayName": { "ja": "Manabi Map（まなびマップ）", "en": "Manabi Map" },
+    "alternateName": "まなびマップ",
+    "logo": "/brand-mark.svg",
+    "shareImage": "/og-hero.png"
+  },
+  "school": {
+    "name": "Manabi Map",
+    "shortName": "Manabi Map",
+    "displayName": { "ja": "Manabi Map", "en": "Manabi Map" },
+    "alternateName": "まなびマップ",
+    "logo": "/brand-mark.svg",
+    "shareImage": "/og-hero.png"
+  },
+  "apex": {
+    "name": "まなびマップ",
+    "shortName": "まなびマップ",
+    "displayName": { "ja": "まなびマップ", "en": "まなびマップ" },
+    "alternateName": "まなびマップ",
+    "logo": "/brand-mark.svg",
+    "shareImage": "/og-hero.png"
+  }
+}

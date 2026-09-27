@@ -21,8 +21,13 @@
 // 切替手順の正典: docs/local/maintenance-mode-runbook.md
 // 注意: Pages の環境変数変更は再デプロイ(最新デプロイの Retry で可)を伴う。
 
+import { MIGRATION_INVENTORY, schoolMigrationAction, validateMigrationInventory } from './_school-migration.ts';
+
 interface Env {
   MAINTENANCE_MODE?: string;
+  /** Explicit legacy-apex candidate binding; absent on existing production. */
+  LEGACY_SCHOOL_SHELL?: string;
+  SCHOOL_MIGRATION_PHASE?: string;
   ASSETS: { fetch: (input: Request | string | URL) => Promise<Response> };
 }
 
@@ -112,6 +117,49 @@ export const onRequest = async (context: Context): Promise<Response> => {
   const { request, env, next } = context;
   const { pathname, searchParams } = new URL(request.url);
 
+  // Candidate routing is opt-in and must never silently fall back on bad inventory.
+  const phase = env.SCHOOL_MIGRATION_PHASE;
+  if (phase) {
+    const headers = { 'cache-control': 'no-store', 'referrer-policy': 'no-referrer', 'x-robots-tag': 'noindex' };
+    if (phase !== 'candidate-rescue' && phase !== 'candidate-retired') return new Response(null, { status: 503, headers });
+    let action;
+    try {
+      const response = await env.ASSETS.fetch(new URL(MIGRATION_INVENTORY, request.url));
+      if (!response.ok) throw new Error('Unavailable inventory');
+      action = schoolMigrationAction(new URL(request.url), request.method, validateMigrationInventory(await response.json(), phase));
+    } catch { return new Response(null, { status: 503, headers }); }
+    if (action.kind === 'missing') {
+      if (pathname.startsWith('/api/')) return new Response(request.method === 'HEAD' ? null : '{"error":"not found"}', { status: 404, headers: { ...headers, 'content-type': 'application/json' } });
+      const page = await env.ASSETS.fetch(new URL('/404.html', request.url));
+      return new Response(request.method === 'HEAD' ? null : page.ok ? page.body : 'Not Found', {
+        status: 404, headers: { ...headers, 'content-type': page.ok ? 'text/html; charset=utf-8' : 'text/plain; charset=utf-8' },
+      });
+    }
+    if (action.kind === 'method') return new Response(null, { status: 405, headers: { ...headers, allow: action.allow } });
+    if (action.kind === 'ended') {
+      if (pathname.startsWith('/api/')) return new Response(request.method === 'HEAD' ? null : '{"error":"legacy endpoint retired"}', {
+        status: 410, headers: { ...headers, 'content-type': 'application/json' },
+      });
+      // This document has only a fixed restart destination, never the old query/hash.
+      const page = await env.ASSETS.fetch(new URL('/school-recovery-ended.html', request.url));
+      return new Response(request.method === 'HEAD' ? null : page.ok ? page.body : 'School recovery is unavailable.', {
+        status: page.ok ? 410 : 503, headers: { ...headers, 'content-type': 'text/html; charset=utf-8' },
+      });
+    }
+    if (action.kind === 'redirect') return new Response(null, { status: 301, headers: { ...headers, location: action.location } });
+    if (action.kind === 'next') return context.next();
+    // Hard maintenance deliberately pauses rescue; it is not a DB write freeze.
+    if (env.MAINTENANCE_MODE === '1') return new Response(request.method === 'HEAD' ? null : '旧URLでの手続きはメンテナンス中です。復旧後に同じURLから再開してください。', {
+      status: 503, headers: { ...headers, 'content-type': 'text/plain; charset=utf-8', 'retry-after': '300' },
+    });
+    const shell = await env.ASSETS.fetch(new URL('/legacy-school/', request.url));
+    if (!shell.ok) return new Response(null, { status: 503, headers });
+    const shellHeaders = new Headers(shell.headers);
+    for (const [key, value] of Object.entries(headers)) shellHeaders.set(key, value);
+    shellHeaders.set('content-type', 'text/html; charset=utf-8');
+    return new Response(request.method === 'HEAD' ? null : shell.body, { status: 200, headers: shellHeaders });
+  }
+
   if (env.MAINTENANCE_MODE === "1") {
     // API は maintenance.html（200 + HTML）で汚さず、各 Function 自身の
     // 認証・認可・エラー応答を返す。admin 誤判定もここで防ぐ。
@@ -141,7 +189,8 @@ export const onRequest = async (context: Context): Promise<Response> => {
   // GET / HEAD 以外(POST 等)を HTML 200 にすり替えない。
   const isReadRequest = request.method === "GET" || request.method === "HEAD";
   if (isReadRequest && isSpaRoute(pathname)) {
-    const shell = await env.ASSETS.fetch(new URL(SPA_SHELL_PATH, request.url));
+    const legacy = env.LEGACY_SCHOOL_SHELL === "1";
+    const shell = await env.ASSETS.fetch(new URL(legacy ? "/legacy-school/" : SPA_SHELL_PATH, request.url));
     // シェルが取れないときは従来どおりの応答へ落とす(勝手に 200 を作らない)。
     if (!shell.ok) {
       return next();
@@ -149,10 +198,15 @@ export const onRequest = async (context: Context): Promise<Response> => {
     // _headers 由来のヘッダ(CSP 等)を落とさないよう、本文と一緒にそのまま引き継ぐ。
     const headers = new Headers(shell.headers);
     headers.set("content-type", "text/html; charset=utf-8");
+    if (legacy) {
+      headers.set("cache-control", "no-store");
+      headers.set("referrer-policy", "no-referrer");
+      headers.set("x-robots-tag", "noindex");
+    }
     if (hasSharedLocationQuery(searchParams)) {
       headers.set("x-robots-tag", "noindex");
     }
-    return new Response(shell.body, { status: 200, headers });
+    return new Response(request.method === "HEAD" ? null : shell.body, { status: 200, headers });
   }
 
   return next();

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Trial icon: school inside a map pin. No external image dependency. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="48dp" android:height="48dp"
+    android:viewportWidth="48" android:viewportHeight="48">
+    <path android:fillColor="#F7F3EA" android:pathData="M0,0H48V48H0Z" />
+    <path android:fillColor="#FF7A3D"
+        android:pathData="M24,5C14.6,5 8,11.8 8,20C8,30 24,44 24,44C24,44 40,30 40,20C40,11.8 33.4,5 24,5Z" />
+    <path android:fillColor="#29251F" android:pathData="M14,19L24,12L34,19V21H14Z" />
+    <path android:fillColor="#FFFFFF" android:pathData="M16,21H32V30H16Z" />
+    <path android:fillColor="#29251F" android:pathData="M18,23H21V26H18ZM27,23H30V26H27ZM23,24H25V30H23Z" />
+</vector>

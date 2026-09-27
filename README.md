@@ -99,4 +99,6 @@ LINE、Google、匿名のいずれかで利用できます。匿名で始めた�
 
 ## リンク
 
+開発中の表示設定は [`web/data/brands.json`](web/data/brands.json) に集約し、学校・学校入口・総合入口を独立して変更できます。URL・認証・保存データの識別子は別に管理します。合成設定での検収と戻し方は[ブランド運用仕様](docs/reference_manabi-map-operating-rules.md#brand-portability)を参照してください。候補の実装と本番の改名・学校移転は別の工程です。
+
 - 本番サイト: https://manabi-map.app

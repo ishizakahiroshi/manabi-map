@@ -13,8 +13,8 @@
 
 製品のやらないこと、教育系広告だけを許可する方針、個人情報・偏差値相当値・公開 API の境界は [`docs/reference_manabi-map-operating-rules.md`](docs/reference_manabi-map-operating-rules.md) を正本とする。
 
-- 正式決定前のネイティブアプリ化（Capacitor 等の導入）、ランキングサイト化、商用偏差値の転載、自由口コミ大量収集、有料課金の本実装は提案しない。
-- URL・DB・API・Pages プロジェクト名にはサービス名ではなく機能名を使う。詳細は operating rules の「ブランドと URL」節。
+- 高校版は当面 Web と Android に注力し、iPhone は Web 版で提供する。iPhone 専用版の再検討条件は [提供プラットフォームと採算の判断](docs/reference_manabi-map-operating-rules.md#platform-policy)を読む。正式決定前のアプリ化拡大（Capacitor 等の導入を含む）、ランキングサイト化、商用偏差値の転載、自由口コミ大量収集、有料課金の本実装は提案しない。
+- ブランドの差替え可能性は必須。URL・DB・API・Pages名は機能名を使い、表示名・ロゴ等と分離する。定点観測・切替方針も含む共通正本は [operating rules「ブランドと URL」](docs/reference_manabi-map-operating-rules.md#brand-portability)。
 - 公開 fixture は合成データだけで作る。外部 KB の表示名・実値・秘密を公開ファイルへ残さない。
 - 既存の表示・API・RLS のガードを緩める提案をしない。機械的な強制層は正本コードとテストを読む。
 

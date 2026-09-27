@@ -490,11 +490,13 @@ export function MapPage({ userData }: Props) {
       maxClusterRadius: 40,
       iconCreateFunction: (cluster) => {
         const n = cluster.getChildCount()
+        const tier = n < 10 ? 'lv1' : n < 30 ? 'lv2' : n < 80 ? 'lv3' : 'lv4'
+        const size = tier === 'lv4' ? 48 : 40
         return L.divIcon({
           className: '',
-          iconSize: [40, 40],
-          iconAnchor: [20, 20],
-          html: `<div class="school-cluster"><span>${n}</span></div>`,
+          iconSize: [size, size],
+          iconAnchor: [size / 2, size / 2],
+          html: `<div class="school-cluster school-cluster--${tier}"><span>${n}</span></div>`,
         })
       },
     }).addTo(map)

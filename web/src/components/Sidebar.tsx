@@ -1,3 +1,4 @@
+import { schoolBrand } from '../lib/brand'
 import { useEffect, useRef } from 'react'
 import siteFooterLinks from '../../data/site-footer-links.json'
 import { useLocation, useNavigate, useNavigationType } from 'react-router-dom'
@@ -97,7 +98,7 @@ export function Sidebar({ favCount, noteCount, isAdmin }: SidebarProps) {
           <button className="icon-btn" onClick={close} aria-label={t('common.close')}>
             ×
           </button>
-          <div className="brand">{t('common.brand')}</div>
+          <div className="brand" title={t('common.brand')}>{t('common.brand')}</div>
         </div>
         <div className="sb-body">
           <div className="sb-user">
@@ -194,7 +195,7 @@ export function Sidebar({ favCount, noteCount, isAdmin }: SidebarProps) {
           </div>
 
           <div className="sb-footer">
-            <div>Manabi Map v{__APP_VERSION__}</div>
+            <div>{schoolBrand.name} v{__APP_VERSION__}</div>
             <div className="sb-oss">🌱 Open Source · AGPL-3.0</div>
             <div style={{ marginTop: 4 }}>
               <a href="/legal/privacy" onClick={(e) => { e.preventDefault(); go('/legal/privacy') }}>

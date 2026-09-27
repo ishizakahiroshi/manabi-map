@@ -1,4 +1,5 @@
 import { Suspense, lazy, useMemo } from 'react'
+import { schoolBrand } from './lib/brand'
 import { Navigate, Routes, Route, useLocation } from 'react-router-dom'
 import { useI18n } from './contexts/I18nContext'
 import { useUserData } from './hooks/useUserData'
@@ -105,8 +106,8 @@ export default function App() {
 
         {isHome && (
           <div className="header">
-            <img className="brand-icon" src="/brand-mark.svg" alt="" aria-hidden="true" />
-            <div className="brand">{t('common.brand')}</div>
+            <img className="brand-icon" src={schoolBrand.logo} alt="" aria-hidden="true" />
+            <div className="brand" title={t('common.brand')}>{t('common.brand')}</div>
           </div>
         )}
 
