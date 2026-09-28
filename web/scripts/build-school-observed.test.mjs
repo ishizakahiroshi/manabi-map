@@ -52,6 +52,8 @@ async function inventedGeneration(t) {
 test('observed CLI requires explicit pinned source, external output and public-only config', () => {
   const required = ['--snapshot=a', '--manifest=b', '--output-root=c', '--public-config=d', '--generation-time=2030-01-01T00:00:00Z', `--candidate-revision=${'a'.repeat(40)}`]
   assert.equal(parseObservedBuildArgs([...required, '--max-decoded-bytes=268435456'])['max-decoded-bytes'], '268435456')
+  assert.equal(parseObservedBuildArgs([...required, '--site-origin=https://manabi-map-school.pages.dev'])['site-origin'], 'https://manabi-map-school.pages.dev')
+  assert.equal(parseObservedBuildArgs([...required, '--site-origin=https://school.manabi-map.app'])['site-origin'], 'https://school.manabi-map.app')
   for (const args of [[], required.slice(1), [...required, '--snapshot=duplicate'], [...required, '--env-file=secret'], [...required, '--school-source=supabase']]) assert.throws(() => parseObservedBuildArgs(args))
 })
 
@@ -150,6 +152,11 @@ test('mocked build executes isolated phases in order and copies only public gene
     })
     if (args.includes('scripts/gen-schools-json.mjs')) {
       phases.push('generation')
+      assert.equal(options.cwd, join(output, 'source/web'))
+      const siteBytes = syncFS.readFileSync(join(options.cwd, 'data/site.json'))
+      fixture.receipt.generator.files = [{ path: 'web/data/site.json', sha256: hash(siteBytes) }]
+      fixture.receipt.generator.sha256 = hash(canonicalSchoolSourceJSON(fixture.receipt.generator.files))
+      syncFS.writeFileSync(join(fixture.root, 'observed-generation.json'), canonical(fixture.receipt))
       const generation = args.find((arg) => arg.startsWith('--output-root=')).slice('--output-root='.length)
       syncFS.cpSync(fixture.root, generation, { recursive: true })
       if (fault === 'junction') {
@@ -161,10 +168,14 @@ test('mocked build executes isolated phases in order and copies only public gene
     } else if (basename(args[1]) === 'vite.js' && !args.includes('--ssr')) {
       phases.push('client')
       syncFS.cpSync(join(output, 'generation/public-data'), join(output, 'dist'), { recursive: true })
-      syncFS.writeFileSync(join(output, 'dist/index.html'), '<!doctype html><title>Invented fixture</title>')
+      const site = JSON.parse(syncFS.readFileSync(join(options.cwd, 'data/site.json')))
+      syncFS.writeFileSync(join(output, 'dist/index.html'), `<!doctype html><title>Invented fixture</title><link rel="canonical" href="${site.origin}/">`)
     } else if (args.includes('--ssr')) phases.push('ssr')
     else if (args.includes('scripts/gen-seo-pages.mjs')) phases.push('seo')
-    else if (basename(args[1]) === 'verify-static-output.mjs') phases.push('static')
+    else if (basename(args[1]) === 'verify-static-output.mjs') {
+      phases.push('static')
+      if (fault === 'site-drift') syncFS.writeFileSync(join(output, 'source/web/data/site.json'), '{"origin":"https://wrong.invalid"}')
+    }
     else assert.fail('unexpected command')
     return Buffer.from('invented subprocess output must not be printed')
   })
@@ -175,6 +186,9 @@ test('mocked build executes isolated phases in order and copies only public gene
     'generation-time': fixture.pins.generatedAt, 'candidate-revision': fixture.pins.candidateRevision })
   assert.deepEqual(phases, ['generation', 'client', 'ssr', 'seo', 'static'])
   assert.equal(receipt.deploymentPerformed, false)
+  assert.equal(receipt.origin, 'https://manabi-map.app')
+  assert.equal(receipt.siteOriginOverlay, undefined)
+  assert.match((await fs.readFile(join(output, 'dist/index.html'))).toString(), /href="https:\/\/manabi-map\.app\/"/)
   assert.ok(receipt.sourceFiles.some((entry) => entry.path === 'web/data/deployment-targets.json'))
   assert.ok(receipt.sourceFiles.some((entry) => entry.path === 'functions/_school-migration.ts'))
   assert.ok(!receipt.sourceFiles.some((entry) => entry.path === 'functions/api/csp-report.test.ts'))
@@ -185,6 +199,23 @@ test('mocked build executes isolated phases in order and copies only public gene
   assert.equal(receipt.publicArtifacts.length, fixture.files.size + 1)
   await assert.rejects(fs.stat(join(output, 'source/web/public/private-source')), { code: 'ENOENT' })
   assert.equal(JSON.parse(await fs.readFile(join(output, 'observed-build.json'))).generationReceiptSha256, hash(canonical(fixture.receipt)))
+  for (const [name, origin] of [['pages', 'https://manabi-map-school.pages.dev'], ['custom', 'https://school.manabi-map.app']]) {
+    phases.length = 0; output = join(root, `school-origin-${name}`)
+    const school = await buildSchoolObserved({ snapshot: join(input, 'snapshot.json'), manifest: join(input, 'manifest.json'),
+      'public-config': join(input, 'public.json'), 'output-root': output,
+      'generation-time': fixture.pins.generatedAt, 'candidate-revision': fixture.pins.candidateRevision,
+      'site-origin': origin })
+    assert.deepEqual(phases, ['generation', 'client', 'ssr', 'seo', 'static'])
+    assert.equal(school.origin, origin)
+    assert.equal(school.siteOriginOverlay.origin, origin)
+    assert.equal(school.siteOriginOverlay.originalSha256, hash(await fs.readFile(new URL('../data/site.json', import.meta.url))))
+    assert.equal(school.siteOriginOverlay.effectiveSha256, hash(await fs.readFile(join(output, 'source/web/data/site.json'))))
+    assert.equal(school.sourceFiles.find((entry) => entry.path === 'web/data/site.json').sha256, school.siteOriginOverlay.effectiveSha256)
+    assert.equal(JSON.parse(await fs.readFile(join(output, 'generation/observed-generation.json'))).generator.files[0].sha256,
+      school.siteOriginOverlay.effectiveSha256)
+    assert.ok((await fs.readFile(join(output, 'dist/index.html'))).toString().includes(`href="${origin}/"`))
+    assert.equal(JSON.parse(await fs.readFile(new URL('../data/site.json', import.meta.url))).origin, 'https://manabi-map.app')
+  }
   for (const phase of ['generation', 'client', 'ssr', 'seo', 'static']) {
     await t.test(`fixed ${phase} failure excludes all child diagnostics`, async () => {
       fault = phase; output = join(root, `failed-${phase}`)
@@ -207,6 +238,26 @@ test('mocked build executes isolated phases in order and copies only public gene
       assert.equal(observedBuildFailure(error).phase, 'public-copy'); return true
     })
     assert.deepEqual(await fs.readdir(join(root, 'victim')), [])
+    await assert.rejects(fs.stat(join(output, 'observed-build.json')), { code: 'ENOENT' })
+  })
+  await t.test('wrong origin and copied site drift never create a completed receipt', async () => {
+    output = join(root, 'wrong-origin')
+    await assert.rejects(buildSchoolObserved({ snapshot: join(input, 'snapshot.json'), manifest: join(input, 'manifest.json'),
+      'public-config': join(input, 'public.json'), 'output-root': output,
+      'generation-time': fixture.pins.generatedAt, 'candidate-revision': fixture.pins.candidateRevision,
+      'site-origin': 'https://wrong.invalid' }))
+    await assert.rejects(fs.stat(output), { code: 'ENOENT' })
+    output = join(root, 'apex-origin-override')
+    await assert.rejects(buildSchoolObserved({ snapshot: join(input, 'snapshot.json'), manifest: join(input, 'manifest.json'),
+      'public-config': join(input, 'public.json'), 'output-root': output,
+      'generation-time': fixture.pins.generatedAt, 'candidate-revision': fixture.pins.candidateRevision,
+      'site-origin': 'https://manabi-map.app' }))
+    await assert.rejects(fs.stat(output), { code: 'ENOENT' })
+    fault = 'site-drift'; output = join(root, 'site-drift')
+    await assert.rejects(buildSchoolObserved({ snapshot: join(input, 'snapshot.json'), manifest: join(input, 'manifest.json'),
+      'public-config': join(input, 'public.json'), 'output-root': output,
+      'generation-time': fixture.pins.generatedAt, 'candidate-revision': fixture.pins.candidateRevision,
+      'site-origin': 'https://manabi-map-school.pages.dev' }))
     await assert.rejects(fs.stat(join(output, 'observed-build.json')), { code: 'ENOENT' })
   })
 })

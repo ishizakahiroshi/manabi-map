@@ -29,7 +29,8 @@ import school_live_source as live
 import store_school as school
 
 CONTROLS = {"_headers", "_redirects", "_routes.json"}
-ORIGINS = {"https://manabi-map.app", "https://school.manabi-map.app"}
+SCHOOL_ORIGINS = {"https://school.manabi-map.app", "https://manabi-map-school.pages.dev"}
+ORIGINS = {"https://manabi-map.app"} | SCHOOL_ORIGINS
 OS_ENV = {"path", "systemroot", "windir", "temp", "tmp", "userprofile", "home", "localappdata", "appdata", "comspec", "pathext"}
 EXPLICIT_ENV = {"CLOUDFLARE_ACCOUNT_ID", "CLOUDFLARE_API_TOKEN", "WRANGLER_SEND_METRICS"}
 MAX_RECORD = 8 * 1024 * 1024
@@ -46,6 +47,16 @@ class TransportReadError(PublishError):
 def need(ok, message="school publication rejected; reconcile saved evidence"):
     if not ok:
         raise PublishError(message)
+
+
+def canonical_deployment_id(project):
+    deployment = project.get("canonical_deployment")
+    need(deployment is None or type(deployment) is dict)
+    if deployment is None:
+        return None
+    identifier = deployment.get("id")
+    need(type(identifier) is str and re.fullmatch(r"[A-Za-z0-9-]{1,200}", identifier))
+    return identifier
 
 
 def sha(raw):
@@ -348,11 +359,24 @@ class SchoolLivePublisher:
         project = self._api("", control)
         need(project.get("name") == self.config["project"] and project.get("production_branch") == self.config["branch"])
         need(urlsplit(self.config["origin"]).hostname in project.get("domains", []))
-        source = project.get("source", {})
-        need(source.get("type") in ("github", "gitlab") and source.get("config", {}).get("production_deployments_enabled") is False,
-             "automatic production Git deployment must be disabled")
+        source = project.get("source")
+        if source is None:
+            need(self.config["project"] == "manabi-map-school" and self.config["origin"] in SCHOOL_ORIGINS,
+                 "direct upload target must be the dedicated school project")
+        else:
+            need(type(source) is dict and source.get("type") in ("github", "gitlab")
+                 and source.get("config", {}).get("production_deployments_enabled") is False,
+                 "automatic production Git deployment must be disabled")
+        canonical_deployment_id(project)
         # This digest detects binding/config changes without returning values.
         return project, sha(school.canonical_json(project.get("deployment_configs", {}).get("production")).encode())
+
+    def _empty_school_project(self, project, control):
+        need(self.config["project"] == "manabi-map-school" and project.get("source") is None
+             and canonical_deployment_id(project) is None, "initial school project is no longer empty")
+        for environment_name in ("production", "preview"):
+            rows = self._api(f"/deployments?env={environment_name}&per_page=20&page=1", control)
+            need(type(rows) is list and not rows, "initial school project has deployment history")
 
     @guarded
     def generate(self, context, control):
@@ -376,7 +400,9 @@ class SchoolLivePublisher:
             f'--snapshot={bundle / "snapshot.json"}', f'--manifest={bundle / "manifest.json"}', f'--output-root={build}',
             f'--public-config={self.config["public_config"]}', f'--generation-time={generated_at}', f'--candidate-revision={self.config["revision"]}',
             f'--version={self.config["version"]}', f'--max-decoded-bytes={self.maximum}', f'--max-total-bytes={self.total}',
-            '--node-heap-mib=4096', f'--timeout-seconds={min(3600, int(control.remaining()))}'], self.repo / "web", control)
+            '--node-heap-mib=4096', f'--timeout-seconds={min(3600, int(control.remaining()))}',
+            *([f'--site-origin={self.config["origin"]}'] if self.config["origin"] in SCHOOL_ORIGINS else [])],
+            self.repo / "web", control)
         return self._assemble(root, exported_pin, control)
 
     def _assemble(self, root, exported_pin, control, authorization=None):
@@ -398,16 +424,22 @@ class SchoolLivePublisher:
         _, bindings = self._project(control)
         completion_path = build / "school-release-completion.json"
         if not completion_path.exists():
+            # The site origin was overlaid only in the observed source tree.
+            # Validate its pinned bytes before executing the isolated finalizer.
+            for entry in built["sourceFiles"]:
+                need(sha(_read(build / "source" / _path_name(entry["path"]), 25 * 1024 * 1024)) == entry["sha256"])
+                control.checkpoint()
+            isolated_web = build / "source/web"
             wrangler_version_output = self._run([self.config["node"], self.config["wrangler"], "--version"],
                                                 root / "build/source", control, maximum=65536)
             version_match = re.search(rb"(?<![0-9])([0-9]+\.[0-9]+\.[0-9]+(?:[-+][A-Za-z0-9.-]+)?)(?![0-9])",
                                       wrangler_version_output)
             need(version_match is not None)
             wrangler_version = version_match.group(1).decode("ascii")
-            self._run([self.config["node"], str(self.repo / "web/scripts/finalize-school-release.mjs"),
+            self._run([self.config["node"], str(isolated_web / "scripts/finalize-school-release.mjs"),
                 f'--build-root={build}', f'--wrangler-path={self.config["wrangler"]}',
                 f'--wrangler-version={wrangler_version}', f'--bindings-sha256={bindings}',
-                f'--generation={sha(generation_raw)}'], self.repo, control, maximum=65536)
+                f'--generation={sha(generation_raw)}'], isolated_web, control, maximum=65536)
         completion_raw = _read(completion_path)
         json.loads(completion_raw)
         completion_pin = {"path": str(completion_path), "sha256": sha(completion_raw)}
@@ -446,6 +478,16 @@ class SchoolLivePublisher:
         need(built.get("origin") == self.config["origin"] and built.get("candidateRevision") == self.config["revision"]
              and built.get("appVersion") == self.config["version"]
              and built.get("generationReceiptSha256") == candidate["generation_receipt"]["sha256"])
+        overlay = built.get("siteOriginOverlay")
+        if self.config["origin"] in SCHOOL_ORIGINS:
+            site_entry = next((entry for entry in built["sourceFiles"] if entry["path"] == "web/data/site.json"), None)
+            need(type(overlay) is dict and set(overlay) == {"path", "originalSha256", "effectiveSha256", "origin"}
+                 and overlay["path"] == "web/data/site.json" and overlay["origin"] == self.config["origin"]
+                 and site_entry is not None and site_entry["sha256"] == overlay["effectiveSha256"]
+                 and sha(_read(self.repo / "web/data/site.json")) == overlay["originalSha256"]
+                 and json.loads(_read(root / "build/source/web/data/site.json")) == {"origin": self.config["origin"]})
+        else:
+            need(overlay is None)
         need(exported.get("source_content_sha256") == candidate["source_sha256"]
              and exported.get("content_sha256") == candidate["snapshot_content_sha256"]
              and generated.get("source", {}).get("snapshotSha256") == exported.get("snapshot_sha256")
@@ -538,8 +580,11 @@ class SchoolLivePublisher:
         keys = {"format", "version", "request_id", "source", "source_file_sha256", "source_sha256", "snapshot_content_sha256",
                 "code_sha256", "revision", "origin", "project", "expected_deployment_id", "build_receipt", "export_receipt"}
         need(set(value) == keys and value["format"] == "school-live-bootstrap-authorization" and value["version"] == 1)
-        need(re.fullmatch(r"[0-9a-f-]{36}", value["request_id"]) and type(value["expected_deployment_id"]) is str
-             and re.fullmatch(r"[A-Za-z0-9-]{1,200}", value["expected_deployment_id"]))
+        expected = value["expected_deployment_id"]
+        need(re.fullmatch(r"[0-9a-f-]{36}", value["request_id"])
+             and (expected is None or (type(expected) is str and re.fullmatch(r"[A-Za-z0-9-]{1,200}", expected))))
+        if expected is None:
+            need(value["project"] == "manabi-map-school", "empty baseline is restricted to the dedicated school project")
         need(all(value[key] == self.config[key] for key in ("revision", "origin", "project")))
         need(all(re.fullmatch(r"[a-f0-9]{64}", value[k]) for k in ("source_file_sha256", "source_sha256", "snapshot_content_sha256", "code_sha256")))
         need(not any(os.path.lexists(value["source"] + suffix) for suffix in ("-wal", "-shm", "-journal")),
@@ -604,7 +649,10 @@ class SchoolLivePublisher:
         checked = time.monotonic()
         project, bindings = self._project(control)
         need(bindings == context["candidate"]["bindings_sha256"], "production bindings changed after Functions compilation")
-        need(project.get("canonical_deployment", {}).get("id") == authorization["expected_deployment_id"], "bootstrap production deployment changed")
+        expected = authorization["expected_deployment_id"]
+        need(canonical_deployment_id(project) == expected, "bootstrap production deployment changed")
+        if expected is None:
+            self._empty_school_project(project, control)
         marker = "school-bootstrap:" + authorization["request_id"] + ":" + context["candidate"]["artifacts_sha256"]
         intent = {"marker": marker, "candidate_sha256": school.content_hash(context["candidate"]), "bindings_sha256": bindings,
                   "previous_deployment_id": authorization["expected_deployment_id"], "created_at": stamp()}
@@ -614,6 +662,12 @@ class SchoolLivePublisher:
         else:
             _record(root / "bootstrap-intent.json", intent)
         def starting():
+            need(time.monotonic() - checked < 30, "bootstrap project check expired before spawn")
+            current, current_bindings = self._project(control)
+            need(current_bindings == bindings and canonical_deployment_id(current) == expected,
+                 "bootstrap project changed before spawn")
+            if expected is None:
+                self._empty_school_project(current, control)
             need(time.monotonic() - checked < 30, "bootstrap project check expired before spawn")
             _record(root / "upload-started.json", {"candidate_sha256": school.content_hash(context["candidate"]), "started_at": stamp(), "mode": "bootstrap"})
         self._run([self.config["node"], self.config["wrangler"], "pages", "deploy", str(root / "build/dist"),
@@ -725,7 +779,7 @@ class SchoolLivePublisher:
                 break
             time.sleep(min(0.5, control.remaining())); control.checkpoint()
         project, bindings = self._project(control)
-        need(project.get("canonical_deployment", {}).get("id") == identifier and bindings == intent["bindings_sha256"], "production changed during publication")
+        need(canonical_deployment_id(project) == identifier and bindings == intent["bindings_sha256"], "production changed during publication")
         return {"destination": self.config["origin"], "deployment_id": identifier}
 
     @guarded
@@ -735,9 +789,11 @@ class SchoolLivePublisher:
         need(not (root / "upload-started.json").exists(), "upload already started; recover only")
         project, bindings = self._project(control)
         need(bindings == context["candidate"]["bindings_sha256"], "production bindings changed after Functions compilation")
+        previous_id = canonical_deployment_id(project)
+        need(previous_id is not None, "normal publication requires a verified baseline")
         marker = "school-live:" + context["request"]["request_id"] + ":" + context["candidate"]["artifacts_sha256"]
         intent = {"marker": marker, "candidate_sha256": school.content_hash(context["candidate"]), "bindings_sha256": bindings,
-                  "previous_deployment_id": project.get("canonical_deployment", {}).get("id"), "created_at": stamp()}
+                  "previous_deployment_id": previous_id, "created_at": stamp()}
         if (root / "deploy-intent.json").exists():
             previous = json.loads(_read(root / "deploy-intent.json"))
             need(all(previous[k] == intent[k] for k in ("marker", "candidate_sha256", "bindings_sha256", "previous_deployment_id")))
@@ -793,7 +849,7 @@ class SchoolLivePublisher:
         root, built = self._candidate(context["candidate"], control)
         deployment, candidate = context["deployment"], context["candidate"]
         project, _ = self._project(control)
-        need(deployment["destination"] == self.config["origin"] and project.get("canonical_deployment", {}).get("id") == deployment["deployment_id"])
+        need(deployment["destination"] == self.config["origin"] and canonical_deployment_id(project) == deployment["deployment_id"])
         probes = self._control_probes(root, built, candidate) + copy.deepcopy(self.config.get("http_probes", []))
         present_controls = {entry["path"] for entry in built["publicArtifacts"] if entry["path"] in CONTROLS}
         expected = []
@@ -835,7 +891,7 @@ class SchoolLivePublisher:
                     need(response["headers"].get("location") == item["location"])
                 need(all(response["headers"].get(name.lower()) == value for name, value in item["headers"].items()))
         project, _ = self._project(control)
-        need(project.get("canonical_deployment", {}).get("id") == deployment["deployment_id"], "production changed during observation")
+        need(canonical_deployment_id(project) == deployment["deployment_id"], "production changed during observation")
         observation = {**deployment, "observed_at": stamp(), "manifest_sha256": candidate["manifest_sha256"],
             "artifacts_sha256": candidate["artifacts_sha256"], "artifact_count": candidate["artifact_count"],
             "application_receipts_sha256": application_hash}

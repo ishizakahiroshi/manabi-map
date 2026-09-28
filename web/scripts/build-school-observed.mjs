@@ -1,4 +1,4 @@
-// Explicit offline SQLite projection -> isolated build at the current origin.
+// Explicit offline SQLite projection -> isolated build with a pinned site origin.
 // No install, Git fetch, deployment, source DB, or ambient credential discovery.
 import fs from 'node:fs/promises'
 import { execFileSync } from 'node:child_process'
@@ -40,7 +40,7 @@ const staticFiles = new Set([
 export function parseObservedBuildArgs(args) {
   const options = {}
   for (const arg of args) {
-    const match = /^--(snapshot|manifest|output-root|public-config|generation-time|candidate-revision|max-total-bytes|max-decoded-bytes|timeout-seconds|node-heap-mib|version)=(.+)$/.exec(arg)
+    const match = /^--(snapshot|manifest|output-root|public-config|generation-time|candidate-revision|max-total-bytes|max-decoded-bytes|timeout-seconds|node-heap-mib|version|site-origin)=(.+)$/.exec(arg)
     check(match && !Object.hasOwn(options, match[1])); options[match[1]] = match[2]
   }
   check(['snapshot', 'manifest', 'output-root', 'public-config', 'generation-time', 'candidate-revision'].every((key) => options[key]))
@@ -151,6 +151,9 @@ async function buildObserved(options, state) {
   // explicit heap ceiling and a shared remaining deadline; late success fails.
   const timeout = Number(options['timeout-seconds'] ?? 900), heap = Number(options['node-heap-mib'] ?? 2048)
   check(Number.isInteger(timeout) && timeout > 0 && timeout <= 3600 && Number.isInteger(heap) && heap >= 256 && heap <= 4096)
+  const selectedOrigin = options['site-origin']
+  check(selectedOrigin === undefined || ['https://manabi-map-school.pages.dev',
+    'https://school.manabi-map.app'].includes(selectedOrigin))
   const deadline = performance.now() + timeout * 1000
   const remaining = () => { const value = Math.floor(deadline - performance.now()); check(value > 0); return value }
   const limits = schoolResourceBudget({
@@ -210,12 +213,21 @@ async function buildObserved(options, state) {
   }
   const workspace = join(output, 'source'), isolatedWeb = join(workspace, 'web')
   const copiedSources = []
+  let siteOriginOverlay
   for (const path of [...sourcePaths, ...[...staticFiles].map((name) => `web/public/${name}`)]) {
     const bytes = await readBounded(join(repoRoot, path), limits.maxFileBytes)
-    await write(join(workspace, path), bytes); copiedSources.push({ path, sha256: hash(bytes) })
+    let effective = bytes
+    if (path === 'web/data/site.json' && selectedOrigin !== undefined) {
+      const original = JSON.parse(bytes)
+      check(Object.keys(original).join(',') === 'origin' && original.origin === 'https://manabi-map.app')
+      effective = Buffer.from(canonical({ origin: selectedOrigin }))
+      siteOriginOverlay = { path, originalSha256: hash(bytes), effectiveSha256: hash(effective), origin: selectedOrigin }
+    }
+    await write(join(workspace, path), effective); copiedSources.push({ path, sha256: hash(effective) })
   }
   const site = JSON.parse(await fs.readFile(join(isolatedWeb, 'data/site.json')))
-  check(new URL(site.origin).origin === site.origin && site.origin.startsWith('https://'))
+  check(new URL(site.origin).origin === site.origin && site.origin.startsWith('https://') &&
+    (selectedOrigin === undefined || site.origin === selectedOrigin))
   await own()
   await fs.symlink(await fs.realpath(join(webRoot, 'node_modules')), join(isolatedWeb, 'node_modules'), process.platform === 'win32' ? 'junction' : 'dir')
   const generation = join(output, 'generation'), dist = join(output, 'dist')
@@ -231,9 +243,11 @@ async function buildObserved(options, state) {
       remaining()
     } catch { throw buildFailure('OBSERVED_BUILD_CHILD_FAILED', command.phase) }
   }
-  run(commands[0], webRoot)
+  run(commands[0], isolatedWeb)
   state.phase = 'generation-verify'
   let verified = await verifyObservedBuildInput(generation, pins)
+  check(verified.receipt.generator.files.find((entry) => entry.path === 'web/data/site.json')?.sha256 ===
+    copiedSources.find((entry) => entry.path === 'web/data/site.json')?.sha256)
   const generationPin = verified.receiptSha256
   state.phase = 'public-copy'
   for (const [path, bytes] of verified.files) await write(join(isolatedWeb, 'public', path), bytes)
@@ -257,7 +271,8 @@ async function buildObserved(options, state) {
     !/^(?:private-source|source|generation|bundle)(?:\/|$)/i.test(path))
   state.phase = 'source-recheck'
   for (const entry of copiedSources) {
-    check(hash(await readBounded(join(repoRoot, entry.path), limits.maxFileBytes)) === entry.sha256)
+    const originalHash = siteOriginOverlay?.path === entry.path ? siteOriginOverlay.originalSha256 : entry.sha256
+    check(hash(await readBounded(join(repoRoot, entry.path), limits.maxFileBytes)) === originalHash)
     check(hash(await readBounded(join(workspace, entry.path), limits.maxFileBytes)) === entry.sha256)
   }
   check(hash(await readBounded(inputs[0], limits.maxDecodedBytes)) === pins.snapshotSha256 &&
@@ -265,7 +280,8 @@ async function buildObserved(options, state) {
   state.phase = 'completion'
   await own()
   const result = { format: 'observed-school-build', version: 1, evidence: 'observed', deploymentPerformed: false,
-    origin: site.origin, appVersion: version, candidateRevision: pins.candidateRevision, generatedAt: pins.generatedAt,
+    origin: site.origin, ...(siteOriginOverlay ? { siteOriginOverlay } : {}),
+    appVersion: version, candidateRevision: pins.candidateRevision, generatedAt: pins.generatedAt,
     source: receipt.source, generationReceiptSha256: generationPin, sourceFiles: copiedSources,
     publicArtifacts: distribution.entries, publicArtifactsSha256: hash(canonicalSchoolSourceJSON(distribution.entries)),
     publicBytes: distribution.bytes, resourceBudget: limits, checks: ['projection', 'vite', 'ssr', 'seo', 'static-output', 'private-path-exclusion'],
