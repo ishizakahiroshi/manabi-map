@@ -15,7 +15,10 @@ adapter never creates or mutates cluster roles, auth, or provider services.
 The only reviewed catalog profiles are PostgreSQL 17 and 18. A proposal is
 locked to the source major in both its SQL and catalog-semantics comment; it
 must not be reused across majors. Supabase Auth/provider schemas and extensions
-remain unsupported and fail closed. This is not a Supabase restore adapter.
+remain unsupported and fail closed. The source's observed managed schemas are
+blocked explicitly. Public enums, views, triggers, event triggers, default
+ACLs, extensions, database role settings, and foreign keys to excluded schemas
+also fail closed. This is not a Supabase restore adapter.
 """
 import json
 
@@ -25,7 +28,12 @@ from restore_pg_adapter import Session, ident, literal, need
 
 CONTEXT = "SET search_path=pg_catalog; SET timezone='UTC'; SET datestyle='ISO,YMD'; SET extra_float_digits=3; SET bytea_output=hex; "
 SUPPORTED_MAJORS = (17, 18)
-SUPABASE_MANAGED_SCHEMAS = frozenset({'auth', 'storage'})
+# Observed Supabase schemas, not a complete provider taxonomy. The SQL schema
+# closure check still rejects any non-selected user schema outside this set.
+SUPABASE_MANAGED_SCHEMAS = frozenset({
+    'auth', 'extensions', 'graphql', 'graphql_public', 'realtime', 'storage',
+    'supabase_migrations', 'vault',
+})
 
 
 def _major_profile(major):

@@ -108,12 +108,34 @@ class CatalogTests(unittest.TestCase):
             "SELECT current_setting('server_version_num')::integer;",
         ])
 
-    def test_auth_and_storage_rows_cannot_be_selected_for_capture(self):
+    def test_observed_supabase_schemas_cannot_be_selected_for_capture(self):
         with patch.object(catalog,'Session') as session:
-            for schema in ('auth','storage'):
+            for schema in sorted(catalog.SUPABASE_MANAGED_SCHEMAS):
                 with self.subTest(schema=schema),self.assertRaises(RuntimeError):
-                    self.propose(schemas=[schema,'public'],tables=[schema+'.synthetic_rows','public.example_rows'])
+                    self.propose(schemas=sorted([schema,'public']),
+                                 tables=sorted([schema+'.synthetic_rows','public.example_rows']))
             session.assert_not_called()
+
+    def test_source_object_classes_remain_fail_closed(self):
+        schemas=['public']
+        tables=['public.example_rows']
+        sequences=[]
+        roles=['example_owner']
+        _,_,acl_rows=catalog._catalog(schemas,tables,sequences,roles,major=17)
+        sql=catalog._unsupported(schemas,tables,sequences,roles,acl_rows,major=17)
+        for blocker in (
+            "FROM pg_namespace WHERE nspname NOT IN ('public','pg_catalog','information_schema')",
+            "c.relkind='r'",
+            "FROM pg_type t",
+            'x.contype=\'f\'',
+            'FROM pg_trigger',
+            'FROM pg_event_trigger',
+            'FROM pg_default_acl',
+            "FROM pg_extension WHERE extname<>'plpgsql'",
+            'FROM pg_db_role_setting',
+        ):
+            with self.subTest(blocker=blocker):
+                self.assertIn(blocker,sql)
 
     def test_proposal_is_untrusted_and_discovery_uses_one_transaction(self):
         entries={kind:[] for kind in bundle.KINDS}
