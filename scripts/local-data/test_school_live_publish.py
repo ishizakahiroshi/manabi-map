@@ -88,6 +88,45 @@ class PublisherTests(unittest.TestCase):
             return encoded(result)
         if "token" in argv:
             return encoded({"type": "oauth", "token": "invented-secret-token"})
+        if argv[-1:] == ["--version"]:
+            return b"Wrangler 4.31.0\n"
+        if any(str(item).endswith("finalize-school-release.mjs") for item in argv):
+            args = dict(item[2:].split("=", 1) for item in argv if item.startswith("--") and "=" in item)
+            build = Path(args["build-root"])
+            receipt = json.loads((build / "observed-build.json").read_bytes())
+            functions_inventory = sorted((entry for entry in receipt["sourceFiles"] if entry["path"].startswith("functions/")),
+                                         key=lambda entry: entry["path"])
+            worker = b"// invented compiled Functions worker\n"
+            worker_sha = pub.sha(worker)
+            binding_sha = args["bindings-sha256"]
+            source_inventory_sha = pub.sha((school.canonical_json(functions_inventory) + "\n").encode())
+            metadata_raw = b'{"version":1}\n'
+            invocation_sha = "c" * 64
+            candidate = {"format": "school-functions-compile-candidate", "version": 1, "status": "success",
+                         "compiler": "wrangler-pages", "compilerVersion": "4.31.0", "invocationSha256": invocation_sha,
+                         "sourceRevision": self.config["revision"], "sourceInventory": functions_inventory,
+                         "sourceInventorySha256": source_inventory_sha, "workerSha256": worker_sha,
+                         "buildMetadataSha256": pub.sha(metadata_raw), "bindingsSha256": binding_sha}
+            functions_root = build / "functions-candidate"; functions_root.mkdir()
+            (build / "dist/_worker.js").write_bytes(worker)
+            (functions_root / "wrangler-build-metadata.json").write_bytes(metadata_raw)
+            compile_raw = (school.canonical_json(candidate) + "\n").encode()
+            (functions_root / "school-functions-compile-receipt.json").write_bytes(compile_raw)
+            generation_raw = (build / "generation/observed-generation.json").read_bytes()
+            completion = {"format": "school-release-completion", "version": 1, "evidence": "observed",
+                          "deploymentPerformed": False, "generation": args["generation"], "generatedAt": "2026-09-28T00:00:00.000Z",
+                          "candidateRevision": self.config["revision"],
+                          "generationReceiptSha256": pub.sha(generation_raw),
+                          "observedBuildSha256": pub.sha((school.canonical_json(receipt) + "\n").encode()),
+                          "producerReceiptSha256": "d" * 64, "projectionGateSha256": "e" * 64,
+                          "functions": {"compileRecordStatus": "success", "sourceRevision": self.config["revision"],
+                              "compileRecordSha256": pub.sha(compile_raw), "compiler": "wrangler-pages", "compilerVersion": "4.31.0",
+                              "invocationSha256": invocation_sha, "buildMetadataSha256": pub.sha(metadata_raw),
+                              "sourceInventorySha256": source_inventory_sha, "workerSha256": worker_sha,
+                              "bindingsSha256": binding_sha}, "packagePin": "f" * 64,
+                          "packageMetadataSha256": "a" * 64, "artifacts": []}
+            (build / "school-release-completion.json").write_bytes((school.canonical_json(completion) + "\n").encode())
+            return b'{"status":"packaged","deploymentPerformed":false}\n'
         if "deploy" in argv:
             self.uploads += 1
             self.assertTrue((Path(cwd) / "functions/_middleware.ts").is_file())

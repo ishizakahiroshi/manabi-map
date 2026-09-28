@@ -11,6 +11,11 @@ propose_program performs read-only discovery; it returns untrusted proposal
 bytes and a proposed hash. Review/pin adoption and capture are separate calls.
 The selected roles must already exist identically at the new target; this
 adapter never creates or mutates cluster roles, auth, or provider services.
+
+The only reviewed catalog profiles are PostgreSQL 17 and 18. A proposal is
+locked to the source major in both its SQL and catalog-semantics comment; it
+must not be reused across majors. Supabase Auth/provider schemas and extensions
+remain unsupported and fail closed. This is not a Supabase restore adapter.
 """
 import json
 
@@ -19,6 +24,15 @@ from restore_pg_adapter import Session, ident, literal, need
 
 
 CONTEXT = "SET search_path=pg_catalog; SET timezone='UTC'; SET datestyle='ISO,YMD'; SET extra_float_digits=3; SET bytea_output=hex; "
+SUPPORTED_MAJORS = (17, 18)
+SUPABASE_MANAGED_SCHEMAS = frozenset({'auth', 'storage'})
+
+
+def _major_profile(major):
+    need(type(major) is int and major in SUPPORTED_MAJORS)
+    if major == 17:
+        return "/* catalog-profile=postgresql-17; relation-not-null=pg_attribute.attnotnull */ "
+    return "/* catalog-profile=postgresql-18; relation-not-null=pg_attribute.attnotnull+pg_constraint.contype-n */ "
 
 
 def names(values, *, qualified=False):
@@ -79,13 +93,14 @@ def _acl_entries(acl_rows):
  SELECT identity,jsonb_build_object('identity',identity,'definition',definition) item FROM entries"""
 
 
-def _unsupported(schemas, tables, sequences, roles, acl_rows):
+def _unsupported(schemas, tables, sequences, roles, acl_rows, *, major):
+    profile = _major_profile(major)
     sc, tb, sq, ro = map(literals, (schemas, tables, sequences, roles))
     user_schema = "n.nspname NOT IN ('pg_catalog','information_schema') AND n.nspname !~ '^pg_'"
     # This enumerates actual catalog rows, not a fixture-name comparison or
     # a caller-supplied boolean. Exclusions are explicit and fail on appearance.
     checks = [
-        "SELECT 'unsupported-server-version' name WHERE current_setting('server_version_num')::integer/10000<>18",
+        f"SELECT 'unsupported-server-version' name WHERE current_setting('server_version_num')::integer/10000<>{major}",
         f"SELECT 'schema:'||nspname name FROM pg_namespace WHERE nspname NOT IN ({sc},'pg_catalog','information_schema') AND nspname !~ '^pg_'",
         f"SELECT 'missing-schema:'||v name FROM unnest(ARRAY[{sc}]::text[]) v WHERE NOT EXISTS(SELECT 1 FROM pg_namespace WHERE nspname=v)",
         f"SELECT 'missing-table:'||v name FROM unnest(ARRAY[{tb}]::text[]) v WHERE NOT EXISTS(SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname||'.'||c.relname=v AND c.relkind='r')",
@@ -112,7 +127,7 @@ def _unsupported(schemas, tables, sequences, roles, acl_rows):
         "SELECT 'extended-statistics:'||stxname name FROM pg_statistic_ext",
         "SELECT 'custom-access-method:'||amname name FROM pg_am WHERE amname NOT IN ('heap','btree','hash','gist','gin','spgist','brin')",
         # FirstNormalObjectId is PostgreSQL's normal-postmaster boundary.
-        # Limit this catalog program to PG18 and review this on major upgrades.
+        # The profile is reviewed only for PG17 and PG18.
         "SELECT 'custom-cast:'||c.oid name FROM pg_cast c WHERE c.oid>=16384",
         f"SELECT 'storage:'||n.nspname||'.'||c.relname name FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE {user_schema} AND (c.reltablespace<>0 OR (c.relkind='r' AND NOT EXISTS(SELECT 1 FROM pg_am am WHERE am.oid=c.relam AND am.amname='heap')) OR (c.relkind='i' AND NOT EXISTS(SELECT 1 FROM pg_am am WHERE am.oid=c.relam AND am.amname IN ('btree','hash','gist','gin','spgist','brin'))))",
         "SELECT 'large-object' name FROM pg_largeobject_metadata",
@@ -131,10 +146,11 @@ def _unsupported(schemas, tables, sequences, roles, acl_rows):
     # User-created objects inside pg_catalog cannot hide behind a system schema.
     for table, namespace in [('pg_class','relnamespace'),('pg_proc','pronamespace'),('pg_type','typnamespace')]:
         checks.append(f"SELECT 'system-schema-object:'||x.oid name FROM {table} x JOIN pg_namespace n ON n.oid=x.{namespace} WHERE n.nspname IN ('pg_catalog','information_schema') AND x.oid>=16384")
-    return CONTEXT+"WITH unexpected AS ("+'\nUNION ALL\n'.join(checks)+") SELECT coalesce(jsonb_agg(name ORDER BY name COLLATE \"C\"),'[]'::jsonb) FROM unexpected;"
+    return profile+CONTEXT+"WITH unexpected AS ("+'\nUNION ALL\n'.join(checks)+") SELECT coalesce(jsonb_agg(name ORDER BY name COLLATE \"C\"),'[]'::jsonb) FROM unexpected;"
 
 
-def _catalog(schemas, tables, sequences, roles):
+def _catalog(schemas, tables, sequences, roles, *, major):
+    profile = _major_profile(major)
     sc, tb, ro = map(literals, (schemas,tables,roles))
     definitions = ["SELECT "+_entry("'schema:'||nspname", "jsonb_build_object('owner',pg_get_userbyid(nspowner))::text")+f" FROM pg_namespace WHERE nspname IN ({sc})"]
     definitions.append("SELECT "+_entry("'database:owner'", "pg_get_userbyid(datdba)")+" FROM pg_database WHERE datname=current_database()")
@@ -161,8 +177,8 @@ def _catalog(schemas, tables, sequences, roles):
     acl_rows = _acl_rows(schemas,tables,sequences)
     parts = {'schema':_array('\nUNION ALL\n'.join(definitions)), 'data':_array('\nUNION ALL\n'.join(data)),
              'acl':_array(_acl_entries(acl_rows)), 'rls':_array(rls),'rpc':_array(rpc),'provider':"'[]'::jsonb"}
-    collect = CONTEXT+'SELECT jsonb_build_object('+','.join(literal(k)+','+v for k,v in parts.items())+');'
-    inventory = CONTEXT+'SELECT jsonb_build_object('+','.join(literal(k)+','+v for k,v in parts.items() if k!='data')+');'
+    collect = profile+CONTEXT+'SELECT jsonb_build_object('+','.join(literal(k)+','+v for k,v in parts.items())+');'
+    inventory = profile+CONTEXT+'SELECT jsonb_build_object('+','.join(literal(k)+','+v for k,v in parts.items() if k!='data')+');'
     return collect, inventory, acl_rows
 
 
@@ -208,12 +224,17 @@ def propose_program(tools, endpoint, *, schemas, tables, sequences, roles, probe
     if sequences:
         names(sequences,qualified=True)
     need(all(value.split('.')[0] in schemas for value in tables+sequences))
-    need(not any(value.startswith('pg_') or value=='information_schema' for value in schemas))
-    collect, inventory, acl_rows = _catalog(schemas,tables,sequences,roles)
-    unsupported = _unsupported(schemas,tables,sequences,roles,acl_rows)
+    need(not any(value.startswith('pg_') or value in ('information_schema', *SUPABASE_MANAGED_SCHEMAS)
+                 for value in schemas))
     session = Session(tools,endpoint,deadline)
     try:
         session.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY;')
+        server_version_num = session.query("SELECT current_setting('server_version_num')::integer;")
+        need(server_version_num.isdecimal())
+        major = int(server_version_num) // 10000
+        need(major in SUPPORTED_MAJORS)
+        collect, inventory, acl_rows = _catalog(schemas,tables,sequences,roles,major=major)
+        unsupported = _unsupported(schemas,tables,sequences,roles,acl_rows,major=major)
         need(json.loads(session.query(unsupported)) == [])
         entries = json.loads(session.query(collect))
         acl_sql = _acl_sql(session.query,acl_rows)
