@@ -54,6 +54,8 @@ test('observed CLI requires explicit pinned source, external output and public-o
   assert.equal(parseObservedBuildArgs([...required, '--max-decoded-bytes=268435456'])['max-decoded-bytes'], '268435456')
   assert.equal(parseObservedBuildArgs([...required, '--site-origin=https://manabi-map-school.pages.dev'])['site-origin'], 'https://manabi-map-school.pages.dev')
   assert.equal(parseObservedBuildArgs([...required, '--site-origin=https://school.manabi-map.app'])['site-origin'], 'https://school.manabi-map.app')
+  assert.equal(parseObservedBuildArgs([...required, '--site-origin=https://manabi-map-high-school.pages.dev'])['site-origin'], 'https://manabi-map-high-school.pages.dev')
+  assert.equal(parseObservedBuildArgs([...required, '--site-origin=https://high-school.manabi-map.app'])['site-origin'], 'https://high-school.manabi-map.app')
   for (const args of [[], required.slice(1), [...required, '--snapshot=duplicate'], [...required, '--env-file=secret'], [...required, '--school-source=supabase']]) assert.throws(() => parseObservedBuildArgs(args))
 })
 
@@ -199,7 +201,10 @@ test('mocked build executes isolated phases in order and copies only public gene
   assert.equal(receipt.publicArtifacts.length, fixture.files.size + 1)
   await assert.rejects(fs.stat(join(output, 'source/web/public/private-source')), { code: 'ENOENT' })
   assert.equal(JSON.parse(await fs.readFile(join(output, 'observed-build.json'))).generationReceiptSha256, hash(canonical(fixture.receipt)))
-  for (const [name, origin] of [['pages', 'https://manabi-map-school.pages.dev'], ['custom', 'https://school.manabi-map.app']]) {
+  const targets = JSON.parse(await fs.readFile(new URL('../data/deployment-targets.json', import.meta.url))).targets
+  assert.equal(targets['high-school'].origin, 'https://high-school.manabi-map.app')
+  for (const [name, origin] of [['pages', 'https://manabi-map-school.pages.dev'], ['custom', 'https://school.manabi-map.app'],
+    ['high-school-pages', 'https://manabi-map-high-school.pages.dev'], ['high-school-custom', targets['high-school'].origin]]) {
     phases.length = 0; output = join(root, `school-origin-${name}`)
     const school = await buildSchoolObserved({ snapshot: join(input, 'snapshot.json'), manifest: join(input, 'manifest.json'),
       'public-config': join(input, 'public.json'), 'output-root': output,

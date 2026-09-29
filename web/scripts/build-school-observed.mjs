@@ -153,7 +153,8 @@ async function buildObserved(options, state) {
   check(Number.isInteger(timeout) && timeout > 0 && timeout <= 3600 && Number.isInteger(heap) && heap >= 256 && heap <= 4096)
   const selectedOrigin = options['site-origin']
   check(selectedOrigin === undefined || ['https://manabi-map-school.pages.dev',
-    'https://school.manabi-map.app'].includes(selectedOrigin))
+    'https://school.manabi-map.app', 'https://manabi-map-high-school.pages.dev',
+    'https://high-school.manabi-map.app'].includes(selectedOrigin))
   const deadline = performance.now() + timeout * 1000
   const remaining = () => { const value = Math.floor(deadline - performance.now()); check(value > 0); return value }
   const limits = schoolResourceBudget({

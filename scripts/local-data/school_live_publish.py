@@ -30,7 +30,10 @@ import store_school as school
 
 CONTROLS = {"_headers", "_redirects", "_routes.json"}
 SCHOOL_ORIGINS = {"https://school.manabi-map.app", "https://manabi-map-school.pages.dev"}
-ORIGINS = {"https://manabi-map.app"} | SCHOOL_ORIGINS
+HIGH_SCHOOL_ORIGINS = {"https://high-school.manabi-map.app", "https://manabi-map-high-school.pages.dev"}
+OVERLAY_ORIGINS = SCHOOL_ORIGINS | HIGH_SCHOOL_ORIGINS
+DIRECT_UPLOAD_TARGETS = {"manabi-map-school": SCHOOL_ORIGINS, "manabi-map-high-school": HIGH_SCHOOL_ORIGINS}
+ORIGINS = {"https://manabi-map.app"} | OVERLAY_ORIGINS
 OS_ENV = {"path", "systemroot", "windir", "temp", "tmp", "userprofile", "home", "localappdata", "appdata", "comspec", "pathext"}
 EXPLICIT_ENV = {"CLOUDFLARE_ACCOUNT_ID", "CLOUDFLARE_API_TOKEN", "WRANGLER_SEND_METRICS"}
 MAX_RECORD = 8 * 1024 * 1024
@@ -132,8 +135,8 @@ class _ProcessJob:
             self.api.CloseHandle(self.handle); self.handle = None
 
 
-def run_process(argv, *, cwd, env, control, maximum=MAX_RECORD, before_spawn=None):
-    """Bounded in-memory output, periodic heartbeat; no child diagnostics escape."""
+def run_process(argv, *, cwd, env, control, maximum=MAX_RECORD, before_spawn=None, diagnostic_sink=None):
+    """Bounded in-memory output; optional failure metadata contains no child text."""
     proc, readers, job = None, [], None
     data = [bytearray(), bytearray()]
     failed = threading.Event()
@@ -174,10 +177,18 @@ def run_process(argv, *, cwd, env, control, maximum=MAX_RECORD, before_spawn=Non
         control.checkpoint()
         return bytes(data[0])
     except Exception:
+        diagnostic = {"returncode_before_termination": proc.poll() if proc is not None else None,
+                      "stdout_bytes": len(data[0]), "stderr_bytes": len(data[1]),
+                      "output_limit_exceeded": failed.is_set()}
         if job is not None:
             job.close()
         if proc is not None and (proc.poll() is None or any(t.is_alive() for t in readers)):
             _kill(proc)
+        if diagnostic_sink is not None:
+            try:
+                diagnostic_sink(diagnostic)
+            except Exception:
+                pass
         raise PublishError("school publication child failed; reconcile before retry") from None
     finally:
         if job is not None:
@@ -270,14 +281,19 @@ class SchoolLivePublisher:
     probe is {path,status,headers}, optionally location/body_sha256. Mandatory
     behavior probes are derived from pinned controls (not owner declarations).
     """
-    def __init__(self, config, *, runner=run_process, fetch=https_get):
+    def __init__(self, config, *, runner=run_process, fetch=https_get, process_diagnostic_sink=None):
         self.config = copy.deepcopy(config)
         c = self.config
         required = {"repo_root", "node", "python", "wrangler", "output_root", "public_config", "account_id", "project", "origin", "branch", "revision", "version"}
         need(required <= c.keys() and c.keys() <= required | {"env", "max_bytes", "max_total_bytes", "http_probes", "artifact_observations"})
         need(c.get("origin") in ORIGINS and re.fullmatch(r"[a-z0-9][a-z0-9-]{0,62}", c.get("project", "")))
+        need(c["origin"] in DIRECT_UPLOAD_TARGETS[c["project"]] if c["project"] in DIRECT_UPLOAD_TARGETS
+             else c["origin"] == "https://manabi-map.app",
+             "full application origin and Pages project do not match")
         need(re.fullmatch(r"[a-f0-9]{32}", c.get("account_id", "")) and re.fullmatch(r"[a-f0-9]{40}", c.get("revision", "")))
         need(type(c.get("branch")) is str and re.fullmatch(r"[A-Za-z0-9._/-]{1,100}", c["branch"]))
+        need(c["project"] not in DIRECT_UPLOAD_TARGETS or c["branch"] == "main",
+             "dedicated school Pages production branch must be main")
         need(type(c.get("version")) is str and re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9.+_-]{0,99}", c["version"]))
         for key in ("repo_root", "node", "python", "wrangler", "output_root", "public_config"):
             need(Path(c[key]).is_absolute())
@@ -285,6 +301,8 @@ class SchoolLivePublisher:
         self.root_identity = live._identity(self.root)
         self.repo = Path(c["repo_root"])
         self.runner, self.fetch = runner, fetch
+        need(process_diagnostic_sink is None or callable(process_diagnostic_sink))
+        self.process_diagnostic_sink = process_diagnostic_sink
         self.env = environment({**c.get("env", {}), "CLOUDFLARE_ACCOUNT_ID": c["account_id"]})
         self.maximum = c.get("max_bytes", 256 * 1024 * 1024)
         self.total = c.get("max_total_bytes", 1024 * 1024 * 1024)
@@ -300,6 +318,8 @@ class SchoolLivePublisher:
         control.checkpoint()
         env = self.env if credentials else {k: v for k, v in self.env.items() if k.lower() in OS_ENV}
         options = {} if before_spawn is None else {"before_spawn": before_spawn}
+        if self.runner is run_process and self.process_diagnostic_sink is not None:
+            options["diagnostic_sink"] = self.process_diagnostic_sink
         result = self.runner(args, cwd=str(cwd), env=dict(env), control=control, maximum=maximum, **options)
         need(type(result) is bytes and len(result) <= maximum)
         control.remaining()
@@ -368,8 +388,9 @@ class SchoolLivePublisher:
         need(project.get("name") == self.config["project"] and project.get("production_branch") == self.config["branch"])
         need(urlsplit(self.config["origin"]).hostname in project.get("domains", []))
         source = project.get("source")
-        if source is None:
-            need(self.config["project"] == "manabi-map-school" and self.config["origin"] in SCHOOL_ORIGINS,
+        if self.config["project"] in DIRECT_UPLOAD_TARGETS:
+            need(source is None, "dedicated school Pages target must be direct upload")
+            need(self.config["origin"] in DIRECT_UPLOAD_TARGETS.get(self.config["project"], set()),
                  "direct upload target must be the dedicated school project")
         else:
             need(type(source) is dict and source.get("type") in ("github", "gitlab")
@@ -380,7 +401,7 @@ class SchoolLivePublisher:
         return project, sha(school.canonical_json(project.get("deployment_configs", {}).get("production")).encode())
 
     def _empty_school_project(self, project, control):
-        need(self.config["project"] == "manabi-map-school" and project.get("source") is None
+        need(self.config["origin"] in DIRECT_UPLOAD_TARGETS.get(self.config["project"], set()) and project.get("source") is None
              and canonical_deployment_id(project) is None, "initial school project is no longer empty")
         for environment_name in ("production", "preview"):
             rows = self._api(f"/deployments?env={environment_name}&per_page=20&page=1", control)
@@ -409,7 +430,7 @@ class SchoolLivePublisher:
             f'--public-config={self.config["public_config"]}', f'--generation-time={generated_at}', f'--candidate-revision={self.config["revision"]}',
             f'--version={self.config["version"]}', f'--max-decoded-bytes={self.maximum}', f'--max-total-bytes={self.total}',
             '--node-heap-mib=4096', f'--timeout-seconds={min(3600, int(control.remaining()))}',
-            *([f'--site-origin={self.config["origin"]}'] if self.config["origin"] in SCHOOL_ORIGINS else [])],
+            *([f'--site-origin={self.config["origin"]}'] if self.config["origin"] in OVERLAY_ORIGINS else [])],
             self.repo / "web", control)
         return self._assemble(root, exported_pin, control)
 
@@ -487,7 +508,7 @@ class SchoolLivePublisher:
              and built.get("appVersion") == self.config["version"]
              and built.get("generationReceiptSha256") == candidate["generation_receipt"]["sha256"])
         overlay = built.get("siteOriginOverlay")
-        if self.config["origin"] in SCHOOL_ORIGINS:
+        if self.config["origin"] in OVERLAY_ORIGINS:
             site_entry = next((entry for entry in built["sourceFiles"] if entry["path"] == "web/data/site.json"), None)
             need(type(overlay) is dict and set(overlay) == {"path", "originalSha256", "effectiveSha256", "origin"}
                  and overlay["path"] == "web/data/site.json" and overlay["origin"] == self.config["origin"]
@@ -599,7 +620,8 @@ class SchoolLivePublisher:
         need(re.fullmatch(r"[0-9a-f-]{36}", value["request_id"])
              and (expected is None or (type(expected) is str and re.fullmatch(r"[A-Za-z0-9-]{1,200}", expected))))
         if expected is None:
-            need(value["project"] == "manabi-map-school", "empty baseline is restricted to the dedicated school project")
+            need(value["origin"] in DIRECT_UPLOAD_TARGETS.get(value["project"], set()),
+                 "empty baseline is restricted to a dedicated project")
         need(all(value[key] == self.config[key] for key in ("revision", "origin", "project")))
         need(all(re.fullmatch(r"[a-f0-9]{64}", value[k]) for k in ("source_file_sha256", "source_sha256", "snapshot_content_sha256", "code_sha256")))
         need(not any(os.path.lexists(value["source"] + suffix) for suffix in ("-wal", "-shm", "-journal")),
@@ -658,6 +680,8 @@ class SchoolLivePublisher:
     @guarded
     def bootstrap_deploy(self, context, control):
         """Initial publication only; no queue, RPC or fabricated lease."""
+        need(self.config["project"] != "manabi-map-school",
+             "full application deployment cannot replace the school directory")
         root, authorization, _ = self._bootstrap_context(context, control)
         need(not (root / "bootstrap-receipt.json").exists() and not (root / "upload-started.json").exists(),
              "bootstrap upload already started; recover and observe only")
@@ -799,6 +823,8 @@ class SchoolLivePublisher:
 
     @guarded
     def deploy(self, context, control):
+        need(self.config["project"] != "manabi-map-school",
+             "full application deployment cannot replace the school directory")
         need("bootstrap_authorization" not in context["candidate"])
         root, _ = self._candidate(context["candidate"], control)
         need(not (root / "upload-started.json").exists(), "upload already started; recover only")

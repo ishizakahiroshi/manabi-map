@@ -186,7 +186,7 @@ class PublisherTests(unittest.TestCase):
                  "sourceFiles": [{"path": "functions/_middleware.ts", "sha256": pub.sha(middleware)},
                                  {"path": "web/data/site.json", "sha256": pub.sha(site_raw)},
                                  {"path": "web/scripts/finalize-school-release.mjs", "sha256": pub.sha(finalizer_raw)}]}
-        if self.config["origin"] in pub.SCHOOL_ORIGINS:
+        if self.config["origin"] in pub.OVERLAY_ORIGINS:
             self.assertIn(f'--site-origin={self.config["origin"]}', argv)
             built["siteOriginOverlay"] = {"path": "web/data/site.json",
                                           "originalSha256": pub.sha((self.root / "web/data/site.json").read_bytes()),
@@ -327,6 +327,13 @@ class PublisherTests(unittest.TestCase):
                              "source": None, "canonical_deployment": None})
         self.publisher = pub.SchoolLivePublisher(self.config, runner=self.runner, fetch=self.fetch)
 
+    def empty_high_school_project(self, origin="https://manabi-map-high-school.pages.dev"):
+        self.config["project"] = "manabi-map-high-school"
+        self.config["origin"] = origin
+        self.project.update({"name": "manabi-map-high-school", "domains": [urlsplit(origin).hostname],
+                             "source": None, "canonical_deployment": None})
+        self.publisher = pub.SchoolLivePublisher(self.config, runner=self.runner, fetch=self.fetch)
+
     def bootstrap(self, expected_deployment_id="old-invented"):
         candidate = self.generated()
         root = Path(candidate["evidence_root"])
@@ -357,7 +364,7 @@ class PublisherTests(unittest.TestCase):
         self.assertEqual(self.uploads, 1)
 
     def test_empty_direct_upload_project_creates_first_baseline_and_reads_back(self):
-        self.empty_school_project()
+        self.empty_high_school_project()
         self.bootstrap(None)
         del self.control.queue  # Initial baseline is not a fabricated queue publication.
         with self.assertRaises(pub.PublishError):
@@ -370,6 +377,40 @@ class PublisherTests(unittest.TestCase):
         self.assertEqual(self.uploads, 1)
         self.assertEqual(self.publisher.bootstrap_recover(self.context, self.control), self.context["deployment"])
         self.assertEqual(self.uploads, 1)
+
+    def test_full_app_cannot_start_new_baseline_on_directory_project(self):
+        self.empty_school_project()
+        self.bootstrap(None)
+        with self.assertRaises(pub.PublishError):
+            self.publisher.bootstrap_deploy(self.context, self.control)
+        self.assertEqual(self.uploads, 0)
+
+    def test_full_app_cannot_replace_existing_directory_baseline(self):
+        self.empty_school_project()
+        self.project["canonical_deployment"] = {"id": "old-invented"}
+        self.bootstrap("old-invented")
+        with self.assertRaises(pub.PublishError):
+            self.publisher.bootstrap_deploy(self.context, self.control)
+        with self.assertRaises(pub.PublishError):
+            self.publisher.deploy(self.context, self.control)
+        root = Path(self.context["candidate"]["evidence_root"])
+        self.assertFalse((root / "upload-started.json").exists())
+        self.assertEqual(self.uploads, 0)
+
+    def test_high_school_target_pair_is_exact(self):
+        for project, origin in (("manabi-map-school", "https://high-school.manabi-map.app"),
+                                ("manabi-map-high-school", "https://school.manabi-map.app"),
+                                ("manabi-map-high-school", "https://manabi-map.app")):
+            with self.assertRaises(pub.PublishError):
+                pub.SchoolLivePublisher({**self.config, "project": project, "origin": origin},
+                                        runner=self.runner, fetch=self.fetch)
+        with self.assertRaises(pub.PublishError):
+            pub.SchoolLivePublisher({**self.config, "project": "manabi-map-high-school",
+                                     "origin": "https://high-school.manabi-map.app", "branch": "preview"},
+                                    runner=self.runner, fetch=self.fetch)
+        self.empty_high_school_project("https://high-school.manabi-map.app")
+        candidate = self.generated()
+        self.publisher._candidate(candidate, self.control)
 
     def test_school_origin_receipt_and_original_site_pin_reject_drift(self):
         self.empty_school_project()
@@ -435,7 +476,7 @@ class PublisherTests(unittest.TestCase):
         self.generated()
 
     def test_empty_project_is_rechecked_before_spawn_and_recovery_is_safe(self):
-        self.empty_school_project()
+        self.empty_high_school_project()
         self.bootstrap(None)
         self.before_spawn_project_change = True
         with self.assertRaises(pub.PublishError):
@@ -450,7 +491,7 @@ class PublisherTests(unittest.TestCase):
         self.assertEqual(self.uploads, 1)
 
     def test_empty_project_with_prior_history_or_unknown_upload_stops(self):
-        self.empty_school_project()
+        self.empty_high_school_project()
         self.bootstrap(None)
         self.deployment = {"id": "other-deployment", "environment": "preview"}
         with self.assertRaises(pub.PublishError):
@@ -473,7 +514,7 @@ class PublisherTests(unittest.TestCase):
         self.assertFalse((root / "anchor.json").exists())
 
     def test_first_baseline_readback_failure_keeps_upload_evidence_without_anchor(self):
-        self.empty_school_project()
+        self.empty_high_school_project()
         self.bootstrap(None)
         self.context["deployment"] = self.publisher.bootstrap_deploy(self.context, self.control)
         self.tamper_path = "/"
@@ -525,6 +566,29 @@ class PublisherTests(unittest.TestCase):
             pub.run_process([sys.executable, "-B", "-c", "import time; print('invented-sensitive'); time.sleep(5)"],
                             cwd=self.root, env=pub.environment({}), control=self.control)
         self.assertNotIn("sensitive", str(caught.exception))
+
+    def test_native_process_failure_reports_only_bounded_metadata(self):
+        diagnostics = []
+        with self.assertRaises(pub.PublishError) as caught:
+            pub.run_process([sys.executable, "-B", "-c", "import sys; print('invented-sensitive'); sys.exit(7)"],
+                            cwd=self.root, env=pub.environment({}), control=self.control,
+                            diagnostic_sink=diagnostics.append)
+        self.assertNotIn("sensitive", str(caught.exception))
+        self.assertEqual(len(diagnostics), 1)
+        self.assertEqual(set(diagnostics[0]), {"returncode_before_termination", "stdout_bytes", "stderr_bytes", "output_limit_exceeded"})
+        self.assertEqual(diagnostics[0]["returncode_before_termination"], 7)
+        self.assertGreater(diagnostics[0]["stdout_bytes"], 0)
+        self.assertFalse(diagnostics[0]["output_limit_exceeded"])
+
+    def test_owner_process_sink_receives_failure_metadata(self):
+        diagnostics = []
+        reader = pub.SchoolLivePublisher(self.config, process_diagnostic_sink=diagnostics.append)
+        with self.assertRaises(pub.PublishError):
+            reader._run([sys.executable, "-B", "-c", "import sys; sys.exit(9)"], self.root, self.control)
+        self.assertEqual(len(diagnostics), 1)
+        self.assertEqual(diagnostics[0]["returncode_before_termination"], 9)
+        self.assertEqual(diagnostics[0]["stdout_bytes"], 0)
+        self.assertEqual(diagnostics[0]["stderr_bytes"], 0)
 
     def test_environment_is_allowlisted(self):
         result = pub.environment({"CLOUDFLARE_API_TOKEN": "invented"}, {"PATH": "bin", "NODE_OPTIONS": "injected", "PGPASSWORD": "hidden"})
