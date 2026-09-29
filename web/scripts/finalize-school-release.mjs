@@ -15,6 +15,7 @@ const hash = schoolDigest
 const canonical = (value) => Buffer.from(`${canonicalSchoolSourceJSON(value)}\n`)
 const reject = () => { throw new Error('School release finalizer: candidate refused') }
 const same = (left, right) => canonicalSchoolSourceJSON(left) === canonicalSchoolSourceJSON(right)
+const sourcePins = (entries) => entries.map(({ path, sha256 }) => ({ path, sha256 }))
 
 function validateFunctionsCandidate({ raw, sourceInventory, buildReceipt, worker, bindingsSha256 }) {
   if (!Buffer.isBuffer(raw) || !Buffer.isBuffer(worker) || !Array.isArray(sourceInventory) ||
@@ -34,7 +35,7 @@ function validateFunctionsCandidate({ raw, sourceInventory, buildReceipt, worker
       !/^[a-f0-9]{64}$/.test(candidate.workerSha256) || hash(worker) !== candidate.workerSha256 ||
       !same(candidate.sourceInventory, sourceInventory) ||
       candidate.sourceInventorySha256 !== hash(canonical(candidate.sourceInventory)) ||
-      !same(candidate.sourceInventory, buildReceipt.sourceFiles.filter((entry) => entry.path.startsWith('functions/'))
+      !same(sourcePins(candidate.sourceInventory), buildReceipt.sourceFiles.filter((entry) => entry.path.startsWith('functions/'))
         .sort((a, b) => a.path.localeCompare(b.path, 'en')))) reject()
   return candidate
 }
@@ -163,7 +164,7 @@ export async function compileSchoolFunctionsCandidate({ buildRoot, wranglerPath,
   const metadataPath = join(candidateRoot, 'wrangler-build-metadata.json')
   const receiptPath = join(candidateRoot, 'school-functions-compile-receipt.json')
   const before = await inventoryFunctionsSources(sourceRoot)
-  if (!same(before, expectedSourceInventory) ||
+  if (!same(sourcePins(before), expectedSourceInventory) ||
       await fs.lstat(await checkedPath(workerPath, { missing: true })).then(() => true, (err) => err.code !== 'ENOENT')) reject()
   const normalizedInvocation = ['wrangler', 'pages', 'functions', 'build', 'source/functions',
     '--outfile', 'functions-candidate/_worker.js', '--metafile', 'functions-candidate/wrangler-build-metadata.json']
