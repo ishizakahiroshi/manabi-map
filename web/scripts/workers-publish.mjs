@@ -6,7 +6,9 @@
 // the caller provides CLOUDFLARE_ACCOUNT_ID in the environment. Each step writes create-only receipts and
 // Wrangler logs into an evidence directory outside the repository.
 import { spawn } from 'node:child_process'
+import { randomUUID } from 'node:crypto'
 import fs from 'node:fs/promises'
+import os from 'node:os'
 import { isAbsolute, join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { canonical, readTarget, sha, verifyWorkersPackage } from './workers-package.mjs'
@@ -138,6 +140,69 @@ export async function uploadVersion({ packageRoot, expectedReceiptSha256, eviden
   return result
 }
 
+/**
+ * Add secrets to the deployed version without changing code or assets (`versions secret bulk` patches the
+ * latest uploaded version). The result is a Preview-only version recorded like an upload, so the same
+ * observe → deploy steps apply. Secret values come from the caller, go only into a temporary JSON file that
+ * is removed right after Wrangler reads it, and never appear in receipts or logs (names only).
+ */
+export async function secretsVersion({ packageRoot, expectedReceiptSha256, evidenceDirectory, baseEvidenceDirectory, secrets, run = wranglerRunner(), now = () => new Date(), tmpDirectory = os.tmpdir() }) {
+  const { receipt } = await verifyWorkersPackage({ packageRoot, expectedReceiptSha256 })
+  need(receipt.worker, 'secrets require a Worker target')
+  const baseDeploy = JSON.parse(await fs.readFile(join(baseEvidenceDirectory, 'deploy-receipt.json')))
+  need(baseDeploy.format === 'school-workers-deploy' && baseDeploy.workerName === receipt.workerName &&
+    baseDeploy.packageReceiptSha256 === expectedReceiptSha256, 'base deploy receipt does not match the package')
+  const names = Object.keys(secrets ?? {}).sort()
+  need(names.length > 0 && names.every((name) => /^[A-Z][A-Z0-9_]{0,63}$/.test(name) && typeof secrets[name] === 'string' &&
+    secrets[name].length > 0 && secrets[name].length <= 8192), 'secret names or values rejected')
+  const directory = await evidence(evidenceDirectory)
+  const active = await deploymentStatus(run, receipt.workerName, directory, 'secrets-status-before')
+  need(active && active.versions.length === 1 && active.versions[0].percentage === 100, 'secrets require one version at 100%')
+  const base = active.versions[0].versionId
+  need(base === baseDeploy.versionId, 'the active version is not the one recorded by the base deploy receipt')
+  const listed = await run(['versions', 'list', '--name', receipt.workerName, '--json'], { cwd: directory, logDirectory: directory, label: 'versions-list' })
+  need(listed.code === 0, 'versions list failed')
+  const latest = JSON.parse(listed.stdout).reduce((top, entry) => (!top || entry.number > top.number ? entry : top), null)
+  need(latest?.id === base, 'the latest uploaded version is not the deployed one; secrets would patch another version')
+  const viewBase = await run(['versions', 'view', base, '--name', receipt.workerName, '--json'], { cwd: directory, logDirectory: directory, label: 'versions-view-base' })
+  need(viewBase.code === 0, 'base version readback failed')
+  const baseView = JSON.parse(viewBase.stdout)
+  const { tag } = versionLabels(receipt, expectedReceiptSha256)
+  const secretTag = `${tag}-s`
+  const message = `secrets ${names.join(',')} on ${base.slice(0, 8)} pkg=${expectedReceiptSha256.slice(0, 12)}`.slice(0, 100)
+  await createOnly(join(directory, 'secrets-intent.json'), { workerName: receipt.workerName, packageReceiptSha256: expectedReceiptSha256,
+    baseVersionId: base, secretNames: names, tag: secretTag, message, createdAt: now().toISOString() })
+  const file = join(tmpDirectory, `workers-secrets-${randomUUID()}.json`)
+  let created
+  try {
+    await fs.writeFile(file, JSON.stringify(secrets), { flag: 'wx', mode: 0o600 })
+    created = await run(['versions', 'secret', 'bulk', file, '--name', receipt.workerName, '--message', message, '--tag', secretTag],
+      { cwd: directory, logDirectory: directory, label: 'versions-secret-bulk' })
+  } finally {
+    await fs.rm(file, { force: true })
+  }
+  need(created.code === 0, 'versions secret bulk failed; read the evidence logs before any retry')
+  const versionId = /Created version ([0-9a-f-]{36}) with/.exec(created.stdout)?.[1]
+  need(versionId && VERSION_ID.test(versionId), 'secret bulk output lacks the new version ID')
+  const viewed = await run(['versions', 'view', versionId, '--name', receipt.workerName, '--json'], { cwd: directory, logDirectory: directory, label: 'versions-view' })
+  need(viewed.code === 0, 'new version readback failed')
+  const view = JSON.parse(viewed.stdout)
+  const bindings = (view.resources?.bindings ?? []).map((binding) => `${binding.name}:${binding.type}`).sort()
+  need(canonical(bindings) === canonical(['ASSETS:assets', ...names.map((name) => `${name}:secret_text`)].sort()), 'new version bindings differ')
+  const scriptTag = (value) => value.resources?.script?.etag ?? null
+  need(scriptTag(view) && scriptTag(view) === scriptTag(baseView), 'new version code differs from the deployed version')
+  const annotations = view.annotations ?? {}
+  need(annotations['workers/tag'] === secretTag && annotations['workers/message'] === message, 'new version annotations differ')
+  const after = await deploymentStatus(run, receipt.workerName, directory, 'secrets-status-after')
+  need(canonical(after.versions) === canonical(active.versions), 'active deployment changed while creating a secret version')
+  const workersDev = new URL(baseDeploy.workersDevUrl)
+  const result = { format: 'school-workers-upload', version: 1, target: receipt.target, workerName: receipt.workerName,
+    packageReceiptSha256: expectedReceiptSha256, versionId, previewUrl: `https://${versionId.slice(0, 8)}-${workersDev.hostname}`,
+    tag: secretTag, message, baseVersionId: base, secretNames: names, activeDeployment: after, uploadedAt: now().toISOString() }
+  await createOnly(join(directory, 'upload-receipt.json'), result)
+  return result
+}
+
 export async function deployVersion({ packageRoot, expectedReceiptSha256, evidenceDirectory, observationPath, run = wranglerRunner(), now = () => new Date() }) {
   const { receipt } = await verifyWorkersPackage({ packageRoot, expectedReceiptSha256 })
   const directory = await evidence(evidenceDirectory)
@@ -172,10 +237,15 @@ if (process.argv[1] && pathToFileURL(resolve(process.argv[1])).href === import.m
     let result = null
     if (action === 'bootstrap' && args.length === 2) result = await bootstrapWorker({ target: args[0], evidenceDirectory: args[1] })
     else if (action === 'upload' && args.length === 3) result = await uploadVersion({ packageRoot: args[0], expectedReceiptSha256: args[1], evidenceDirectory: args[2] })
-    else if (action === 'deploy' && args.length === 4) {
+    else if (action === 'secrets' && args.length === 5) {
+      // Values are read from WORKERS_SECRET_<NAME> set by the caller; they are never printed.
+      const secrets = Object.fromEntries(args[4].split(',').map((name) => [name, process.env[`WORKERS_SECRET_${name}`] ?? '']))
+      result = await secretsVersion({ packageRoot: args[0], expectedReceiptSha256: args[1], evidenceDirectory: args[2],
+        baseEvidenceDirectory: args[3], secrets })
+    } else if (action === 'deploy' && args.length === 4) {
       result = await deployVersion({ packageRoot: args[0], expectedReceiptSha256: args[1], evidenceDirectory: args[2], observationPath: args[3] })
     }
-    need(result, 'usage: workers-publish.mjs bootstrap <target> <evidence-dir> | upload <package-root> <receipt-sha256> <evidence-dir> | deploy <package-root> <receipt-sha256> <evidence-dir> <observation-json>')
+    need(result, 'usage: workers-publish.mjs bootstrap <target> <evidence-dir> | upload <package-root> <receipt-sha256> <evidence-dir> | secrets <package-root> <receipt-sha256> <evidence-dir> <base-evidence-dir> <NAME,NAME> | deploy <package-root> <receipt-sha256> <evidence-dir> <observation-json>')
     console.log(JSON.stringify({ action, workerName: result.workerName, versionId: result.versionId ?? null, status: 'ok' }))
   } catch (error) {
     console.error(`Workers publish rejected: ${error instanceof WorkersPublishError || error?.constructor?.name === 'WorkersPackageError' ? error.message : error?.code ?? 'unexpected error'}`)

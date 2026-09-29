@@ -3,7 +3,7 @@ import fs from 'node:fs/promises'
 import { join } from 'node:path'
 import test from 'node:test'
 import { buildWorkersPackage, canonical, sha } from './workers-package.mjs'
-import { bootstrapWorker, deployVersion, parseUploadOutput, uploadVersion, versionLabels, workersDevOrigin } from './workers-publish.mjs'
+import { bootstrapWorker, deployVersion, parseUploadOutput, secretsVersion, uploadVersion, versionLabels, workersDevOrigin } from './workers-publish.mjs'
 import { fakeHighSchoolCandidate, fakeRepo, tempRoot } from './workers-fixture.test-helper.mjs'
 
 const VERSION = '11111111-2222-4333-8444-555555555555'
@@ -104,4 +104,75 @@ test('deploy requires a passed observation of the same version, then reads back 
   assert.deepEqual(result.rollback.versions, [{ versionId: 'old-version', percentage: 100 }])
   assert.equal(result.workersDevUrl, 'https://example-high-school.example-sub.workers.dev')
   assert.equal(result.message, `accept ${result.message.split(' ')[1]} obs=${sha(Buffer.from(passed)).slice(0, 12)}`)
+})
+
+const DEPLOYED = '22222222-3333-4444-8555-666666666666'
+const PATCHED = '33333333-4444-4555-8666-777777777777'
+
+/** Fake Wrangler for `versions secret bulk`: records the secret file contents it saw, never the network. */
+function fakeSecretWrangler({ latest = DEPLOYED, etagChanges = false } = {}) {
+  const state = { calls: [], seenSecrets: null, seenFile: null, active: [{ version_id: DEPLOYED, percentage: 100 }], annotations: {} }
+  const run = async (args, { logDirectory, label }) => {
+    state.calls.push(args)
+    await fs.writeFile(join(logDirectory, `${label}.stdout.log`), '', { flag: 'wx' })
+    const [command, sub] = args
+    if (command === 'deployments') return { code: 0, stdout: JSON.stringify({ id: 'd', versions: state.active }), stderr: '' }
+    if (command === 'versions' && sub === 'list') {
+      return { code: 0, stdout: JSON.stringify([{ id: 'placeholder', number: 1 }, { id: latest, number: 2 }]), stderr: '' }
+    }
+    if (command === 'versions' && sub === 'secret') {
+      state.seenFile = args[3]
+      state.seenSecrets = JSON.parse(await fs.readFile(args[3], 'utf8'))
+      state.annotations = { 'workers/tag': args[args.indexOf('--tag') + 1], 'workers/message': args[args.indexOf('--message') + 1] }
+      return { code: 0, stdout: `Success! Created version ${PATCHED} with 2 secrets.`, stderr: '' }
+    }
+    if (command === 'versions' && sub === 'view') {
+      const patched = args[2] === PATCHED
+      return { code: 0, stdout: JSON.stringify({ id: args[2], annotations: patched ? state.annotations : {},
+        resources: { script: { etag: patched && etagChanges ? 'other' : 'same-code' },
+          bindings: [{ name: 'ASSETS', type: 'assets' }, ...(patched ? [{ name: 'EXAMPLE_KEY', type: 'secret_text' }, { name: 'EXAMPLE_URL', type: 'secret_text' }] : [])] } }), stderr: '' }
+    }
+    throw new Error(`unexpected wrangler call ${args.join(' ')}`)
+  }
+  return { run, state }
+}
+
+async function secretFixture(t) {
+  const base = await fixture(t)
+  const baseEvidence = join(base.root, 'ev-base')
+  await fs.mkdir(baseEvidence)
+  await fs.writeFile(join(baseEvidence, 'deploy-receipt.json'), canonical({ format: 'school-workers-deploy', workerName: 'example-high-school',
+    packageReceiptSha256: base.receiptSha256, versionId: DEPLOYED, workersDevUrl: 'https://example-high-school.example-sub.workers.dev' }))
+  return { ...base, baseEvidence, tmp: await fs.mkdtemp(join(base.root, 'tmp-')) }
+}
+
+test('secrets create a Preview version of the same code with only the named secrets, and remove the value file', async (t) => {
+  const { root, output, receiptSha256, baseEvidence, tmp } = await secretFixture(t)
+  const fake = fakeSecretWrangler()
+  const secrets = { EXAMPLE_URL: 'https://example.test', EXAMPLE_KEY: 'synthetic-value' }
+  const result = await secretsVersion({ packageRoot: output, expectedReceiptSha256: receiptSha256, evidenceDirectory: join(root, 'ev-secrets'),
+    baseEvidenceDirectory: baseEvidence, secrets, run: fake.run, tmpDirectory: tmp })
+  assert.equal(result.versionId, PATCHED)
+  assert.equal(result.previewUrl, 'https://33333333-example-high-school.example-sub.workers.dev')
+  assert.deepEqual(result.secretNames, ['EXAMPLE_KEY', 'EXAMPLE_URL'])
+  assert.deepEqual(fake.state.seenSecrets, secrets)
+  assert.deepEqual(await fs.readdir(tmp), [])
+  const saved = await fs.readFile(join(root, 'ev-secrets/upload-receipt.json'), 'utf8')
+  assert.ok(!saved.includes('synthetic-value') && !(await fs.readFile(join(root, 'ev-secrets/secrets-intent.json'), 'utf8')).includes('synthetic-value'))
+  assert.equal(fake.state.calls.filter((args) => args[0] === 'versions' && args[1] === 'deploy').length, 0)
+})
+
+test('secrets refuse to patch when the latest upload is not the deployed version or the code changes', async (t) => {
+  const { root, output, receiptSha256, baseEvidence, tmp } = await secretFixture(t)
+  const secrets = { EXAMPLE_URL: 'https://example.test', EXAMPLE_KEY: 'synthetic-value' }
+  const stale = fakeSecretWrangler({ latest: PATCHED })
+  await assert.rejects(secretsVersion({ packageRoot: output, expectedReceiptSha256: receiptSha256, evidenceDirectory: join(root, 'ev-a'),
+    baseEvidenceDirectory: baseEvidence, secrets, run: stale.run, tmpDirectory: tmp }), /latest uploaded version is not the deployed one/)
+  assert.equal(stale.state.seenSecrets, null)
+  const changed = fakeSecretWrangler({ etagChanges: true })
+  await assert.rejects(secretsVersion({ packageRoot: output, expectedReceiptSha256: receiptSha256, evidenceDirectory: join(root, 'ev-b'),
+    baseEvidenceDirectory: baseEvidence, secrets, run: changed.run, tmpDirectory: tmp }), /code differs/)
+  assert.deepEqual(await fs.readdir(tmp), [])
+  await assert.rejects(secretsVersion({ packageRoot: output, expectedReceiptSha256: receiptSha256, evidenceDirectory: join(root, 'ev-c'),
+    baseEvidenceDirectory: baseEvidence, secrets: { lower: 'x' }, run: fakeSecretWrangler().run, tmpDirectory: tmp }), /names or values/)
 })
