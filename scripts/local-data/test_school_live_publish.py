@@ -103,7 +103,9 @@ class PublisherTests(unittest.TestCase):
             self.assertEqual(Path(cwd), build / "source/web")
             self.assertEqual(json.loads((build / "source/web/data/site.json").read_bytes())["origin"], self.config["origin"])
             receipt = json.loads((build / "observed-build.json").read_bytes())
-            functions_inventory = sorted((entry for entry in receipt["sourceFiles"] if entry["path"].startswith("functions/")),
+            functions_inventory = sorted(({
+                **entry, "size": (build / "source" / entry["path"]).stat().st_size,
+            } for entry in receipt["sourceFiles"] if entry["path"].startswith("functions/")),
                                          key=lambda entry: entry["path"])
             worker = b"// invented compiled Functions worker\n"
             worker_sha = pub.sha(worker)

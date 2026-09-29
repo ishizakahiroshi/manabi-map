@@ -504,6 +504,14 @@ class SchoolLivePublisher:
         compile_record = json.loads(compile_raw)
         source_inventory = sorted((entry for entry in built["sourceFiles"] if entry["path"].startswith("functions/")),
                                   key=lambda entry: entry["path"])
+        compiled_inventory = compile_record.get("sourceInventory")
+        need(type(compiled_inventory) is list and len(compiled_inventory) == len(source_inventory)
+             and all(type(entry) is dict and set(entry) == {"path", "size", "sha256"}
+                     and type(entry["size"]) is int and entry["size"] > 0 for entry in compiled_inventory)
+             and [{"path": entry["path"], "sha256": entry["sha256"]} for entry in compiled_inventory] == source_inventory
+             and compile_record.get("sourceInventorySha256") == sha((school.canonical_json(compiled_inventory) + "\n").encode()))
+        for entry in compiled_inventory:
+            need(len(_read(root / "build/source" / _path_name(entry["path"]), 25 * 1024 * 1024)) == entry["size"])
         need(completion_raw == (school.canonical_json(completion) + "\n").encode()
              and completion.get("format") == "school-release-completion" and completion.get("version") == 1
              and completion.get("evidence") == "observed" and completion.get("deploymentPerformed") is False
@@ -527,7 +535,6 @@ class SchoolLivePublisher:
              and compile_record.get("status") == "success" and compile_record.get("sourceRevision") == self.config["revision"]
              and compile_record.get("workerSha256") == candidate["worker_sha256"]
              and compile_record.get("bindingsSha256") == candidate["bindings_sha256"]
-             and compile_record.get("sourceInventory") == source_inventory
              and re.fullmatch(r"[a-f0-9]{64}", completion.get("packageMetadataSha256", ""))
              and re.fullmatch(r"[a-f0-9]{64}", completion.get("packagePin", "")))
         dist = root / "build/dist"
