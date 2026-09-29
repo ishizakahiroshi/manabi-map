@@ -1,0 +1,7 @@
+{
+  "format": "school-workers-observe-contract",
+  "version": 1,
+  "shellPath": "/",
+  "shellRoutes": ["/auth/callback", "/map"],
+  "noindexRoutes": ["/map?lat=35.6812&lng=139.7671"]
+}

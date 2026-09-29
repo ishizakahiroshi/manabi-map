@@ -1,0 +1,18 @@
+// 学校入口（学校の種類を選ぶ軽量ページ）の Workers（static assets）設定の正本。
+// C8: docs/local/plan_parallel-school-restore-readiness.md（作者環境）。
+//
+// 入口は静的ファイルだけで Functions を持たないので、Worker 本体（main）も ASSETS binding も置かない
+// assets のみの Worker にする。すべてのリクエストを asset が返し、Worker のリクエスト数を消費しない。
+// `assets.directory` は web/scripts/workers-package.mjs が隔離パッケージへ書き出すときに足す。
+// not_found_handling / html_handling は Pages の既定（404.html を 404 で返す・末尾スラッシュ自動）に合わせる。
+{
+  "name": "manabi-map-school",
+  "compatibility_date": "2026-09-29",
+  "workers_dev": true,
+  "preview_urls": true,
+  "send_metrics": false,
+  "assets": {
+    "html_handling": "auto-trailing-slash",
+    "not_found_handling": "404-page"
+  }
+}
