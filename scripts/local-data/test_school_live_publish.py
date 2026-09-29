@@ -8,6 +8,7 @@ import sys
 import tempfile
 import time
 import unittest
+from unittest.mock import patch
 from urllib.parse import urlsplit
 
 import school_live_publish as pub
@@ -413,6 +414,20 @@ class PublisherTests(unittest.TestCase):
         with self.assertRaises(pub.PublishError):
             self.publisher._candidate(candidate, self.control)
         self.assertEqual(self.uploads, 0)
+
+    def test_school_overlay_reads_trusted_repo_site_outside_external_source_reader(self):
+        self.empty_school_project()
+        candidate = self.generated()
+        original_read = pub.live._read
+        site = self.root / "web/data/site.json"
+
+        def external_only(path, *args, **kwargs):
+            if Path(path) == site:
+                raise live.LiveSourceError("repository paths are forbidden")
+            return original_read(path, *args, **kwargs)
+
+        with patch.object(pub.live, "_read", side_effect=external_only):
+            self.publisher._candidate(candidate, self.control)
 
     def test_apex_and_school_origins_execute_the_pinned_isolated_finalizer(self):
         self.generated()

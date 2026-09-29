@@ -207,6 +207,14 @@ def _read(path, maximum=MAX_RECORD):
     return live._read(path, maximum)
 
 
+def _repo_site_sha(repo):
+    """Read the fixed source-tree site control, not an external school source."""
+    path = repo / "web/data/site.json"
+    need(path.is_file() and not path.is_symlink() and not path.is_junction()
+         and path.resolve().is_relative_to(repo.resolve()) and path.stat().st_size <= MAX_RECORD)
+    return sha(path.read_bytes())
+
+
 def _record(path, value):
     raw = (school.canonical_json(value) + "\n").encode()
     live._write(Path(path), raw, MAX_RECORD)
@@ -484,7 +492,7 @@ class SchoolLivePublisher:
             need(type(overlay) is dict and set(overlay) == {"path", "originalSha256", "effectiveSha256", "origin"}
                  and overlay["path"] == "web/data/site.json" and overlay["origin"] == self.config["origin"]
                  and site_entry is not None and site_entry["sha256"] == overlay["effectiveSha256"]
-                 and sha(_read(self.repo / "web/data/site.json")) == overlay["originalSha256"]
+                 and _repo_site_sha(self.repo) == overlay["originalSha256"]
                  and json.loads(_read(root / "build/source/web/data/site.json")) == {"origin": self.config["origin"]})
         else:
             need(overlay is None)
