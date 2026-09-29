@@ -194,7 +194,7 @@ async function syntheticBuildRoot(t, release, sourceRevision, bindingsSha256) {
     { path: 'web/src/entry-client.tsx', sha256: '6'.repeat(64) },
   ]
   const fakeWrangler = join(root, 'wrangler-synthetic.mjs')
-  await fs.writeFile(fakeWrangler, `import fs from 'node:fs/promises';\nconst args=process.argv.slice(2);\nif(args[0]==='--version'){process.stdout.write('4.0.0\\n')}else{const at=(name)=>args[args.indexOf(name)+1];await fs.writeFile(at('--outfile'),'export default {fetch(){return new Response("synthetic")}}');if(args.includes('--metafile'))await fs.writeFile(at('--metafile'),JSON.stringify({inputs:{'_middleware.ts':{}},outputs:{'_worker.js':{}}}))}\n`)
+  await fs.writeFile(fakeWrangler, `import fs from 'node:fs/promises';\nimport {join} from 'node:path';\nconst args=process.argv.slice(2);\nif(args[0]==='--version'){process.stdout.write('4.0.0\\n')}else{const at=(name)=>args[args.indexOf(name)+1];await fs.mkdir(at('--outdir'));await fs.writeFile(join(at('--outdir'),'index.js'),'export default {fetch(){return new Response("synthetic")}}');if(args.includes('--metafile'))await fs.writeFile(at('--metafile'),JSON.stringify({inputs:{'_middleware.ts':{}},outputs:{'index.js':{}}}))}\n`)
   return { root, fakeWrangler, sourceFiles, bindingsSha256, sourceRevision }
 }
 
@@ -271,6 +271,22 @@ test('failed Wrangler candidate cannot leave a compiled worker or success receip
     expectedSourceInventory: buildRoot.sourceFiles.filter((entry) => entry.path.startsWith('functions/')) }), /candidate refused/)
   await assert.rejects(fs.lstat(join(buildRoot.root, 'dist/_worker.js')), { code: 'ENOENT' })
   await assert.rejects(fs.lstat(join(buildRoot.root, 'functions-candidate/school-functions-compile-receipt.json')), { code: 'ENOENT' })
+})
+
+test('finalizer rejects multipart compiler output and split modules before publishing a worker', async (t) => {
+  const { release } = await releaseFixture(t)
+  const sourceRevision = 'b'.repeat(40), bindingsSha256 = '4'.repeat(64)
+  for (const extraModule of [false, true]) {
+    const buildRoot = await syntheticBuildRoot(t, release, sourceRevision, bindingsSha256)
+    const body = extraModule ? 'export default {fetch(){return new Response("synthetic")}}' :
+      '--synthetic-boundary\r\nContent-Disposition: form-data; name="metadata"\r\n\r\n{}\r\n--synthetic-boundary--\r\n'
+    await fs.writeFile(buildRoot.fakeWrangler, `import fs from 'node:fs/promises';\nimport {join} from 'node:path';\nconst args=process.argv.slice(2);\nif(args[0]==='--version'){process.stdout.write('4.0.0\\n')}else{const at=(name)=>args[args.indexOf(name)+1];await fs.mkdir(at('--outdir'));await fs.writeFile(join(at('--outdir'),'index.js'),${JSON.stringify(body)});${extraModule ? "await fs.writeFile(join(at('--outdir'),'other.js'),'export default 1');" : ''}await fs.writeFile(at('--metafile'),JSON.stringify({inputs:{'_middleware.ts':{}},outputs:{'index.js':{}}}))}\n`)
+    await assert.rejects(compileSchoolFunctionsCandidate({ buildRoot: buildRoot.root, wranglerPath: buildRoot.fakeWrangler,
+      wranglerVersion: '4.0.0', sourceRevision, bindingsSha256,
+      expectedSourceInventory: buildRoot.sourceFiles.filter((entry) => entry.path.startsWith('functions/')) }), /candidate refused/)
+    await assert.rejects(fs.lstat(join(buildRoot.root, 'dist/_worker.js')), { code: 'ENOENT' })
+    await assert.rejects(fs.lstat(join(buildRoot.root, 'functions-candidate/school-functions-compile-receipt.json')), { code: 'ENOENT' })
+  }
 })
 
 test('CLI identifies an explicit compiler and version and rejects a self-asserted compile flag', () => {

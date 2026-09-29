@@ -160,14 +160,16 @@ export async function compileSchoolFunctionsCandidate({ buildRoot, wranglerPath,
   const candidateRoot = join(root, 'functions-candidate')
   await fs.mkdir(await checkedPath(candidateRoot, { missing: true }))
   const workerPath = join(distRoot, '_worker.js')
-  const compiledWorkerPath = join(candidateRoot, '_worker.js')
+  const compiledRoot = join(candidateRoot, 'compiled')
+  const compiledWorkerPath = join(compiledRoot, 'index.js')
   const metadataPath = join(candidateRoot, 'wrangler-build-metadata.json')
   const receiptPath = join(candidateRoot, 'school-functions-compile-receipt.json')
   const before = await inventoryFunctionsSources(sourceRoot)
   if (!same(sourcePins(before), expectedSourceInventory) ||
-      await fs.lstat(await checkedPath(workerPath, { missing: true })).then(() => true, (err) => err.code !== 'ENOENT')) reject()
+      await fs.lstat(await checkedPath(workerPath, { missing: true })).then(() => true, (err) => err.code !== 'ENOENT') ||
+      await fs.lstat(await checkedPath(compiledRoot, { missing: true })).then(() => true, (err) => err.code !== 'ENOENT')) reject()
   const normalizedInvocation = ['wrangler', 'pages', 'functions', 'build', 'source/functions',
-    '--outfile', 'functions-candidate/_worker.js', '--metafile', 'functions-candidate/wrangler-build-metadata.json']
+    '--outdir', 'functions-candidate/compiled', '--metafile', 'functions-candidate/wrangler-build-metadata.json']
   const invocationSha256 = hash(canonical(normalizedInvocation))
   const env = commandEnvironment()
   let actualVersion
@@ -177,15 +179,24 @@ export async function compileSchoolFunctionsCandidate({ buildRoot, wranglerPath,
       .toString('utf8').trim()
     if (actualVersion !== wranglerVersion) reject()
     execFileSync(process.execPath, [wrangler, 'pages', 'functions', 'build', sourceRoot,
-      '--outfile', compiledWorkerPath, '--metafile', metadataPath], { cwd: sourceRoot, env,
+      '--outdir', compiledRoot, '--metafile', metadataPath], { cwd: sourceRoot, env,
       windowsHide: true, stdio: 'ignore', timeout: timeoutMs, maxBuffer: 1024 * 1024 })
   } catch { reject() }
+  const compiledEntries = await fs.readdir(await checkedPath(compiledRoot), { withFileTypes: true })
+  // A Pages advanced-mode _worker.js must contain the entire Worker. Refuse
+  // split or auxiliary output until that module layout has an explicit package contract.
+  if (compiledEntries.length !== 1 || compiledEntries[0].name !== 'index.js' ||
+      !compiledEntries[0].isFile()) reject()
   const [after, workerBytes, metadataRaw] = await Promise.all([
     inventoryFunctionsSources(sourceRoot), fs.readFile(await checkedFile(compiledWorkerPath)),
     fs.readFile(await checkedFile(metadataPath)),
   ])
   if (!same(before, after) || workerBytes.length === 0 || workerBytes.length > maxWorkerBytes ||
       metadataRaw.length === 0 || metadataRaw.length > 4 * 1024 * 1024) reject()
+  try {
+    execFileSync(process.execPath, ['--input-type=module', '--check'], { input: workerBytes, cwd: sourceRoot, env,
+      windowsHide: true, stdio: ['pipe', 'ignore', 'ignore'], timeout: Math.min(timeoutMs, 30000), maxBuffer: 1024 * 1024 })
+  } catch { reject() }
   let metadata
   try { metadata = JSON.parse(metadataRaw.toString('utf8')) } catch { reject() }
   if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata) ||
