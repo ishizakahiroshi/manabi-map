@@ -1,5 +1,6 @@
-// Explicit synthetic-only local build. Never invokes the production build/fetch chain.
+// Explicit isolated local build. Never invokes the production build/fetch chain.
 import fs from 'node:fs/promises'
+import { createHash } from 'node:crypto'
 import { execFileSync } from 'node:child_process'
 import { dirname, extname, join, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
@@ -48,12 +49,51 @@ export function candidateEnvironment(source = process.env) {
 export function parseCandidateArgs(args) {
   const result = {}
   for (const arg of args) {
-    const match = /^--(snapshot|manifest|output-root|legacy-assets|brands)=(.+)$/.exec(arg)
+    const match = /^--(snapshot|manifest|output-root|legacy-assets|legacy-manifest|legacy-manifest-sha256|legacy-deployment-id|brands)=(.+)$/.exec(arg)
     if (!match || result[match[1]]) throw new Error('Explicit unique snapshot, manifest and output-root arguments are required')
     result[match[1]] = match[2]
   }
   if (!['snapshot', 'manifest', 'output-root'].every((key) => result[key])) throw new Error('Explicit synthetic snapshot and manifest are required')
+  legacyAssetSelection(result)
   return result
+}
+
+export function legacyAssetSelection(options) {
+  const source = options['legacy-assets']
+  const manifest = options['legacy-manifest']
+  const expectedManifestSha256 = options['legacy-manifest-sha256']
+  const expectedDeploymentId = options['legacy-deployment-id']
+  const pinned = [manifest, expectedManifestSha256, expectedDeploymentId].filter((value) => value !== undefined)
+  if (!source && pinned.length) throw new Error('Legacy asset source is required with production inventory pins')
+  if (!source) return null
+  if (pinned.length && pinned.length !== 3) throw new Error('Production legacy assets require manifest path, SHA256 and deployment ID together')
+  if (pinned.length && (resolve(manifest) !== resolve(source, 'legacy-assets.json') ||
+      !/^[a-f0-9]{64}$/.test(expectedManifestSha256) ||
+      !/^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/.test(expectedDeploymentId))) {
+    throw new Error('Invalid production legacy asset inventory pins')
+  }
+  return { source, manifest: manifest ?? join(source, 'legacy-assets.json'),
+    pins: pinned.length ? { expectedManifestSha256, expectedDeploymentId } : {} }
+}
+
+export async function checkedLegacyAssetSelection(options) {
+  const selection = legacyAssetSelection(options)
+  if (!selection) return null
+  selection.manifest = await checkedFile(selection.manifest)
+  const bytes = await fs.readFile(selection.manifest)
+  if (bytes.length > 4 * 1024 * 1024) throw new Error('Legacy asset inventory exceeds 4 MiB')
+  const manifest = JSON.parse(bytes.toString('utf8'))
+  const expectedFormat = selection.pins.expectedManifestSha256 ? 'production-legacy-assets' : 'synthetic-legacy-assets'
+  if (manifest.format !== expectedFormat) throw new Error('Legacy asset inventory requires the matching explicit pin mode')
+  const anchorDeploymentId = manifest.version === 1 ? manifest.deploymentId :
+    manifest.version === 2 ? manifest.anchorDeploymentId : undefined
+  if (selection.pins.expectedManifestSha256 &&
+      (createHash('sha256').update(bytes).digest('hex') !== selection.pins.expectedManifestSha256 ||
+        anchorDeploymentId !== selection.pins.expectedDeploymentId)) {
+    throw new Error('Production legacy asset inventory pin differs')
+  }
+  if (selection.pins.expectedManifestSha256) selection.inventoryVersion = manifest.version
+  return selection
 }
 
 async function copy(source, destination) {
@@ -63,10 +103,12 @@ async function copy(source, destination) {
 }
 
 export async function buildSchoolCandidates(options) {
+  const legacySelection = await checkedLegacyAssetSelection(options)
   const inputs = await Promise.all([options.snapshot, options.manifest, ...(options.brands ? [options.brands] : [])].map(checkedFile))
+  const legacyManifest = legacySelection?.manifest
   if (inputs[0] === inputs[1]) throw new Error('Separate source files are required')
   parseSchoolSnapshot(await fs.readFile(inputs[0]), await fs.readFile(inputs[1]))
-  const output = await checkedOutput(options['output-root'], inputs, repoRoot)
+  const output = await checkedOutput(options['output-root'], legacyManifest ? [...inputs, legacyManifest] : inputs, repoRoot)
   const config = JSON.parse(await fs.readFile(join(webRoot, 'data/deployment-targets.json'), 'utf8'))
   const targets = config.targets
   if (targets.school.origin !== 'https://school.manabi-map.app' || targets['high-school'].origin !== 'https://high-school.manabi-map.app' ||
@@ -113,7 +155,11 @@ export async function buildSchoolCandidates(options) {
   run(tsx, ['scripts/gen-seo-pages.mjs', '--dist', highSchoolOutput, `--synthetic-candidate=${dataCandidate}`])
   run(join(isolatedWeb, 'scripts/verify-static-output.mjs'), ['--dist', highSchoolOutput, '--max-file-mib', '25'])
   await createApexCandidate({ highSchoolOutput, apexOutput, portalRoot: join(webRoot, 'apex-portal'), schoolShell, portalConfig: portalWithBrands(brandConfig) })
-  const legacyAssets = options['legacy-assets'] ? await retainLegacyAssets(options['legacy-assets'], apexOutput) : { synthetic: true, retained: 0 }
+  const legacyAssets = legacySelection
+    ? { ...await retainLegacyAssets(legacySelection.source, apexOutput, legacySelection.pins),
+      ...(legacySelection.pins.expectedManifestSha256 ? { manifestSha256: legacySelection.pins.expectedManifestSha256 } : {}),
+      ...(legacySelection.inventoryVersion === 2 ? { anchorDeploymentId: legacySelection.pins.expectedDeploymentId } : {}) }
+    : { synthetic: true, retained: 0 }
   const compatibility = await verifyCompatibilityGeneration(dataCandidate, [apexOutput, highSchoolOutput])
   const capacity = {}
   for (const [targetId, distDir] of [['school', schoolOutput], ['high-school', highSchoolOutput], ['apex', apexOutput]]) {
@@ -131,7 +177,9 @@ export async function buildSchoolCandidates(options) {
     limitations: ['Pages project names are local candidate labels; confirm actual resources before deployment.',
       'Functions and production bindings are not included in the static high-school directory.',
       'Synthetic auth values cannot verify real OAuth, persistence or Android. Callback mocks are separate evidence.',
-      'Historical retention is synthetic-only; a verified inventory of actual deployed chunks is required before real cutover.',
+      legacyAssets.synthetic
+        ? 'Historical retention is synthetic-only; a verified inventory of actual deployed chunks is required before real cutover.'
+        : 'Historical assets are pinned to a production deployment inventory; live tab continuity and cutover remain unverified.',
       'The legacy notice remains disabled; existing production origin is unchanged.',
       'Historical PDFs and outbound references are retained; they are not migration acceptance evidence.'] }
   await fs.writeFile(join(output, 'candidate-build.json'), JSON.stringify(result, null, 2) + '\n', { flag: 'wx' })

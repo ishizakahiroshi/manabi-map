@@ -117,3 +117,111 @@ test('historical synthetic chunks are explicit, hash checked and collision safe'
   await fs.writeFile(join(source, 'assets/previous-hash.js'), 'tampered')
   await assert.rejects(retainLegacyAssets(source, destination), /inventory differs/)
 })
+
+test('production old assets require deployment and manifest pins before any copy', async (t) => {
+  const root = await fs.mkdtemp(join(tmpdir(), 'pinned-legacy-assets-'))
+  t.after(() => fs.rm(root, { recursive: true, force: true }))
+  const source = join(root, 'previous'), destination = join(root, 'apex')
+  await fs.mkdir(join(source, 'assets'), { recursive: true }); await fs.mkdir(join(destination, 'assets'), { recursive: true })
+  const inventoryPath = join(destination, 'school-migration-candidate.json')
+  await fs.writeFile(inventoryPath, JSON.stringify({ format: 'synthetic-school-routes', phase: 'candidate-rescue', routes: [], assets: [] }))
+  const oldChunk = Buffer.from('/* old public chunk */'), oldIndex = Buffer.from('{"synthetic":true}')
+  await fs.writeFile(join(source, 'assets/old-chunk.js'), oldChunk)
+  await fs.writeFile(join(source, 'school-name-index-old.json'), oldIndex)
+  const artifact = (path, bytes) => ({ path, size: bytes.length, sha256: createHash('sha256').update(bytes).digest('hex') })
+  const deploymentId = 'e18dfb79-5f4b-4ae3-b283-4ee15eb0b3b8'
+  const manifest = { format: 'production-legacy-assets', version: 1, project: 'manabi-map', deploymentId,
+    artifacts: [artifact('assets/old-chunk.js', oldChunk), artifact('school-name-index-old.json', oldIndex)] }
+  const manifestPath = join(source, 'legacy-assets.json'), raw = Buffer.from(JSON.stringify(manifest))
+  await fs.writeFile(manifestPath, raw)
+  const pins = { expectedDeploymentId: deploymentId, expectedManifestSha256: createHash('sha256').update(raw).digest('hex') }
+  await assert.rejects(retainLegacyAssets(source, destination), /pin differs/)
+  await assert.rejects(retainLegacyAssets(source, destination, { ...pins, expectedDeploymentId: '0'.repeat(36) }), /pin differs/)
+  await assert.rejects(retainLegacyAssets(source, destination, { ...pins, expectedManifestSha256: '0'.repeat(64) }), /pin differs/)
+  await assert.rejects(fs.stat(join(destination, 'assets/old-chunk.js')), { code: 'ENOENT' })
+  const result = await retainLegacyAssets(source, destination, pins)
+  assert.deepEqual(result, { synthetic: false, retained: 2, deploymentId })
+  assert.deepEqual(JSON.parse(await fs.readFile(inventoryPath, 'utf8')).assets,
+    ['/assets/old-chunk.js', '/school-name-index-old.json'])
+  await retainLegacyAssets(source, destination, pins)
+  await fs.writeFile(join(destination, 'assets/old-chunk.js'), 'changed destination')
+  await assert.rejects(retainLegacyAssets(source, destination, pins), /collision/)
+  await fs.writeFile(join(destination, 'assets/old-chunk.js'), oldChunk)
+  await fs.writeFile(join(source, 'assets/old-chunk.js'), 'changed source')
+  await assert.rejects(retainLegacyAssets(source, destination, pins), /inventory differs/)
+  await fs.writeFile(join(source, 'assets/old-chunk.js'), oldChunk)
+  await fs.writeFile(manifestPath, Buffer.concat([raw, Buffer.from('\n')]))
+  await assert.rejects(retainLegacyAssets(source, destination, pins), /pin differs/)
+})
+
+test('production retention rejects duplicate paths and changed existing bytes before copying', async (t) => {
+  const root = await fs.mkdtemp(join(tmpdir(), 'pinned-legacy-collision-'))
+  t.after(() => fs.rm(root, { recursive: true, force: true }))
+  const source = join(root, 'previous'), destination = join(root, 'apex')
+  await fs.mkdir(join(source, 'assets'), { recursive: true }); await fs.mkdir(join(destination, 'assets'), { recursive: true })
+  await fs.writeFile(join(destination, 'school-migration-candidate.json'), JSON.stringify({ format: 'synthetic-school-routes', phase: 'candidate-rescue', routes: [], assets: [] }))
+  const first = Buffer.from('first'), second = Buffer.from('second')
+  for (const [name, bytes] of [['a.js', first], ['b.js', second]]) await fs.writeFile(join(source, 'assets', name), bytes)
+  const artifacts = [['a.js', first], ['b.js', second]].map(([name, bytes]) =>
+    ({ path: `assets/${name}`, size: bytes.length, sha256: createHash('sha256').update(bytes).digest('hex') }))
+  const deploymentId = 'e18dfb79-5f4b-4ae3-b283-4ee15eb0b3b8'
+  const writeManifest = async (entries) => {
+    const raw = Buffer.from(JSON.stringify({ format: 'production-legacy-assets', version: 1, project: 'manabi-map', deploymentId, artifacts: entries }))
+    await fs.writeFile(join(source, 'legacy-assets.json'), raw)
+    return { expectedDeploymentId: deploymentId, expectedManifestSha256: createHash('sha256').update(raw).digest('hex') }
+  }
+  let pins = await writeManifest(artifacts)
+  await fs.writeFile(join(destination, 'assets/b.js'), 'collision')
+  await assert.rejects(retainLegacyAssets(source, destination, pins), /collision/)
+  await assert.rejects(fs.stat(join(destination, 'assets/a.js')), { code: 'ENOENT' })
+  pins = await writeManifest([artifacts[0], { ...artifacts[0], path: 'assets/A.js' }])
+  await assert.rejects(retainLegacyAssets(source, destination, pins), /Invalid legacy asset entry/)
+})
+
+test('v2 pins the current anchor and records a source deployment for every old asset', async (t) => {
+  const root = await fs.mkdtemp(join(tmpdir(), 'multi-deployment-assets-'))
+  t.after(() => fs.rm(root, { recursive: true, force: true }))
+  const source = join(root, 'previous'), destination = join(root, 'apex')
+  await fs.mkdir(join(source, 'assets'), { recursive: true }); await fs.mkdir(destination)
+  const inventoryPath = join(destination, 'school-migration-candidate.json')
+  await fs.writeFile(inventoryPath, JSON.stringify({ format: 'synthetic-school-routes', phase: 'candidate-rescue', routes: [], assets: [] }))
+  const anchorDeploymentId = 'e18dfb79-5f4b-4ae3-b283-4ee15eb0b3b8'
+  const olderDeploymentId = '35bfd306-c852-4b64-9885-1ad9b832fb17'
+  const files = [['assets/current.js', Buffer.from('current'), anchorDeploymentId],
+    ['assets/older.js', Buffer.from('older'), olderDeploymentId]]
+  const artifacts = files.map(([path, bytes, sourceDeploymentId]) =>
+    ({ path, size: bytes.length, sha256: createHash('sha256').update(bytes).digest('hex'), sourceDeploymentId }))
+  for (const [path, bytes] of files) await fs.writeFile(join(source, path), bytes)
+  const manifestPath = join(source, 'legacy-assets.json')
+  const writeManifest = async (entries) => {
+    const raw = Buffer.from(JSON.stringify({ format: 'production-legacy-assets', version: 2, project: 'manabi-map', anchorDeploymentId, artifacts: entries }))
+    await fs.writeFile(manifestPath, raw)
+    return { expectedDeploymentId: anchorDeploymentId, expectedManifestSha256: createHash('sha256').update(raw).digest('hex') }
+  }
+  let pins = await writeManifest(artifacts)
+  await assert.rejects(retainLegacyAssets(source, destination, { ...pins, expectedDeploymentId: olderDeploymentId }), /pin differs/)
+  assert.deepEqual(await retainLegacyAssets(source, destination, pins),
+    { synthetic: false, retained: 2, deploymentId: anchorDeploymentId, version: 2 })
+  assert.deepEqual(JSON.parse(await fs.readFile(inventoryPath, 'utf8')).assets,
+    ['/assets/current.js', '/assets/older.js'])
+  pins = await writeManifest([{ path: artifacts[0].path, size: artifacts[0].size, sha256: artifacts[0].sha256 }])
+  await assert.rejects(retainLegacyAssets(source, destination, pins), /Invalid legacy asset entry/)
+  pins = await writeManifest([{ ...artifacts[0], sourceDeploymentId: 'not-an-id' }])
+  await assert.rejects(retainLegacyAssets(source, destination, pins), /Invalid legacy asset entry/)
+  pins = await writeManifest([artifacts[0], { ...artifacts[0], path: 'assets/CURRENT.js' }])
+  await assert.rejects(retainLegacyAssets(source, destination, pins), /Invalid legacy asset entry/)
+})
+
+test('v2 aggregate byte cap rejects the manifest before reading any asset', async (t) => {
+  const root = await fs.mkdtemp(join(tmpdir(), 'multi-deployment-budget-'))
+  t.after(() => fs.rm(root, { recursive: true, force: true }))
+  const source = join(root, 'previous'), destination = join(root, 'apex')
+  await fs.mkdir(source); await fs.mkdir(destination)
+  const anchorDeploymentId = 'e18dfb79-5f4b-4ae3-b283-4ee15eb0b3b8'
+  const artifacts = Array.from({ length: 11 }, (_, i) => ({ path: `assets/old-${i}.js`, size: 25 * 1024 * 1024,
+    sha256: '0'.repeat(64), sourceDeploymentId: anchorDeploymentId }))
+  const raw = Buffer.from(JSON.stringify({ format: 'production-legacy-assets', version: 2, project: 'manabi-map', anchorDeploymentId, artifacts }))
+  await fs.writeFile(join(source, 'legacy-assets.json'), raw)
+  await assert.rejects(retainLegacyAssets(source, destination, { expectedDeploymentId: anchorDeploymentId,
+    expectedManifestSha256: createHash('sha256').update(raw).digest('hex') }), /aggregate size exceeds 256 MiB/)
+})

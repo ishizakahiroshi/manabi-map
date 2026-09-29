@@ -1,5 +1,5 @@
 import fs from 'node:fs/promises'
-import { dirname, join, relative, isAbsolute } from 'node:path'
+import { dirname, join, relative, isAbsolute, sep } from 'node:path'
 import { createHash } from 'node:crypto'
 import { checkedFile, checkedPath, verifySchoolCandidate } from './school-candidate.mjs'
 import { portal, renderEntryPage, renderRecoveryEnded } from '../../apex-portal/portal.mjs'
@@ -8,6 +8,8 @@ import { normalizedMigrationPath, validateMigrationInventory } from '../../../fu
 import deploymentTargets from '../../data/deployment-targets.json' with { type: 'json' }
 
 const sha256 = (bytes) => createHash('sha256').update(bytes).digest('hex')
+const deploymentId = (value) => typeof value === 'string' && /^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/.test(value)
+const MAX_RETAINED_BYTES = 256 * 1024 * 1024
 
 /** A completed school projection is the sole data input for both origins. */
 export async function verifyCompatibilityGeneration(candidate, outputs) {
@@ -28,40 +30,71 @@ export async function verifyCompatibilityGeneration(candidate, outputs) {
   return { artifactsSha256: receipt.artifactsSha256, artifacts: receipt.artifacts.length, origins: outputs.length }
 }
 
-/** Explicit synthetic historical inventory; collisions must match byte-for-byte. */
-export async function retainLegacyAssets(source, destination) {
-  await checkedPath(source); await checkedPath(destination)
-  const manifest = JSON.parse(await fs.readFile(await checkedFile(join(source, 'legacy-assets.json')), 'utf8'))
-  if (manifest.format !== 'synthetic-legacy-assets' || manifest.synthetic !== true || !Array.isArray(manifest.artifacts) || !manifest.artifacts.length) throw new Error('Explicit synthetic legacy asset inventory required')
+/** Keep pinned old-tab assets alongside the new generation, never replacing changed bytes. */
+export async function retainLegacyAssets(source, destination, pins = {}) {
+  const sourceRoot = await checkedPath(source), destinationRoot = await checkedPath(destination)
+  const separation = relative(sourceRoot, destinationRoot)
+  const reverse = relative(destinationRoot, sourceRoot)
+  if (!separation || [separation, reverse].some((path) => !isAbsolute(path) && path !== '..' && !path.startsWith(`..${sep}`))) {
+    throw new Error('Legacy source and destination must not overlap')
+  }
+  const manifestBytes = await fs.readFile(await checkedFile(join(sourceRoot, 'legacy-assets.json')))
+  if (manifestBytes.length > 4 * 1024 * 1024) throw new Error('Legacy asset inventory exceeds 4 MiB')
+  const manifest = JSON.parse(manifestBytes.toString('utf8'))
+  const synthetic = manifest.format === 'synthetic-legacy-assets' && manifest.synthetic === true
+  const productionV1 = manifest.format === 'production-legacy-assets' && manifest.version === 1 &&
+    manifest.project === 'manabi-map' && deploymentId(manifest.deploymentId) &&
+    Object.keys(manifest).sort().join(',') === 'artifacts,deploymentId,format,project,version'
+  const productionV2 = manifest.format === 'production-legacy-assets' && manifest.version === 2 &&
+    manifest.project === 'manabi-map' && deploymentId(manifest.anchorDeploymentId) &&
+    Object.keys(manifest).sort().join(',') === 'anchorDeploymentId,artifacts,format,project,version'
+  if (!synthetic && !productionV1 && !productionV2) throw new Error('Explicit supported legacy asset inventory required')
+  const anchorDeploymentId = productionV2 ? manifest.anchorDeploymentId : manifest.deploymentId
+  if ((productionV1 || productionV2) && (!/^[a-f0-9]{64}$/.test(pins.expectedManifestSha256 ?? '') ||
+      pins.expectedManifestSha256 !== sha256(manifestBytes) || pins.expectedDeploymentId !== anchorDeploymentId)) {
+    throw new Error('Production legacy asset inventory pin differs')
+  }
+  if (!Array.isArray(manifest.artifacts) || !manifest.artifacts.length || manifest.artifacts.length > 20000) throw new Error('Invalid legacy asset inventory')
   const seen = new Set()
+  let declaredBytes = 0
   for (const item of manifest.artifacts) {
-    if (typeof item.path !== 'string' || !/^(?:assets\/[a-zA-Z0-9_./-]+\.(?:js|css|svg|png|woff2?)|(?:schools|city-index|school-name-index)-[a-z0-9-]+\.json(?:\.gz)?)$/.test(item.path) || item.path.split('/').some((part) => !part || part === '.' || part === '..') || seen.has(item.path.toLowerCase()) || !/^[a-f0-9]{64}$/.test(item.sha256) || !Number.isSafeInteger(item.size)) throw new Error('Invalid legacy asset entry')
+    if (!item || typeof item !== 'object' || Array.isArray(item) ||
+      (productionV2 && (Object.keys(item).sort().join(',') !== 'path,sha256,size,sourceDeploymentId' || !deploymentId(item.sourceDeploymentId))) ||
+      typeof item.path !== 'string' || !/^(?:assets\/[a-zA-Z0-9_./-]+\.(?:js|css|svg|png|woff2?)|(?:schools|city-index|school-name-index)-[a-z0-9-]+\.json(?:\.gz)?)$/.test(item.path) ||
+      item.path.split('/').some((part) => !part || part === '.' || part === '..') || seen.has(item.path.toLowerCase()) ||
+      !/^[a-f0-9]{64}$/.test(item.sha256) || !Number.isSafeInteger(item.size) || item.size < 0 || item.size > 25 * 1024 * 1024) {
+      throw new Error('Invalid legacy asset entry')
+    }
     seen.add(item.path.toLowerCase())
-    const bytes = await fs.readFile(await checkedFile(join(source, item.path)))
+    declaredBytes += item.size
+    if (declaredBytes > MAX_RETAINED_BYTES) throw new Error('Legacy asset aggregate size exceeds 256 MiB')
+  }
+  const staged = []
+  for (const item of manifest.artifacts) {
+    const bytes = await fs.readFile(await checkedFile(join(sourceRoot, item.path)))
     if (bytes.length !== item.size || sha256(bytes) !== item.sha256) throw new Error('Legacy asset inventory differs')
-    const target = join(destination, item.path)
+    const target = join(destinationRoot, item.path)
     try {
       const existing = await fs.readFile(await checkedFile(target))
       if (!existing.equals(bytes)) throw new Error('Legacy asset path collision')
     } catch (error) {
       if (error.code !== 'ENOENT') throw error
-      await fs.mkdir(dirname(target), { recursive: true })
-      await fs.writeFile(target, bytes, { flag: 'wx' })
+      staged.push({ target, bytes })
     }
   }
   // The published route inventory must include assets retained after construction.
-  const inventoryPath = join(destination, 'school-migration-candidate.json')
-  let inventory
-  try { inventory = JSON.parse(await fs.readFile(await checkedFile(inventoryPath), 'utf8')) } catch (error) {
-    if (error.code !== 'ENOENT') throw error
+  const inventoryPath = await checkedFile(join(destinationRoot, 'school-migration-candidate.json'))
+  const inventory = JSON.parse(await fs.readFile(inventoryPath, 'utf8'))
+  validateMigrationInventory(inventory, inventory.phase)
+  inventory.assets = [...new Set([...inventory.assets, ...manifest.artifacts.map((item) => normalizedMigrationPath('/' + item.path))])].sort()
+  validateMigrationInventory(inventory, inventory.phase)
+  for (const { target, bytes } of staged) {
+    await fs.mkdir(dirname(target), { recursive: true })
+    await fs.writeFile(target, bytes, { flag: 'wx' })
   }
-  if (inventory) {
-    validateMigrationInventory(inventory, inventory.phase)
-    inventory.assets = [...new Set([...inventory.assets, ...manifest.artifacts.map((item) => normalizedMigrationPath('/' + item.path))])].sort()
-    validateMigrationInventory(inventory, inventory.phase)
-    await fs.writeFile(inventoryPath, JSON.stringify(inventory) + '\n')
-  }
-  return { synthetic: true, retained: seen.size }
+  await fs.writeFile(inventoryPath, JSON.stringify(inventory) + '\n')
+  return { synthetic, retained: seen.size, deploymentId: productionV1 || productionV2 ? anchorDeploymentId : undefined,
+    ...(productionV2 ? { version: 2 } : {}) }
 }
 
 /** No old SEO HTML is duplicated. Retain current candidate chunks/data for the legacy shell. */

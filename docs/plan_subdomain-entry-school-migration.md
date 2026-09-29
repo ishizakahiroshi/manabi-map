@@ -17,7 +17,7 @@ ai_author_model_id: unknown
 ai_author_model_display: unknown
 ai_author_reasoning: unknown
 ai_author_model_source: unavailable
-ai_execution_refs: [AIX-20260927T012339619-802f5465, AIX-20260927T013035154-418add22, AIX-20260927T014245084-b8ed6267, AIX-20260927T020842634-377a5976, AIX-20260927T022021395-e4091a1f, AIX-20260927T023525215-afd3f979, AIX-20260927T025536733-91e225ce, AIX-20260927T033306106-5d29fec0, AIX-20260927T042101147-61a75c66, AIX-20260927T043840191-2ce59749, AIX-20260927T045329626-7282b173, AIX-20260927T045915321-c91c2c5c, AIX-20260927T133203809-1be98664, AIX-20260927T134321078-340d3dfa, AIX-20260927T224037255-d31ce0ae, AIX-20260927T233259210-a4511260, AIX-20260928T011802664-b8f39eda]
+ai_execution_refs: [AIX-20260927T012339619-802f5465, AIX-20260927T013035154-418add22, AIX-20260927T014245084-b8ed6267, AIX-20260927T020842634-377a5976, AIX-20260927T022021395-e4091a1f, AIX-20260927T023525215-afd3f979, AIX-20260927T025536733-91e225ce, AIX-20260927T033306106-5d29fec0, AIX-20260927T042101147-61a75c66, AIX-20260927T043840191-2ce59749, AIX-20260927T045329626-7282b173, AIX-20260927T045915321-c91c2c5c, AIX-20260927T133203809-1be98664, AIX-20260927T134321078-340d3dfa, AIX-20260927T224037255-d31ce0ae, AIX-20260927T233259210-a4511260, AIX-20260928T011802664-b8f39eda, AIX-20260929T200345195-3888626f, AIX-20260929T200956261-ca34da61, AIX-20260929T201134789-37f079c0]
 ---
 
 # [計画] 総合入口と学校サブドメインへの移行
@@ -28,10 +28,10 @@ ai_execution_refs: [AIX-20260927T012339619-802f5465, AIX-20260927T013035154-418a
 |---|---|---|---|---|---|---|
 | C1 | planned | URL対応表・配信単位・容量を確定する | [SQLite原本・静的生成](plan_subdomain-entry-school-migration_c1_sqlite-static-source.md) | ホストと別Pages方針は採用済み。経路ごとの互換動作・実Pages割当・容量・利用者引継ぎの未検収を詰める | AIX-20260927T025536733-91e225ce; AIX-20260927T033306106-5d29fec0; AIX-20260927T042101147-61a75c66; AIX-20260927T043840191-2ce59749; AIX-20260927T045329626-7282b173; AIX-20260927T045915321-c91c2c5c; AIX-20260927T133203809-1be98664; AIX-20260927T134321078-340d3dfa; AIX-20260927T233259210-a4511260 | implementation: openai / unknown / unknown; implementation: openai / unknown / unknown; implementation: openai / unknown / unknown; implementation: openai / unknown / unknown; implementation: openai / unknown / unknown; implementation: openai / unknown / unknown; implementation: openai / gpt-6-sol / high; review: openai / unknown / unknown; implementation: openai / unknown / unknown |
 | C2 | planned | 学校入口と高校版の経路・認証・SEOを整える | — | C1の確定表を画面・静的生成・Functionsへ同時反映 | AIX-20260928T011802664-b8f39eda | verification: openai / unknown / unknown |
-| C3 | planned | 総合入口と旧URL互換配信を作る | — | C2のURL・公開API成果物を使用。独立した配信先で検収 | AIX-20260928T011802664-b8f39eda | verification: openai / unknown / unknown |
+| C3 | planned | 総合入口と旧URL互換配信を作る | — | C2のURL・公開API成果物を使用。独立した配信先で検収 | AIX-20260928T011802664-b8f39eda; AIX-20260929T200345195-3888626f; AIX-20260929T200956261-ca34da61; AIX-20260929T201134789-37f079c0 | verification: openai / unknown / unknown; implementation: unknown / unknown / unknown; implementation: unknown / unknown / unknown; implementation: unknown / unknown / unknown |
 | C4 | planned | 並行公開・予告・切替・観察を行う | — | 本番反映は別途明示指示。失敗時は公開先と転送を戻す |  |  |
 
-実行順序: 総合入口のグランドデザイン確認済み → `C1 → C2 → C3 → C4`。C1全体は未完了だが、2026-09-27に学校入口 `school.manabi-map.app` と高校入口 `high-school.manabi-map.app` の別Pages・別出力を採用した。高校をschool配下のサブディレクトリへ集約する案は不採用。同じリポ内で入口を管理するA2と、将来の全学校種別への対応予定を明記する方針は維持する。最新承認では候補のローカル実装・合成ビルド・検証・commitに着手し、C2の準備を先行する。本番配備・DNS・実認証・公開日は未承認/未検収であり、C2〜C4の完了とは扱わない。
+実行順序: 総合入口のグランドデザイン確認済み → `C1 → C2 → C3 → C4`。C1全体は未完了だが、2026-09-27に学校入口 `school.manabi-map.app` と高校入口 `high-school.manabi-map.app` の別Pages・別出力を採用した。高校をschool配下のサブディレクトリへ集約する案は不採用。同じリポ内で入口を管理するA2と、将来の全学校種別への対応予定を明記する方針は維持する。2026-09-29にユーザーは残り手順を承認し、実機操作を最後にまとめるよう指定した。高校版は専用Pagesのpages.devへ本番配備済みだが、全件HTTP照合は未完了。高校custom domainはPagesに関連付け済みでDNS未登録のためpending。学校入口とapexの切替、実OAuth・保存、公開日は未検収であり、C2〜C4の完了とは扱わない。
 
 先行資料: [採用したグランドデザイン](reference_portal-grand-design.md)・[画面と構成のプレビュー](design_portal-grand-design_2026-09-27.html)。C3の設計基準とする。当面は現名称を継続し、総合入口と学校サービスの表示ブランドを独立して切り替えられる設計にする。新名称の決定を移行の前提にしない。変更時は候補の先行利用・商標の一次確認を行う。デザインの採用を本番移行の承認とは扱わない。
 
@@ -288,6 +288,12 @@ Google・LINE等のOAuth同意画面、利用中の認証メール（件名・�
 合成の別ブランド設定に切り替えたPreviewで、画面・生成HTML・OGP・JSON-LD・manifest・画像に新しい表記が反映されることを確認する。旧表示名の残存検索では、現行の表示と履歴・URL・内部識別子を区別する。同じ学校URL・ID・ログイン・お気に入り・家族メモが使え、設定と資産を元に戻せることを確認する。画像やPWAのキャッシュ更新も確認し、検索エンジン側の表示更新完了は即時検証できるものと扱わない。
 
 ## C3: 総合入口と旧URL互換配信
+
+### 2026-09-29 実apex資産の保持候補
+
+現行apexのCloudflare canonical deployment `e18dfb79-5f4b-4ae3-b283-4ee15eb0b3b8` と、2026-09-01以降の成功した本番配備23件を読み取り調査した。新しい高校候補に存在しない旧資産は181パス、24,773,664 bytesで、各固定配備URLからHTTP 200の実bytes/SHA256/配備元IDをリポ外の作者環境（`school-publications/apex-history-20260929-001/`）に保存した。現行配備だけでは17件で、過去配備由来の164件が漏れる。Cloudflareの資産一覧にある32文字digestはHTTP本文のMD5と一致しないため、保持には取得した実bytesのSHA256を使う。
+
+候補生成器は外部のmanifest SHA256・現行apex配備ID・各ファイルの配備元ID/サイズ/SHA256を照合して旧資産を保持する経路を追加した。181件のローカル隔離コピーとroute inventory照合は成功。2026-09-29夜、CIと同じ手順の合成snapshotに実旧資産181件を渡して候補生成を通しで実行し（exit 0、配備なし）、apex候補内の181件がサイズ・SHA256とも保持manifestと一致した。ただし9月1日からの棚卸しは暫定範囲であり、切替前の旧タブが参照し得る全世代の保証ではない。D3の「28日以上」は切替後の保持期間案で、切替前に遡る期間の決定ではない。旧apex配信やDNSは変更していない。
 
 ### 受入調査で追加した実装・停止条件（2026-09-27）
 
