@@ -4,7 +4,7 @@ import http from 'node:http'
 import { join } from 'node:path'
 import test from 'node:test'
 import { buildWorkersPackage } from './workers-package.mjs'
-import { expectedHeaders, observeWorkersPackage, parseHeadersFile, planObservation, publicUrl, workerFirst } from './workers-observe.mjs'
+import { expectedHeaders, observeWorkersPackage, parseHeadersFile, planObservation, publicUrl, withoutEdgeBeacon, workerFirst } from './workers-observe.mjs'
 import { fakeHighSchoolCandidate, fakeRepo, HEADERS, tempRoot } from './workers-fixture.test-helper.mjs'
 
 test('URL mapping and _headers matching follow the Pages observer', () => {
@@ -31,8 +31,22 @@ async function packageFixture(t) {
   return { root, output, receiptSha256: built.receiptSha256 }
 }
 
+// Synthetic stand-in for the tag Cloudflare Web Analytics inserts on zone hostnames (values are invented).
+const BEACON = `<script type="module" src="https://static.cloudflareinsights.com/beacon.min.js/v0123abcd" integrity="sha512-AAAA+/==" data-cf-beacon='{"version":"1","token":"0000","r":1}' crossorigin="anonymous"></script>\n`
+
+test('edge beacon allowance removes exactly one tag right before the final </body>', () => {
+  const page = Buffer.from('<html><body><p>日本語</p>\n</body>\n</html>\n')
+  const injected = Buffer.from(page.toString().replace('</body>', `${BEACON}</body>`))
+  assert.ok(withoutEdgeBeacon(injected).equals(page))
+  assert.equal(withoutEdgeBeacon(page), null)
+  assert.equal(withoutEdgeBeacon(Buffer.from(page.toString().replace('</body>', `${BEACON}${BEACON}</body>`))), null)
+  assert.equal(withoutEdgeBeacon(Buffer.from(page.toString().replace('<p>', `${BEACON}<p>`))), null)
+  const otherScript = BEACON.replace('static.cloudflareinsights.com', 'cdn.example.test')
+  assert.equal(withoutEdgeBeacon(Buffer.from(page.toString().replace('</body>', `${otherScript}</body>`))), null)
+})
+
 // A minimal stand-in for Workers static assets + the Pages middleware behaviour the contract expects.
-function server({ dropHeaderOn = null, alterBodyOn = null } = {}, packageRoot) {
+function server({ dropHeaderOn = null, alterBodyOn = null, beaconOn = null } = {}, packageRoot) {
   return http.createServer(async (request, response) => {
     const url = new URL(request.url, 'http://127.0.0.1')
     const blocks = parseHeadersFile(await fs.readFile(join(packageRoot, 'assets/_headers'), 'utf8'))
@@ -52,6 +66,10 @@ function server({ dropHeaderOn = null, alterBodyOn = null } = {}, packageRoot) {
     if (url.searchParams.has('lat') && url.searchParams.has('lng')) headers['x-robots-tag'] = 'noindex'
     if (dropHeaderOn === pathname) delete headers['x-frame-options']
     if (alterBodyOn === pathname) body = Buffer.from('changed')
+    if (beaconOn === pathname) {
+      headers['content-type'] = 'text/html; charset=utf-8'
+      body = Buffer.from(body.toString('latin1').replace('</body>', `${BEACON}</body>`), 'latin1')
+    }
     response.writeHead(status, headers)
     response.end(body)
   })
@@ -87,6 +105,21 @@ test('observation records each failing path and reason instead of stopping', asy
   const saved = JSON.parse(await fs.readFile(join(root, 'observation.json'), 'utf8'))
   assert.deepEqual(saved.failures.map((item) => item.path), ['/guide', '/school/example-1/'])
   assert.equal(saved.failures[1].problems[0].header, 'x-frame-options')
+})
+
+test('custom-domain observation accepts only the edge beacon, and only when allowed', async (t) => {
+  const { root, output, receiptSha256 } = await packageFixture(t)
+  const base = await listen(t, server({ beaconOn: '/guide' }, output))
+  const strict = await observeWorkersPackage({ packageRoot: output, expectedReceiptSha256: receiptSha256, baseUrl: base,
+    outputPath: join(root, 'strict.json'), concurrency: 2 })
+  assert.equal(strict.status, 'failed')
+  assert.deepEqual(strict.failuresByReason, { body: 1 })
+  const allowed = await observeWorkersPackage({ packageRoot: output, expectedReceiptSha256: receiptSha256, baseUrl: base,
+    outputPath: join(root, 'allowed.json'), concurrency: 2, allowEdgeBeacon: true })
+  assert.equal(allowed.status, 'passed')
+  assert.equal(allowed.edgeBeaconNormalized, 1)
+  await assert.rejects(observeWorkersPackage({ packageRoot: output, expectedReceiptSha256: receiptSha256,
+    baseUrl: 'https://example-high-school.example-sub.workers.dev', outputPath: join(root, 'wd.json'), allowEdgeBeacon: true }), /zone hostnames/)
 })
 
 test('observation refuses non-https remote origins and an existing output', async (t) => {

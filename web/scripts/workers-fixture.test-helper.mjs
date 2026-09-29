@@ -36,7 +36,7 @@ export const HIGH_SCHOOL_FILES = {
   'index.html': '<!doctype html><title>shell</title>',
   '404.html': '<!doctype html><title>missing</title>',
   'school/example-1/index.html': '<!doctype html><title>school 1</title>',
-  'guide.html': '<!doctype html><title>guide</title>',
+  'guide.html': '<!doctype html><title>guide</title><body><p>guide</p></body>\n',
   'assets/app-0001.js': 'console.log(1)\n',
   'robots.txt': 'User-agent: *\n',
   _headers: HEADERS,

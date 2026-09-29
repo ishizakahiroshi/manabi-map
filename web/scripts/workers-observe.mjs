@@ -153,25 +153,47 @@ export function httpGet(url, { agent, timeoutMs = 60000 } = {}) {
   })
 }
 
-function compare(item, response) {
+// On a zone hostname (custom domain), Cloudflare Web Analytics' automatic setup inserts its beacon into
+// HTML right before `</body>`. workers.dev has no zone features, so the same version is compared there
+// byte for byte. For a custom domain, `allowEdgeBeacon` accepts exactly one such tag at that position and
+// nothing else: removing it must restore the packaged bytes exactly.
+const EDGE_BEACON = /<script type="module" src="https:\/\/static\.cloudflareinsights\.com\/beacon\.min\.js\/v[0-9a-f]+" integrity="sha512-[A-Za-z0-9+/=]+" data-cf-beacon='\{[^'<>]*\}' crossorigin="anonymous"><\/script>\n?/g
+
+export function withoutEdgeBeacon(body) {
+  const text = body.toString('latin1')
+  const matches = [...text.matchAll(EDGE_BEACON)]
+  if (matches.length !== 1) return null
+  const [match] = matches
+  const end = match.index + match[0].length
+  if (!text.startsWith('</body>', end) || end !== text.lastIndexOf('</body>')) return null
+  return Buffer.from(text.slice(0, match.index) + text.slice(end), 'latin1')
+}
+
+function compare(item, response, { allowEdgeBeacon = false } = {}) {
   const problems = []
+  let beacon = false
   if (response.status !== item.status) problems.push({ reason: 'status', status: response.status })
   const encoding = response.headers['content-encoding']
   if (encoding !== undefined && encoding !== 'identity') problems.push({ reason: 'encoding', actual: encoding })
-  if (item.bodySha256 && response.status === item.status && sha(response.body) !== item.bodySha256) problems.push({ reason: 'body' })
+  if (item.bodySha256 && response.status === item.status && sha(response.body) !== item.bodySha256) {
+    const stripped = allowEdgeBeacon && /^text\/html\b/.test(response.headers['content-type'] ?? '') ? withoutEdgeBeacon(response.body) : null
+    if (stripped && sha(stripped) === item.bodySha256) beacon = true
+    else problems.push({ reason: 'body' })
+  }
   if (item.location !== undefined && response.headers.location !== item.location) {
     problems.push({ reason: 'location', expected: item.location, actual: response.headers.location ?? null })
   }
   for (const [name, value] of Object.entries(item.headers)) {
     if (response.headers[name] !== value) problems.push({ reason: 'header', header: name, expected: value, actual: response.headers[name] ?? null })
   }
-  return problems
+  return { problems, beacon }
 }
 
 export async function observeWorkersPackage({
-  packageRoot, expectedReceiptSha256, baseUrl, outputPath, versionId = null, concurrency = 16,
+  packageRoot, expectedReceiptSha256, baseUrl, outputPath, versionId = null, concurrency = 16, allowEdgeBeacon = false,
   get = httpGet, attempts = 3, retryDelayMs = 500, onProgress = () => {}, now = () => new Date(),
 }) {
+  need(!allowEdgeBeacon || !new URL(baseUrl).hostname.endsWith('.workers.dev'), 'edge beacon allowance is only for zone hostnames')
   const origin = baseOrigin(baseUrl)
   need(Number.isInteger(concurrency) && concurrency > 0 && concurrency <= 64, 'concurrency out of range')
   const output = resolve(outputPath)
@@ -188,7 +210,7 @@ export async function observeWorkersPackage({
   const startedAt = now().toISOString()
   const failures = []
   const failuresByReason = {}
-  let passed = 0, failed = 0, retries = 0, done = 0, next = 0
+  let passed = 0, failed = 0, retries = 0, done = 0, next = 0, edgeBeacon = 0
   async function one(item) {
     let response = null
     for (let attempt = 1; attempt <= attempts; attempt++) {
@@ -202,7 +224,8 @@ export async function observeWorkersPackage({
       retries++
       await new Promise((wake) => setTimeout(wake, retryDelayMs * attempt))
     }
-    const problems = response ? compare(item, response) : [{ reason: 'transport' }]
+    const { problems, beacon } = response ? compare(item, response, { allowEdgeBeacon }) : { problems: [{ reason: 'transport' }], beacon: false }
+    if (beacon) edgeBeacon++
     if (problems.length === 0) passed++
     else {
       failed++
@@ -229,7 +252,7 @@ export async function observeWorkersPackage({
     target: receipt.target, workerName: receipt.workerName, versionId, baseUrl: origin,
     packageReceiptSha256: expectedReceiptSha256, assetInventorySha256: receipt.assets.inventorySha256,
     startedAt, finishedAt: now().toISOString(),
-    expected: expected.length, passed, failed, retries,
+    expected: expected.length, passed, failed, retries, allowEdgeBeacon, edgeBeaconNormalized: edgeBeacon,
     byKind: expected.reduce((counts, item) => ({ ...counts, [item.kind]: (counts[item.kind] ?? 0) + 1 }), {}),
     workerFirstRequests: expected.filter((item) => workerFirst(receipt.runWorkerFirst, new URL(item.path, origin).pathname)).length,
     failuresByReason, failures,
@@ -239,12 +262,14 @@ export async function observeWorkersPackage({
 }
 
 if (process.argv[1] && pathToFileURL(resolve(process.argv[1])).href === import.meta.url) {
-  const [packageRoot, receiptSha256, baseUrl, outputPath, versionId] = process.argv.slice(2)
+  const args = process.argv.slice(2)
+  const allowEdgeBeacon = args.includes('--allow-edge-beacon')
+  const [packageRoot, receiptSha256, baseUrl, outputPath, versionId] = args.filter((arg) => arg !== '--allow-edge-beacon')
   try {
     need(packageRoot && receiptSha256 && baseUrl && outputPath,
-      'usage: workers-observe.mjs <package-root> <package-receipt-sha256> <base-url> <output-json> [version-id]')
+      'usage: workers-observe.mjs <package-root> <package-receipt-sha256> <base-url> <output-json> [version-id] [--allow-edge-beacon]')
     const result = await observeWorkersPackage({
-      packageRoot, expectedReceiptSha256: receiptSha256, baseUrl, outputPath, versionId: versionId ?? null,
+      packageRoot, expectedReceiptSha256: receiptSha256, baseUrl, outputPath, versionId: versionId ?? null, allowEdgeBeacon,
       onProgress: ({ done, total, failed }) => console.error(`progress ${done}/${total} failed=${failed}`),
     })
     console.log(JSON.stringify(result))
