@@ -166,7 +166,7 @@ export async function compileSchoolFunctionsCandidate({ buildRoot, wranglerPath,
   if (!same(before, expectedSourceInventory) ||
       await fs.lstat(await checkedPath(workerPath, { missing: true })).then(() => true, (err) => err.code !== 'ENOENT')) reject()
   const normalizedInvocation = ['wrangler', 'pages', 'functions', 'build', 'source/functions',
-    '--outfile', 'functions-candidate/_worker.js', '--build-metadata-path', 'functions-candidate/wrangler-build-metadata.json']
+    '--outfile', 'functions-candidate/_worker.js', '--metafile', 'functions-candidate/wrangler-build-metadata.json']
   const invocationSha256 = hash(canonical(normalizedInvocation))
   const env = commandEnvironment()
   let actualVersion
@@ -176,7 +176,7 @@ export async function compileSchoolFunctionsCandidate({ buildRoot, wranglerPath,
       .toString('utf8').trim()
     if (actualVersion !== wranglerVersion) reject()
     execFileSync(process.execPath, [wrangler, 'pages', 'functions', 'build', sourceRoot,
-      '--outfile', compiledWorkerPath, '--build-metadata-path', metadataPath], { cwd: sourceRoot, env,
+      '--outfile', compiledWorkerPath, '--metafile', metadataPath], { cwd: sourceRoot, env,
       windowsHide: true, stdio: 'ignore', timeout: timeoutMs, maxBuffer: 1024 * 1024 })
   } catch { reject() }
   const [after, workerBytes, metadataRaw] = await Promise.all([
@@ -187,7 +187,9 @@ export async function compileSchoolFunctionsCandidate({ buildRoot, wranglerPath,
       metadataRaw.length === 0 || metadataRaw.length > 4 * 1024 * 1024) reject()
   let metadata
   try { metadata = JSON.parse(metadataRaw.toString('utf8')) } catch { reject() }
-  if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) reject()
+  if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata) ||
+      !metadata.inputs || typeof metadata.inputs !== 'object' || Array.isArray(metadata.inputs) ||
+      !metadata.outputs || typeof metadata.outputs !== 'object' || Array.isArray(metadata.outputs)) reject()
   const receipt = { format: 'school-functions-compile-candidate', version: 1, status: 'success', compiler: 'wrangler-pages',
     compilerVersion: actualVersion, invocationSha256, sourceRevision, sourceInventory: before,
     sourceInventorySha256: hash(canonical(before)), workerSha256: hash(workerBytes),

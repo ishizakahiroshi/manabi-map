@@ -194,7 +194,7 @@ async function syntheticBuildRoot(t, release, sourceRevision, bindingsSha256) {
     { path: 'web/src/entry-client.tsx', size: 24, sha256: '6'.repeat(64) },
   ]
   const fakeWrangler = join(root, 'wrangler-synthetic.mjs')
-  await fs.writeFile(fakeWrangler, `import fs from 'node:fs/promises';\nconst args=process.argv.slice(2);\nif(args[0]==='--version'){process.stdout.write('4.0.0\\n')}else{const at=(name)=>args[args.indexOf(name)+1];await fs.writeFile(at('--outfile'),'export default {fetch(){return new Response("synthetic")}}');await fs.writeFile(at('--build-metadata-path'),JSON.stringify({synthetic:true,entrypoint:'_middleware.ts'}))}\n`)
+  await fs.writeFile(fakeWrangler, `import fs from 'node:fs/promises';\nconst args=process.argv.slice(2);\nif(args[0]==='--version'){process.stdout.write('4.0.0\\n')}else{const at=(name)=>args[args.indexOf(name)+1];await fs.writeFile(at('--outfile'),'export default {fetch(){return new Response("synthetic")}}');if(args.includes('--metafile'))await fs.writeFile(at('--metafile'),JSON.stringify({inputs:{'_middleware.ts':{}},outputs:{'_worker.js':{}}}))}\n`)
   return { root, fakeWrangler, sourceFiles, bindingsSha256, sourceRevision }
 }
 
