@@ -1,7 +1,10 @@
 // Two-stage Workers publication for a verified package:
 //   bootstrap (only for a Worker that does not exist yet: a 503 placeholder, because `versions upload`
-//   cannot create a Worker) → upload (`wrangler versions upload`, Preview URL) → HTTP acceptance
-//   (workers-observe.mjs) → deploy (`wrangler versions deploy` of that same version at 100%).
+//   cannot create a Worker) → upload (`wrangler versions upload`, Preview URL) → secrets when the version
+//   lacks the secrets declared in the package env.json (`wrangler versions secret bulk`, a new Preview
+//   version of the same code) → HTTP acceptance (workers-observe.mjs) of the version to deploy → deploy
+//   (`wrangler versions deploy` of that same version at 100%). For a Worker target, deploy first reads the
+//   version's bindings and refuses unless they are exactly ASSETS plus each env.json secret.
 // Wrangler runs with the caller's existing login. This script never reads, prints or stores credentials;
 // the caller provides CLOUDFLARE_ACCOUNT_ID in the environment. Each step writes create-only receipts and
 // Wrangler logs into an evidence directory outside the repository.
@@ -40,6 +43,30 @@ export function workersDevOrigin(previewUrl, workerName) {
   need(url.protocol === 'https:' && url.hostname.endsWith('.workers.dev') && match && match[1].startsWith(`${workerName}.`),
     'unexpected Preview URL shape')
   return `https://${match[1]}`
+}
+
+const list = (values) => values.length > 0 ? values.join(',') : 'none'
+
+/**
+ * Compare a `versions view` readback with the bindings a Worker version must have: ASSETS plus each secret declared
+ * in the package env.json as secret_text. Returns null when they match exactly, otherwise the missing and extra
+ * bindings as `name:type` (never values).
+ */
+export function bindingDifference(view, secretNames) {
+  const expected = ['ASSETS:assets', ...secretNames.map((name) => `${name}:secret_text`)].sort()
+  const bindings = view?.resources?.bindings ?? []
+  const actual = (Array.isArray(bindings) ? bindings : []).map((binding) => `${binding?.name}:${binding?.type}`).sort()
+  if (canonical(actual) === canonical(expected)) return null
+  const missing = expected.filter((entry) => !actual.includes(entry))
+  const extra = actual.filter((entry, index) => !expected.includes(entry) || actual.indexOf(entry) !== index)
+  return `missing: ${list(missing)}; extra: ${list(extra)}`
+}
+
+async function readOptionalJson(path) {
+  try { return JSON.parse(await fs.readFile(path)) } catch (error) {
+    if (error?.code === 'ENOENT') return null
+    throw error
+  }
 }
 
 async function createOnly(path, value) {
@@ -141,29 +168,62 @@ export async function uploadVersion({ packageRoot, expectedReceiptSha256, eviden
 }
 
 /**
- * Add secrets to the deployed version without changing code or assets (`versions secret bulk` patches the
- * latest uploaded version). The result is a Preview-only version recorded like an upload, so the same
- * observe → deploy steps apply. Secret values come from the caller, go only into a temporary JSON file that
- * is removed right after Wrangler reads it, and never appear in receipts or logs (names only).
+ * The version `versions secret bulk` will patch (it always patches the latest uploaded version):
+ *   (a) the version a base deploy receipt put at 100%, still active and the latest upload; or
+ *   (b) before any deploy receipt exists in the base directory, the version of its upload receipt, which must be
+ *       the latest upload but need not be active (a new Worker gets its secrets before its first real deploy).
+ * Either way the base receipt must come from this package.
+ */
+async function secretsBase(baseEvidenceDirectory, receipt, expectedReceiptSha256) {
+  const deployed = await readOptionalJson(join(baseEvidenceDirectory, 'deploy-receipt.json'))
+  if (deployed) {
+    need(deployed.format === 'school-workers-deploy' && deployed.workerName === receipt.workerName &&
+      deployed.packageReceiptSha256 === expectedReceiptSha256 && VERSION_ID.test(deployed.versionId), 'base deploy receipt does not match the package')
+    return { file: 'deploy-receipt.json', versionId: deployed.versionId, workersDevHost: new URL(deployed.workersDevUrl).hostname }
+  }
+  const uploaded = await readOptionalJson(join(baseEvidenceDirectory, 'upload-receipt.json'))
+  need(uploaded, 'base evidence directory has neither a deploy receipt nor an upload receipt')
+  need(uploaded.format === 'school-workers-upload' && uploaded.workerName === receipt.workerName &&
+    uploaded.packageReceiptSha256 === expectedReceiptSha256 && VERSION_ID.test(uploaded.versionId), 'base upload receipt does not match the package')
+  return { file: 'upload-receipt.json', versionId: uploaded.versionId,
+    workersDevHost: new URL(workersDevOrigin(uploaded.previewUrl, receipt.workerName)).hostname }
+}
+
+/**
+ * Add secrets to a version of this package without changing code or assets (`versions secret bulk` patches the
+ * latest uploaded version); the base is chosen by `secretsBase`. The names must be exactly the secrets of the
+ * package env.json. The result is a Preview-only version recorded like an upload, so the same observe → deploy
+ * steps apply. Secret values come from the caller, go only into a temporary JSON file that is removed right after
+ * Wrangler reads it, and never appear in receipts or logs (names only).
  */
 export async function secretsVersion({ packageRoot, expectedReceiptSha256, evidenceDirectory, baseEvidenceDirectory, secrets, run = wranglerRunner(), now = () => new Date(), tmpDirectory = os.tmpdir() }) {
-  const { receipt } = await verifyWorkersPackage({ packageRoot, expectedReceiptSha256 })
-  need(receipt.worker, 'secrets require a Worker target')
-  const baseDeploy = JSON.parse(await fs.readFile(join(baseEvidenceDirectory, 'deploy-receipt.json')))
-  need(baseDeploy.format === 'school-workers-deploy' && baseDeploy.workerName === receipt.workerName &&
-    baseDeploy.packageReceiptSha256 === expectedReceiptSha256, 'base deploy receipt does not match the package')
+  const { receipt, envContract } = await verifyWorkersPackage({ packageRoot, expectedReceiptSha256 })
+  need(receipt.worker && envContract, 'secrets require a Worker target')
+  const baseVersion = await secretsBase(baseEvidenceDirectory, receipt, expectedReceiptSha256)
   const names = Object.keys(secrets ?? {}).sort()
   need(names.length > 0 && names.every((name) => /^[A-Z][A-Z0-9_]{0,63}$/.test(name) && typeof secrets[name] === 'string' &&
     secrets[name].length > 0 && secrets[name].length <= 8192), 'secret names or values rejected')
+  // A version with only some of the declared secrets would always be refused at deploy, so refuse it before creating one.
+  const missing = envContract.secrets.filter((name) => !names.includes(name))
+  const extra = names.filter((name) => !envContract.secrets.includes(name))
+  need(missing.length === 0 && extra.length === 0, `secret names differ from the package env.json (missing: ${list(missing)}; extra: ${list(extra)})`)
   const directory = await evidence(evidenceDirectory)
+  // This step ends by writing upload-receipt.json and version logs here; in a used directory (such as the base)
+  // that write would fail after Wrangler had already created the version, leaving it unrecorded.
+  need((await fs.readdir(directory)).length === 0, 'secrets need a new, empty evidence directory (not the base one)')
   const active = await deploymentStatus(run, receipt.workerName, directory, 'secrets-status-before')
-  need(active && active.versions.length === 1 && active.versions[0].percentage === 100, 'secrets require one version at 100%')
-  const base = active.versions[0].versionId
-  need(base === baseDeploy.versionId, 'the active version is not the one recorded by the base deploy receipt')
+  need(active, 'Worker does not exist; run bootstrap and upload first')
+  const base = baseVersion.versionId
+  const fromDeploy = baseVersion.file === 'deploy-receipt.json'
+  if (fromDeploy) {
+    need(active.versions.length === 1 && active.versions[0].percentage === 100, 'secrets require one version at 100%')
+    need(active.versions[0].versionId === base, 'the active version is not the one recorded by the base deploy receipt')
+  }
   const listed = await run(['versions', 'list', '--name', receipt.workerName, '--json'], { cwd: directory, logDirectory: directory, label: 'versions-list' })
   need(listed.code === 0, 'versions list failed')
   const latest = JSON.parse(listed.stdout).reduce((top, entry) => (!top || entry.number > top.number ? entry : top), null)
-  need(latest?.id === base, 'the latest uploaded version is not the deployed one; secrets would patch another version')
+  need(latest?.id === base, fromDeploy ? 'the latest uploaded version is not the deployed one; secrets would patch another version'
+    : 'the latest uploaded version is not the base upload; secrets would patch another version')
   const viewBase = await run(['versions', 'view', base, '--name', receipt.workerName, '--json'], { cwd: directory, logDirectory: directory, label: 'versions-view-base' })
   need(viewBase.code === 0, 'base version readback failed')
   const baseView = JSON.parse(viewBase.stdout)
@@ -171,7 +231,7 @@ export async function secretsVersion({ packageRoot, expectedReceiptSha256, evide
   const secretTag = `${tag}-s`
   const message = `secrets ${names.join(',')} on ${base.slice(0, 8)} pkg=${expectedReceiptSha256.slice(0, 12)}`.slice(0, 100)
   await createOnly(join(directory, 'secrets-intent.json'), { workerName: receipt.workerName, packageReceiptSha256: expectedReceiptSha256,
-    baseVersionId: base, secretNames: names, tag: secretTag, message, createdAt: now().toISOString() })
+    baseVersionId: base, baseReceipt: baseVersion.file, secretNames: names, tag: secretTag, message, createdAt: now().toISOString() })
   const file = join(tmpDirectory, `workers-secrets-${randomUUID()}.json`)
   let created
   try {
@@ -187,24 +247,24 @@ export async function secretsVersion({ packageRoot, expectedReceiptSha256, evide
   const viewed = await run(['versions', 'view', versionId, '--name', receipt.workerName, '--json'], { cwd: directory, logDirectory: directory, label: 'versions-view' })
   need(viewed.code === 0, 'new version readback failed')
   const view = JSON.parse(viewed.stdout)
-  const bindings = (view.resources?.bindings ?? []).map((binding) => `${binding.name}:${binding.type}`).sort()
-  need(canonical(bindings) === canonical(['ASSETS:assets', ...names.map((name) => `${name}:secret_text`)].sort()), 'new version bindings differ')
+  const difference = bindingDifference(view, envContract.secrets)
+  need(!difference, `new version bindings differ from the package env.json (${difference})`)
   const scriptTag = (value) => value.resources?.script?.etag ?? null
-  need(scriptTag(view) && scriptTag(view) === scriptTag(baseView), 'new version code differs from the deployed version')
+  need(scriptTag(view) && scriptTag(view) === scriptTag(baseView), 'new version code differs from the base version')
   const annotations = view.annotations ?? {}
   need(annotations['workers/tag'] === secretTag && annotations['workers/message'] === message, 'new version annotations differ')
   const after = await deploymentStatus(run, receipt.workerName, directory, 'secrets-status-after')
-  need(canonical(after.versions) === canonical(active.versions), 'active deployment changed while creating a secret version')
-  const workersDev = new URL(baseDeploy.workersDevUrl)
+  need(after && canonical(after.versions) === canonical(active.versions), 'active deployment changed while creating a secret version')
   const result = { format: 'school-workers-upload', version: 1, target: receipt.target, workerName: receipt.workerName,
-    packageReceiptSha256: expectedReceiptSha256, versionId, previewUrl: `https://${versionId.slice(0, 8)}-${workersDev.hostname}`,
-    tag: secretTag, message, baseVersionId: base, secretNames: names, activeDeployment: after, uploadedAt: now().toISOString() }
+    packageReceiptSha256: expectedReceiptSha256, versionId, previewUrl: `https://${versionId.slice(0, 8)}-${baseVersion.workersDevHost}`,
+    tag: secretTag, message, baseVersionId: base, baseReceipt: baseVersion.file, secretNames: names, activeDeployment: after,
+    uploadedAt: now().toISOString() }
   await createOnly(join(directory, 'upload-receipt.json'), result)
   return result
 }
 
 export async function deployVersion({ packageRoot, expectedReceiptSha256, evidenceDirectory, observationPath, run = wranglerRunner(), now = () => new Date() }) {
-  const { receipt } = await verifyWorkersPackage({ packageRoot, expectedReceiptSha256 })
+  const { receipt, envContract } = await verifyWorkersPackage({ packageRoot, expectedReceiptSha256 })
   const directory = await evidence(evidenceDirectory)
   const upload = JSON.parse(await fs.readFile(join(directory, 'upload-receipt.json')))
   const observation = JSON.parse(await fs.readFile(observationPath))
@@ -215,6 +275,16 @@ export async function deployVersion({ packageRoot, expectedReceiptSha256, eviden
     observation.baseUrl === upload.previewUrl, 'the same version has no passed Preview observation')
   const before = await deploymentStatus(run, receipt.workerName, directory, 'deploy-status-before')
   need(before, 'Worker does not exist')
+  if (envContract) {
+    // 2026-09-29: a version without the Supabase secrets passed the byte-for-byte observation and went live, and
+    // /api/admin/* returned 404. The observation cannot see bindings, so read them back before any deploy intent.
+    const viewed = await run(['versions', 'view', upload.versionId, '--name', receipt.workerName, '--json'],
+      { cwd: directory, logDirectory: directory, label: 'deploy-versions-view' })
+    need(viewed.code === 0, 'version readback before deploy failed')
+    const difference = bindingDifference(JSON.parse(viewed.stdout), envContract.secrets)
+    need(!difference, `version ${upload.versionId} bindings differ from the package env.json (${difference}); ` +
+      'create a secrets version of this package, observe it, then deploy that version')
+  }
   const message = `accept ${upload.tag} obs=${sha(await fs.readFile(observationPath)).slice(0, 12)}`
   await createOnly(join(directory, 'deploy-intent.json'), { workerName: receipt.workerName, versionId: upload.versionId,
     rollback: before, message, createdAt: now().toISOString() })

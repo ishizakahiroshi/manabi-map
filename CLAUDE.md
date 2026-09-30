@@ -25,6 +25,7 @@
 | React / TypeScript / Vite | `web/src/`、`web/package.json` |
 | Supabase / RLS / migrations | `web/supabase/` |
 | Cloudflare Pages | `.github/workflows/`、`README.md` |
+| Cloudflare Workers（高校版・学校入口） | `workers/`、`web/scripts/workers-*.mjs` |
 | scripts / secrets-scan | `scripts/`、`.githooks/` |
 | 公開データ・ライセンス | `DATA.md`、`LICENSE`、`THIRD_PARTY_NOTICES.md` |
 

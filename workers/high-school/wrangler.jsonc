@@ -11,10 +11,11 @@
 //   exclude 側（静的ファイル）は asset を先に配り、Worker のリクエスト数を消費しない。
 // - not_found_handling / html_handling は Pages の既定（404.html を 404 で返す・末尾スラッシュ自動）に合わせる。
 // - compatibility_date は Pages の manabi-map-high-school（2026-09-29 作成）の本番設定と同じ値。
-// - 秘密（Cloudflare 側にだけ置く。値はリポに書かない）: SUPABASE_URL / SUPABASE_ANON_KEY（管理者判定の
-//   functions/api/admin/_auth.ts が使う）、SUPABASE_SERVICE_ROLE_KEY（管理ダッシュボードの集計読み取り）。
-//   登録は web/scripts/workers-publish.mjs の `secrets`（今の version のコードに秘密だけを足した Preview version を作る）。
-//   無いと /api/admin/* は 404 になり、管理者でも /dashboard に入れない（2026-09-29 に実測）。
+// - 秘密と未設定の env の一覧は同じフォルダの env.json（値はリポに書かない）。functions/ が読む env 名と一致しないと
+//   web/scripts/workers-env-contract.test.mjs が落ちる。env.json はパッケージに入り、receipt で pin される。
+//   手順は upload → （version に秘密が無ければ）web/scripts/workers-publish.mjs の `secrets` → observe → deploy。
+//   `secrets` に渡す名前は env.json の secrets と完全一致が必要。deploy は本番化の前に version の binding を読み、
+//   ASSETS と env.json の secrets（secret_text）に完全一致しなければ止まる。
 {
   "name": "manabi-map-high-school",
   "compatibility_date": "2026-09-29",

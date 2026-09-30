@@ -1,6 +1,7 @@
 // Workers static assets package for an already verified school candidate.
 // Local files only: no network, credentials or deployment. The output is a new isolated directory with
-// the candidate's public files, the compiled Worker (if any), the generated Wrangler config and a receipt.
+// the candidate's public files, the compiled Worker and its env.json (Worker targets only), the generated
+// Wrangler config and a receipt.
 import { createHash } from 'node:crypto'
 import fs from 'node:fs/promises'
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
@@ -12,6 +13,8 @@ const MAX_FILES = 20000
 const MAX_FILE_BYTES = 25 * 1024 * 1024
 const ROUTES = '_routes.json'
 const PAGES_WORKER = '_worker.js'
+const ENV_FILE = 'env.json'
+const ENV_NAME = /^[A-Z][A-Z0-9_]*$/
 export const TARGETS = {
   'high-school': { candidate: 'high-school-candidate', worker: true },
   school: { candidate: 'school-portal-package', worker: false },
@@ -21,6 +24,28 @@ export class WorkersPackageError extends Error {}
 const need = (condition, reason) => { if (!condition) throw new WorkersPackageError(reason) }
 export const sha = (bytes) => createHash('sha256').update(bytes).digest('hex')
 export const canonical = (value) => `${JSON.stringify(value, null, 2)}\n`
+
+/**
+ * workers/<target>/env.json of a Worker target: the secrets the Worker must have as bindings, and the env names
+ * left unset on purpose (each with a reason). `bindings` are Wrangler template bindings (ASSETS), which are not
+ * env names. The package carries this file, and deploy refuses a version whose bindings differ from it.
+ */
+export function validateEnvContract(contract, { bindings = [] } = {}) {
+  need(contract && typeof contract === 'object' && !Array.isArray(contract) &&
+    canonical(Object.keys(contract).sort()) === canonical(['format', 'secrets', 'unset', 'version']),
+  'env.json keys must be exactly format, secrets, unset and version')
+  need(contract.format === 'school-workers-env-contract' && contract.version === 1, 'env.json format or version rejected')
+  const { secrets, unset } = contract
+  need(Array.isArray(secrets) && secrets.every((name) => typeof name === 'string' && ENV_NAME.test(name)), 'env.json secrets must be env names')
+  need(canonical(secrets) === canonical([...new Set(secrets)].sort()), 'env.json secrets must be unique and sorted')
+  need(unset && typeof unset === 'object' && !Array.isArray(unset), 'env.json unset must be an object')
+  for (const [name, reason] of Object.entries(unset)) {
+    need(ENV_NAME.test(name) && typeof reason === 'string' && reason.trim().length > 0, `env.json unset ${name} needs a reason`)
+    need(!secrets.includes(name), `env.json ${name} is both a secret and unset`)
+  }
+  for (const name of [...secrets, ...Object.keys(unset)]) need(!bindings.includes(name), `env.json ${name} is a Wrangler binding, not an env name`)
+  return contract
+}
 const hex = (value, length = 64) => typeof value === 'string' && new RegExp(`^[0-9a-f]{${length}}$`).test(value)
 const byPath = (a, b) => a.path < b.path ? -1 : a.path > b.path ? 1 : 0
 const beneath = (parent, child) => {
@@ -116,12 +141,29 @@ export async function readTarget(target, repoRoot = defaultRepoRoot) {
   } else {
     need(!('binding' in template.assets) && !('run_worker_first' in template.assets), 'assets-only template must not bind a Worker')
   }
+  const envPath = `workers/${target}/${ENV_FILE}`
+  let envBytes = null, env = null
+  if (spec.worker) {
+    try { envBytes = await readPlain(join(repoRoot, envPath), 1024 * 1024) } catch (error) {
+      if (error?.code === 'ENOENT') need(false, `${envPath} is required for a Worker target`)
+      throw error
+    }
+    env = validateEnvContract(JSON.parse(envBytes), { bindings: [template.assets.binding] })
+  } else {
+    let declared = true
+    try { await fs.lstat(join(repoRoot, envPath)) } catch (error) {
+      if (error?.code !== 'ENOENT') throw error
+      declared = false
+    }
+    need(!declared, `assets-only target must not declare ${envPath}`)
+  }
   need(contract.format === 'school-workers-observe-contract' && contract.version === 1 &&
     Array.isArray(contract.shellRoutes) && Array.isArray(contract.noindexRoutes) &&
     (contract.shellPath === null || contract.shellPath === '/') &&
     (contract.shellPath !== null || (contract.shellRoutes.length === 0 && contract.noindexRoutes.length === 0)),
   'observe contract rejected')
-  return { spec, template, templatePath, templateSha256: sha(templateBytes), contractBytes, contractPath, contractSha256: sha(contractBytes) }
+  return { spec, template, templatePath, templateSha256: sha(templateBytes), contractBytes, contractPath, contractSha256: sha(contractBytes),
+    env, envBytes, envPath, envSha256: envBytes ? sha(envBytes) : null }
 }
 
 async function readCandidate(target, candidateRoot) {
@@ -161,7 +203,8 @@ async function readCandidate(target, candidateRoot) {
 }
 
 export async function buildWorkersPackage({ target, candidateRoot, outputRoot, repoRoot = defaultRepoRoot, now = () => new Date() }) {
-  const { spec, template, templatePath, templateSha256, contractBytes, contractPath, contractSha256 } = await readTarget(target, repoRoot)
+  const { spec, template, templatePath, templateSha256, contractBytes, contractPath, contractSha256, envBytes, envPath, envSha256 } =
+    await readTarget(target, repoRoot)
   const input = await readCandidate(target, candidateRoot)
   need(input.kind === spec.candidate, 'candidate kind does not match the target')
   const output = resolve(outputRoot)
@@ -219,6 +262,8 @@ export async function buildWorkersPackage({ target, candidateRoot, outputRoot, r
   const configBytes = Buffer.from(canonical(config))
   await fs.writeFile(join(output, 'wrangler.jsonc'), configBytes, { flag: 'wx' })
   await fs.writeFile(join(output, 'observe.json'), contractBytes, { flag: 'wx' })
+  // The validated bytes read by readTarget, so the package declares exactly the secrets that were checked.
+  if (spec.worker) await fs.writeFile(join(output, ENV_FILE), envBytes, { flag: 'wx' })
   const files = assets.map(({ path, size, sha256 }) => ({ path, size, sha256 }))
   const receipt = {
     format: 'school-workers-package', version: 1, target, workerName: template.name,
@@ -226,6 +271,7 @@ export async function buildWorkersPackage({ target, candidateRoot, outputRoot, r
     candidate: { kind: input.kind, root: input.root, receipt: input.receipt },
     template: { path: templatePath, sha256: templateSha256 },
     contract: { path: contractPath, sha256: contractSha256 },
+    env: spec.worker ? { path: envPath, sha256: envSha256 } : null,
     config: { path: 'wrangler.jsonc', sha256: sha(configBytes) },
     worker,
     runWorkerFirst: spec.worker ? template.assets.run_worker_first : null,
@@ -248,15 +294,30 @@ export async function verifyWorkersPackage({ packageRoot, expectedReceiptSha256 
   const receipt = JSON.parse(raw)
   need(raw.equals(Buffer.from(canonical(receipt))) && receipt.format === 'school-workers-package' && receipt.version === 1 &&
     receipt.deploymentPerformed === false && TARGETS[receipt.target], 'package receipt rejected')
+  const spec = TARGETS[receipt.target]
+  need(Boolean(receipt.worker) === spec.worker, 'package Worker presence differs from its target')
+  if (spec.worker) {
+    need(receipt.env && receipt.env.path === `workers/${receipt.target}/${ENV_FILE}` && hex(receipt.env.sha256),
+      'package has no env contract (built before env.json was packaged); rebuild it from the candidate')
+  } else {
+    need(receipt.env == null, 'assets-only package must not carry an env contract')
+  }
   // Wrangler may leave its own `.wrangler` cache next to the config it reads; it is never uploaded.
   const top = (await fs.readdir(root)).filter((name) => name !== '.wrangler').sort()
-  const expectedTop = ['assets', 'observe.json', 'workers-package.json', 'wrangler.jsonc', ...(receipt.worker ? ['worker'] : [])].sort()
+  const expectedTop = ['assets', 'observe.json', 'workers-package.json', 'wrangler.jsonc', ...(receipt.worker ? ['worker'] : []),
+    ...(receipt.env ? [ENV_FILE] : [])].sort()
   need(canonical(top) === canonical(expectedTop), 'package directory has unexpected entries')
   const config = parseJsonc((await readPlain(join(root, 'wrangler.jsonc'), 1024 * 1024)).toString('utf8'))
   need(sha(await readPlain(join(root, 'wrangler.jsonc'), 1024 * 1024)) === receipt.config.sha256 &&
     config.name === receipt.workerName && config.assets?.directory === 'assets' &&
     canonical(config.assets.run_worker_first ?? null) === canonical(receipt.runWorkerFirst), 'package config differs')
   need(sha(await readPlain(join(root, 'observe.json'), 1024 * 1024)) === receipt.contract.sha256, 'observe contract differs')
+  let envContract = null
+  if (receipt.env) {
+    const envBytes = await readPlain(join(root, ENV_FILE), 1024 * 1024)
+    need(sha(envBytes) === receipt.env.sha256, 'package env contract differs')
+    envContract = validateEnvContract(JSON.parse(envBytes), { bindings: [config.assets.binding] })
+  }
   if (receipt.worker) {
     need(config.main === receipt.worker.path && config.no_bundle === true, 'package Worker entry differs')
     const worker = await readPlain(join(root, receipt.worker.path))
@@ -276,7 +337,7 @@ export async function verifyWorkersPackage({ packageRoot, expectedReceiptSha256 
     bytes += assetBytes.length
   }
   need(bytes === receipt.assets.bytes, 'package asset byte total differs')
-  return { receipt, packageRoot: root, receiptSha256: expectedReceiptSha256 }
+  return { receipt, packageRoot: root, receiptSha256: expectedReceiptSha256, envContract }
 }
 
 if (process.argv[1] && pathToFileURL(resolve(process.argv[1])).href === import.meta.url) {

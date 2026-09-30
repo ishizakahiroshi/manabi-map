@@ -21,7 +21,13 @@ async function write(path, bytes) {
   await fs.writeFile(path, bytes)
 }
 
-export async function fakeRepo(root, { runWorkerFirst = ['/*', '!/assets/*', '!/robots.txt'] } = {}) {
+/** Synthetic workers/high-school/env.json: two secret names and one deliberately unset name. */
+export const ENV_SECRETS = ['EXAMPLE_KEY', 'EXAMPLE_URL']
+export const ENV_CONTRACT = { format: 'school-workers-env-contract', version: 1, secrets: ENV_SECRETS,
+  unset: { EXAMPLE_FLAG: 'synthetic: left unset on purpose' } }
+
+/** `highSchoolEnv` / `schoolEnv`: an object is written as JSON, a string as-is, null writes no env.json. */
+export async function fakeRepo(root, { runWorkerFirst = ['/*', '!/assets/*', '!/robots.txt'], highSchoolEnv = ENV_CONTRACT, schoolEnv = null } = {}) {
   const repo = join(root, 'repo')
   await write(join(repo, 'workers/high-school/wrangler.jsonc'), `// synthetic\n{\n  "name": "example-high-school",\n  "compatibility_date": "2026-01-01",\n  "no_bundle": true,\n  "workers_dev": true,\n  "preview_urls": true,\n  "assets": { "binding": "ASSETS", "html_handling": "auto-trailing-slash", "not_found_handling": "404-page",\n    "run_worker_first": ${JSON.stringify(runWorkerFirst)} }\n}\n`)
   await write(join(repo, 'workers/high-school/observe.json'), JSON.stringify({ format: 'school-workers-observe-contract', version: 1,
@@ -29,6 +35,9 @@ export async function fakeRepo(root, { runWorkerFirst = ['/*', '!/assets/*', '!/
   await write(join(repo, 'workers/school/wrangler.jsonc'), '{ "name": "example-school", "compatibility_date": "2026-01-01", "workers_dev": true,\n  "assets": { "html_handling": "auto-trailing-slash", "not_found_handling": "404-page" } }\n')
   await write(join(repo, 'workers/school/observe.json'), JSON.stringify({ format: 'school-workers-observe-contract', version: 1,
     shellPath: null, shellRoutes: [], noindexRoutes: [] }))
+  for (const [target, env] of [['high-school', highSchoolEnv], ['school', schoolEnv]]) {
+    if (env !== null) await write(join(repo, `workers/${target}/env.json`), typeof env === 'string' ? env : `${JSON.stringify(env, null, 2)}\n`)
+  }
   return repo
 }
 
