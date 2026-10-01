@@ -82,7 +82,7 @@ recruitment_ended_year, status_description
 
 ### 原本から除外する範囲
 
-baseline public 43表のうち、25表以外の18表は以下。学校への逆方向FKがあっても、利用者・受付・運用データを取り込まない。auth schemaも対象外。SQLite側へユーザーIDや管理権限を持ち込まず、Supabase側のFK/RLSはC3/C4まで維持する。
+baseline public 43表のうち、25表以外の18表は以下。学校への逆方向FKがあっても、利用者・受付・運用データを取り込まない。auth schemaも対象外。SQLite側へユーザーIDや管理権限を持ち込まず、Supabase側のFK/RLSはC3/C4まで維持する。（10/1 注: 利用者データを D1＋Better Auth へ移す決定（9/30）により、移行後に整合と本人限定を保つ場所は D1 と Worker になる。移行の計画は docs/local/plan_auth-cloudflare-migration.md）
 
 - 利用者保存6表: user_school_favorites, user_school_notes, user_school_deviations, home_locations, family_groups, family_members。
 - 受付/補正監査2表: data_reports, deviation_correction_logs。管理者・利用者IDを含むため移さない。採用された学校側の値だけ別の受付→原本更新経路へ接続する（C3）。

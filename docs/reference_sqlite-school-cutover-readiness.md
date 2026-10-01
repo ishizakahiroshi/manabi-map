@@ -55,7 +55,7 @@ last_reviewed: 2026-09-27
 
 ## 3. 最小ID registryの比較候補
 
-優先候補はSupabaseに次の2表を残す方式。どちらも原本schools/school_departmentsへのFKを持たせない。原本削除のCASCADEをregistryへ伝えないためである。
+優先候補はSupabaseに次の2表を残す方式。どちらも原本schools/school_departmentsへのFKを持たせない。原本削除のCASCADEをregistryへ伝えないためである。（10/1 注: 利用者データを Supabase から D1 へ移す決定（9/30）により、この 2 表を D1 に作るかは判断 D8 で決める。移行の計画は docs/local/plan_auth-cloudflare-migration.md）
 
 | 候補 | 必須列・制約 | 任意の運用metadata |
 |---|---|---|
@@ -75,9 +75,9 @@ registryは公開済み履歴を含む追記中心の索引にし、閉校・統
 ## 4. RLS・RPC・権限の維持条件
 
 - 利用者3表の本人限定policy `auth.uid() = user_id` を維持する。INSERT/UPDATEのWITH CHECKも保持し、ID移行を理由にservice権限で利用者保存を代行しない。
-- 家族の共有RPCは匿名を拒否し、呼出者のactive membershipと所有者側のshare_favorites/share_notesを検査して利用者表を返す。学校原本をJOINしないので学校情報の移行のために共有認可を広げない。[共有既定OFF migration](../web/supabase/migrations/202609180101_v0.9_family_join_share_defaults_off.sql)の既定と既存行保持も維持する。
+- 家族の共有RPCは匿名を拒否し、呼出者のactive membershipと所有者側のshare_favorites/share_notesを検査して利用者表を返す。学校原本をJOINしないので学校情報の移行のために共有認可を広げない。[共有既定OFF migration](../web/supabase/migrations/202609180101_v0.9_family_join_share_defaults_off.sql)の既定と既存行保持も維持する。（10/1 注: 利用者データを D1＋Better Auth へ移す決定（9/30）の後も、この検査を Worker 側へ移せば同じ条件を保てる。移行の計画は docs/local/plan_auth-cloudflare-migration.md）
 - [save_mine_consent](../web/supabase/migrations/202609180105_v0.9_save_mine_consent_atomic.sql) はNULL学科のセンチネルと学科行のvisibilityを同transactionで変更する。値0のセンチネルは欠測の勝手な補完ではなく既存保存契約。`UNIQUE NULLS NOT DISTINCT (user_id, school_id, department_id)` と同意撤回を保持する。
-- data_reportsの本人INSERT・管理者SELECT/UPDATE、投稿レート制限、補正の管理者/PIN/ロックアウト、監査の管理者SELECTを維持する。根拠はbaselineと [補正強化migration](../web/supabase/migrations/202608040107_v0.5_audit_c7_db_integrity.sql)。
+- data_reportsの本人INSERT・管理者SELECT/UPDATE、投稿レート制限、補正の管理者/PIN/ロックアウト、監査の管理者SELECTを維持する。根拠はbaselineと [補正強化migration](../web/supabase/migrations/202608040107_v0.5_audit_c7_db_integrity.sql)。（10/1 注: D1＋Better Auth へ移す決定（9/30）により、PIN の試行記録とロックも移行後は D1 に置く。移行の計画は docs/local/plan_auth-cloudflare-migration.md）
 - 新registryの更新は専用の信頼された同期処理だけに許す。anon/authenticatedに原本やregistryのINSERT/UPDATE/DELETEを与えない。ID索引のSELECT公開範囲は別途明示する。新表のRLS有効化と明示GRANTを含む新migrationで管理し、baselineの編集だけで移行済みにしない。
 - Supabase上の最終DDLとACLはbaselineだけでは確定しない。[後続の明示GRANT migration](../web/supabase/migrations/202609240102_explicit_grants_legacy_tables.sql)等も含め、C4前に実適用履歴を確認する。
 
