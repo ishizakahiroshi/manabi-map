@@ -7,7 +7,11 @@
     "email": true
   },
   "allow": {
-    "emails": [],
+    "emails": [
+      "ishizakahiroshi.dev\u0040gmail.com",
+      "hello\u0040manabi-map.app",
+      "takedown\u0040manabi-map.app"
+    ],
     "emailDomains": [
       "example.com",
       "example.net",
