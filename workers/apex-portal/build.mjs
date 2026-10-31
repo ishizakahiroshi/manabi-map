@@ -23,7 +23,7 @@ const html = template.replace(/<meta name="robots" content="noindex">/, '')
 if (html.includes('{{') || html.includes('noindex') || html.includes('旧URL')) throw new Error('Invalid public portal')
 const files = {
   '/': ['text/html; charset=utf-8', html],
-  '/robots.txt': ['text/plain; charset=utf-8', 'User-agent: *\nAllow: /\nSitemap: https://manabi-map.app/sitemap.xml\n'],
+  '/robots.txt': ['text/plain; charset=utf-8', 'User-agent: *\nAllow: /\nDisallow: /auth/\nDisallow: /mypage\nDisallow: /favorites\nDisallow: /compare\nDisallow: /family/\n\nUser-agent: meta-externalagent\nUser-agent: Amazonbot\nUser-agent: GPTBot\nUser-agent: ClaudeBot\nUser-agent: CCBot\nUser-agent: Bytespider\nAllow: /api/v1/\nAllow: /data/\nDisallow: /\n\nSitemap: https://manabi-map.app/sitemap.xml\n'],
   '/sitemap.xml': ['application/xml; charset=utf-8', '<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>https://manabi-map.app/</loc></url></urlset>\n'],
   '/llms.txt': ['text/plain; charset=utf-8', '# まなびマップ\n\n学ぶことと通う場所を見つける入口です。\n\n高校・高専: https://high-school.manabi-map.app/\n地ファクト: https://home.manabi-map.app/\n'],
 }
