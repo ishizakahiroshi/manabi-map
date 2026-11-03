@@ -6,7 +6,7 @@ const get = (path, method = 'GET') => worker.fetch(new Request(`https://manabi-m
 const response = await get('/')
 const html = await response.text()
 assert.equal(response.status, 200)
-assert.match(html, /https:\/\/high-school\.manabi-map\.app\//)
+assert.match(html, /href="https:\/\/school\.manabi-map\.app\/">学校の種類を選ぶ/)
 assert.match(html, /https:\/\/home\.manabi-map\.app\//)
 assert.match(html, /rel="canonical" href="https:\/\/manabi-map\.app\//)
 assert.doesNotMatch(html, /noindex|旧URL|移行候補|\{\{/)

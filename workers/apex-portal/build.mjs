@@ -8,7 +8,7 @@ const css = await readFile(resolve(root, 'web/apex-portal/portal.css'), 'utf8')
 const cards = '<article><h2>たねもじ</h2><p>漢字を学ぶ教材。</p><span class="state">準備中</span></article><article><h2>郷土かるた</h2><p>地域のことばや文化に親しむ教材。</p><span class="state">準備中</span></article>'
 const values = {
   origin: 'https://manabi-map.app', brand: 'まなびマップ', schoolBrand: 'Manabi Map（まなびマップ）',
-  schoolAction: '<a class="primary" href="https://high-school.manabi-map.app/">高校・高専を探す →</a>',
+  schoolAction: '<a class="primary" href="https://school.manabi-map.app/">学校の種類を選ぶ →</a>',
   homeAction: '<a class="primary" href="https://home.manabi-map.app/">地ファクトを開く →</a>',
   learningCards: cards, recoveryLink: '', recoveryNotice: '',
 }
@@ -25,7 +25,7 @@ const files = {
   '/': ['text/html; charset=utf-8', html],
   '/robots.txt': ['text/plain; charset=utf-8', 'User-agent: *\nAllow: /\nDisallow: /auth/\nDisallow: /mypage\nDisallow: /favorites\nDisallow: /compare\nDisallow: /family/\n\nUser-agent: meta-externalagent\nUser-agent: Amazonbot\nUser-agent: GPTBot\nUser-agent: ClaudeBot\nUser-agent: CCBot\nUser-agent: Bytespider\nAllow: /api/v1/\nAllow: /data/\nDisallow: /\n\nSitemap: https://manabi-map.app/sitemap.xml\n'],
   '/sitemap.xml': ['application/xml; charset=utf-8', '<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>https://manabi-map.app/</loc></url></urlset>\n'],
-  '/llms.txt': ['text/plain; charset=utf-8', '# まなびマップ\n\n学ぶことと通う場所を見つける入口です。\n\n高校・高専: https://high-school.manabi-map.app/\n地ファクト: https://home.manabi-map.app/\n'],
+  '/llms.txt': ['text/plain; charset=utf-8', '# まなびマップ\n\n学ぶことと通う場所を見つける入口です。\n\n学校の種類を選ぶ: https://school.manabi-map.app/\n高校・高専: https://high-school.manabi-map.app/\n地ファクト: https://home.manabi-map.app/\n'],
 }
 const code = `const files = ${JSON.stringify(files)};\nexport default { async fetch(request) {\n const url = new URL(request.url);\n if (!['GET','HEAD'].includes(request.method)) return new Response('Method Not Allowed', {status:405, headers:{Allow:'GET, HEAD'}});\n const file = files[url.pathname];\n if (!file) return new Response('Not Found', {status:404});\n const headers = {'Content-Type':file[0], 'X-Content-Type-Options':'nosniff', 'Referrer-Policy':'no-referrer', 'Content-Security-Policy':"default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; frame-ancestors 'none'", 'Cache-Control':'public, max-age=300'};\n if (url.hostname !== 'manabi-map.app') headers['X-Robots-Tag'] = 'noindex';\n return new Response(request.method === 'HEAD' ? null : file[1], {headers});\n} };\n`
 const output = resolve(process.argv[2] ?? 'dist-apex-portal/worker.mjs')
