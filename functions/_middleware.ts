@@ -8,6 +8,9 @@
 // 参照: https://developers.cloudflare.com/pages/functions/get-started/
 //
 // 動作:
+// - 総合入口のホスト（manabi-map.app）の / に計測用の文字列（utm_* 等）だけが付いた
+//   GET / HEAD は、文字列を落として / へ 302 で戻す（総合入口の Worker が答える）。
+//   メンテナンスや移行の判定より先に走る（後述 apexTrackingRedirect）。
 // - 環境変数 MAINTENANCE_MODE=1 のとき、許可リスト以外の全リクエストを
 //   /maintenance.html の内容で HTTP 503 応答する。Retry-After と no-store を付ける。
 //   メンテナンス判定は SPA フォールバックより先に走る（/map 等もメンテ中は 503）。
@@ -22,6 +25,7 @@
 // 注意: Pages の環境変数変更は再デプロイ(最新デプロイの Retry で可)を伴う。
 
 import { MIGRATION_INVENTORY, schoolMigrationAction, validateMigrationInventory } from './_school-migration.ts';
+import deploymentTargets from '../web/data/deployment-targets.json' with { type: 'json' };
 
 interface Env {
   MAINTENANCE_MODE?: string;
@@ -113,9 +117,41 @@ export const isSpaRoute = (pathname: string): boolean =>
 export const hasSharedLocationQuery = (searchParams: URLSearchParams): boolean =>
   searchParams.has("lat") && searchParams.has("lng");
 
+// --- 総合入口の「?」付きトップを総合入口へ戻す -------------------------------
+//
+// manabi-map.app/ は総合入口の Worker（workers/apex-portal）が答えるが、Worker の経路は
+// 問い合わせ文字列まで含めて完全一致で照らすので、`/?utm_source=…` のような URL だけは
+// この Pages（旧い学校アプリ）に落ちて、旧い学校アプリのホームが出ていた。
+// 計測用の文字列だけが付いているときに限り、文字列を落として / へ 302 で戻す。
+// / に問い合わせ文字列が無い要求は Worker が答えるので、ここへは来ず、転送の輪にならない。
+// 認証の code や error など、計測用以外の名前が 1 つでも付いていれば今のまま（転送しない）。
+// 総合入口のホスト以外（school・high-school・Preview）では何もしない（学校アプリの
+// analytics.ts が着地時の utm_* を読むため、そちらの文字列は落とさない）。
+// 経緯と影響の洗い出し: docs/local/pending_apex-query-string-routing.md
+const APEX_HOSTNAME = new URL(deploymentTargets.targets.apex.origin).hostname;
+const TRACKING_PARAMS = new Set([
+  "fbclid", "gclid", "gbraid", "wbraid", "dclid", "yclid", "msclkid", "twclid", "ttclid",
+  "igshid", "li_fat_id", "mc_cid", "mc_eid", "_ga", "_gl",
+]);
+export const isTrackingParam = (name: string): boolean =>
+  name.startsWith("utm_") || TRACKING_PARAMS.has(name);
+
+export function apexTrackingRedirect(url: URL, method: string): string | null {
+  if (method !== "GET" && method !== "HEAD") return null;
+  if (url.hostname !== APEX_HOSTNAME || url.pathname !== "/" || !url.search) return null;
+  const names = [...url.searchParams.keys()];
+  if (names.length === 0 || !names.every(isTrackingParam)) return null;
+  return `${url.origin}/`;
+}
+
 export const onRequest = async (context: Context): Promise<Response> => {
   const { request, env, next } = context;
   const { pathname, searchParams } = new URL(request.url);
+
+  const apexLocation = apexTrackingRedirect(new URL(request.url), request.method);
+  if (apexLocation) {
+    return new Response(null, { status: 302, headers: { location: apexLocation, "cache-control": "no-store" } });
+  }
 
   // Candidate routing is opt-in and must never silently fall back on bad inventory.
   const phase = env.SCHOOL_MIGRATION_PHASE;

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { hasSharedLocationQuery, isSpaRoute, onRequest } from './_middleware.ts'
+import { apexTrackingRedirect, hasSharedLocationQuery, isSpaRoute, onRequest } from './_middleware.ts'
 import { COMPATIBILITY_ENDPOINTS, MIGRATION_INVENTORY, validateMigrationInventory, type MigrationPhase } from './_school-migration.ts'
 
 function makeContext(
@@ -370,4 +370,47 @@ test('candidate inventory fails closed for mixed phase, broad routes, duplicates
     { assets: ['/index.html'] }, { assets: ['/_headers'] }, { assets: ['/api/admin/me'] },
     { routes: ['/school/%2e%2e'] }, { routes: ['/school/synthetic?token=value'] }, { extra: true },
   ]) assert.throws(() => validateMigrationInventory({ ...good, ...mutation }, 'candidate-rescue'))
+})
+
+// 総合入口のトップに計測用の文字列だけが付いた要求（Worker の完全一致の経路から漏れて Pages に届く）
+test('apex top with only tracking parameters goes back to the portal', () => {
+  for (const query of ['?utm_source=synthetic', '?utm_source=a&utm_medium=b&utm_campaign=c', '?fbclid=synthetic', '?gclid=synthetic&utm_term=x']) {
+    assert.equal(apexTrackingRedirect(new URL(`https://manabi-map.app/${query}`), 'GET'), 'https://manabi-map.app/')
+  }
+  assert.equal(apexTrackingRedirect(new URL('https://manabi-map.app/?utm_source=synthetic'), 'HEAD'), 'https://manabi-map.app/')
+})
+
+test('apex top redirect leaves auth, other parameters, other paths, hosts and methods alone', () => {
+  for (const url of [
+    'https://manabi-map.app/?code=synthetic', // 認証の code を捨てない
+    'https://manabi-map.app/?error=access_denied&utm_source=synthetic', // 1 つでも計測用以外があれば転送しない
+    'https://manabi-map.app/?v=1',
+    'https://manabi-map.app/?=synthetic',
+    'https://manabi-map.app/', // 問い合わせ文字列なし（Worker が答える。ここで転送すると輪になる）
+    'https://manabi-map.app/?',
+    'https://manabi-map.app/map?utm_source=synthetic',
+    'https://high-school.manabi-map.app/?utm_source=synthetic', // 学校アプリは utm_* を着地時に読む
+    'https://school.manabi-map.app/?utm_source=synthetic',
+    'https://develop.manabi-map.pages.dev/?utm_source=synthetic',
+  ]) assert.equal(apexTrackingRedirect(new URL(url), 'GET'), null, url)
+  assert.equal(apexTrackingRedirect(new URL('https://manabi-map.app/?utm_source=synthetic'), 'POST'), null)
+})
+
+test('onRequest answers the apex tracking redirect before maintenance and migration handling', async () => {
+  let assetCalls = 0
+  let nextCalls = 0
+  const response = await onRequest({
+    request: new Request('https://manabi-map.app/?utm_source=synthetic&fbclid=synthetic'),
+    env: {
+      MAINTENANCE_MODE: '1',
+      SCHOOL_MIGRATION_PHASE: 'candidate-rescue',
+      ASSETS: { fetch: async () => { assetCalls++; return new Response('synthetic') } },
+    },
+    next: async () => { nextCalls++; return new Response('synthetic-next') },
+  })
+  assert.equal(response.status, 302)
+  assert.equal(response.headers.get('location'), 'https://manabi-map.app/')
+  assert.equal(response.headers.get('cache-control'), 'no-store')
+  assert.equal(assetCalls, 0)
+  assert.equal(nextCalls, 0)
 })
