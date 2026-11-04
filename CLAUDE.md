@@ -2,6 +2,8 @@
 
 # manabi-map 開発ガイド
 
+作者環境で「次の作業」を確認するときは、存在する場合だけ [CLAUDE.local.md](CLAUDE.local.md) の共通看板への案内を読む。公開 clone の作業にこのローカル追記は必須ではない。
+
 ## プロジェクト概要
 
 - Manabi Map は、親子で学校を探し、地図・お気に入り・家族メモを使う進路検討サービス。
@@ -25,6 +27,7 @@
 | React / TypeScript / Vite | `web/src/`、`web/package.json` |
 | Supabase / RLS / migrations | `web/supabase/` |
 | Cloudflare Pages | `.github/workflows/`、`README.md` |
+| Cloudflare Workers（高校版・学校入口） | `workers/`、`web/scripts/workers-*.mjs` |
 | scripts / secrets-scan | `scripts/`、`.githooks/` |
 | 公開データ・ライセンス | `DATA.md`、`LICENSE`、`THIRD_PARTY_NOTICES.md` |
 
@@ -34,7 +37,7 @@
 cd web && pnpm typecheck
 cd web && pnpm lint
 cd web && pnpm test
-node scripts/secrets-scan.mjs --staged --block
+npx doxguard scan --staged --block --strict
 ```
 
 依存インストール、build、環境変数の置き場所は [`web/package.json`](web/package.json) と [`CLAUDE.local.md`](CLAUDE.local.md) を読む。鍵の値を出力しない。
@@ -62,10 +65,10 @@ SSR、初期データ、storage 復元、静的出力の検査は [`docs/referen
 
 ## secrets-scan
 
-- layer 1（手動）: `node scripts/secrets-scan.mjs --staged --block`
-- layer 2（pre-commit）: `.githooks/pre-commit`。導入は `scripts/install-hooks.ps1` / `.sh`
-- layer 3（CI）: `.github/workflows/secrets-scan.yml`
-- env や needles の詳細は `scripts/secrets-scan.mjs` と `CLAUDE.local.md`。公開 clone でも構造 regex は動かす。
+- layer 1（手動）: `npx doxguard scan --staged --block --strict`
+- layer 2（pre-commit）: `.githooks/pre-commit`（doxguard の opt-in ブロック）。導入は `scripts/install-hooks.ps1` / `.sh`
+- layer 3（CI）: `.github/workflows/secrets-scan.yml`（doxguard 0.2.0 の strict を `scripts/secrets-scan.dual.mjs --native-only` 経由で実行）と gitleaks
+- 監視語の設定は `CLAUDE.local.md`。公開 clone でも構造パターンは動かす。
 
 ## AI と project skill
 

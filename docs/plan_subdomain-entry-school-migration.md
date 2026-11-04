@@ -17,7 +17,7 @@ ai_author_model_id: unknown
 ai_author_model_display: unknown
 ai_author_reasoning: unknown
 ai_author_model_source: unavailable
-ai_execution_refs: [AIX-20260927T012339619-802f5465, AIX-20260927T013035154-418add22, AIX-20260927T014245084-b8ed6267, AIX-20260927T020842634-377a5976, AIX-20260927T022021395-e4091a1f, AIX-20260927T023525215-afd3f979, AIX-20260927T025536733-91e225ce, AIX-20260927T033306106-5d29fec0, AIX-20260927T042101147-61a75c66, AIX-20260927T043840191-2ce59749, AIX-20260927T045329626-7282b173, AIX-20260927T045915321-c91c2c5c, AIX-20260927T133203809-1be98664, AIX-20260927T134321078-340d3dfa, AIX-20260927T224037255-d31ce0ae, AIX-20260927T233259210-a4511260, AIX-20260928T011802664-b8f39eda]
+ai_execution_refs: [AIX-20260927T012339619-802f5465, AIX-20260927T013035154-418add22, AIX-20260927T014245084-b8ed6267, AIX-20260927T020842634-377a5976, AIX-20260927T022021395-e4091a1f, AIX-20260927T023525215-afd3f979, AIX-20260927T025536733-91e225ce, AIX-20260927T033306106-5d29fec0, AIX-20260927T042101147-61a75c66, AIX-20260927T043840191-2ce59749, AIX-20260927T045329626-7282b173, AIX-20260927T045915321-c91c2c5c, AIX-20260927T133203809-1be98664, AIX-20260927T134321078-340d3dfa, AIX-20260927T224037255-d31ce0ae, AIX-20260927T233259210-a4511260, AIX-20260928T011802664-b8f39eda, AIX-20260929T200345195-3888626f, AIX-20260929T200956261-ca34da61, AIX-20260929T201134789-37f079c0, AIX-20260929T221041474-84526c28]
 ---
 
 # [計画] 総合入口と学校サブドメインへの移行
@@ -28,10 +28,10 @@ ai_execution_refs: [AIX-20260927T012339619-802f5465, AIX-20260927T013035154-418a
 |---|---|---|---|---|---|---|
 | C1 | planned | URL対応表・配信単位・容量を確定する | [SQLite原本・静的生成](plan_subdomain-entry-school-migration_c1_sqlite-static-source.md) | ホストと別Pages方針は採用済み。経路ごとの互換動作・実Pages割当・容量・利用者引継ぎの未検収を詰める | AIX-20260927T025536733-91e225ce; AIX-20260927T033306106-5d29fec0; AIX-20260927T042101147-61a75c66; AIX-20260927T043840191-2ce59749; AIX-20260927T045329626-7282b173; AIX-20260927T045915321-c91c2c5c; AIX-20260927T133203809-1be98664; AIX-20260927T134321078-340d3dfa; AIX-20260927T233259210-a4511260 | implementation: openai / unknown / unknown; implementation: openai / unknown / unknown; implementation: openai / unknown / unknown; implementation: openai / unknown / unknown; implementation: openai / unknown / unknown; implementation: openai / unknown / unknown; implementation: openai / gpt-6-sol / high; review: openai / unknown / unknown; implementation: openai / unknown / unknown |
 | C2 | planned | 学校入口と高校版の経路・認証・SEOを整える | — | C1の確定表を画面・静的生成・Functionsへ同時反映 | AIX-20260928T011802664-b8f39eda | verification: openai / unknown / unknown |
-| C3 | planned | 総合入口と旧URL互換配信を作る | — | C2のURL・公開API成果物を使用。独立した配信先で検収 | AIX-20260928T011802664-b8f39eda | verification: openai / unknown / unknown |
+| C3 | planned | 総合入口と旧URL互換配信を作る | — | C2のURL・公開API成果物を使用。独立した配信先で検収 | AIX-20260928T011802664-b8f39eda; AIX-20260929T200345195-3888626f; AIX-20260929T200956261-ca34da61; AIX-20260929T201134789-37f079c0; AIX-20260929T221041474-84526c28 | verification: openai / unknown / unknown; implementation: unknown / unknown / unknown; implementation: unknown / unknown / unknown; implementation: unknown / unknown / unknown; verification: anthropic / claude-opus-5-5 / unknown |
 | C4 | planned | 並行公開・予告・切替・観察を行う | — | 本番反映は別途明示指示。失敗時は公開先と転送を戻す |  |  |
 
-実行順序: 総合入口のグランドデザイン確認済み → `C1 → C2 → C3 → C4`。C1全体は未完了だが、2026-09-27に学校入口 `school.manabi-map.app` と高校入口 `high-school.manabi-map.app` の別Pages・別出力を採用した。高校をschool配下のサブディレクトリへ集約する案は不採用。同じリポ内で入口を管理するA2と、将来の全学校種別への対応予定を明記する方針は維持する。最新承認では候補のローカル実装・合成ビルド・検証・commitに着手し、C2の準備を先行する。本番配備・DNS・実認証・公開日は未承認/未検収であり、C2〜C4の完了とは扱わない。
+実行順序: 総合入口のグランドデザイン確認済み → `C1 → C2 → C3 → C4`。C1全体は未完了だが、2026-09-27に学校入口 `school.manabi-map.app` と高校入口 `high-school.manabi-map.app` の別Pages・別出力を採用した。高校をschool配下のサブディレクトリへ集約する案は不採用。同じリポ内で入口を管理するA2と、将来の全学校種別への対応予定を明記する方針は維持する。2026-09-29にユーザーは残り手順を承認し、実機操作を最後にまとめるよう指定した。高校版は専用Pagesのpages.devへ本番配備済みだが、全件HTTP照合は未完了。高校custom domainはPagesに関連付け済みでDNS未登録のためpending。学校入口とapexの切替、実OAuth・保存、公開日は未検収であり、C2〜C4の完了とは扱わない。
 
 先行資料: [採用したグランドデザイン](reference_portal-grand-design.md)・[画面と構成のプレビュー](design_portal-grand-design_2026-09-27.html)。C3の設計基準とする。当面は現名称を継続し、総合入口と学校サービスの表示ブランドを独立して切り替えられる設計にする。新名称の決定を移行の前提にしない。変更時は候補の先行利用・商標の一次確認を行う。デザインの採用を本番移行の承認とは扱わない。
 
@@ -51,7 +51,7 @@ ai_execution_refs: [AIX-20260927T012339619-802f5465, AIX-20260927T013035154-418a
 
 | ID / 決める時点 | 採用内容または未採用の推奨案 | 選択が変えるもの |
 |---|---|---|
-| D1 / 採用済み | 学校入口 `https://school.manabi-map.app/` と高校・高専 `https://high-school.manabi-map.app/` は別Pages・別出力。総合入口も別配信 | 高校の詳細・地域・認証・データは高校originへ。容量枠を分離する。実プロジェクト割当、認証・DAL設定、DNSと切替は未実施 |
+| D1 / 採用済み | 学校入口 `https://school.manabi-map.app/` と高校・高専 `https://high-school.manabi-map.app/` は別Pages・別出力。総合入口も別配信（10/1 注: 学校入口と高校版の分離は、Pages ではなく Workers の別配信先として実施済み） | 高校の詳細・地域・認証・データは高校originへ。容量枠を分離する。実プロジェクト割当、認証・DAL設定、DNSと切替は未実施 |
 | D2 / C3配備設計前 | URL切替中は完成済み公開APIの世代G0を固定して旧apexとhigh-schoolへ配布。原本更新の公開は切替後 | 一時的なG0/G1混在を許容するなら許容時間・公開順・検知・復旧条件が必要。固定中の緊急修正は切替を中止して再検収 |
 | D3 / C4公開日決定前 | 事前告知14日以上、切替後の旧origin救済・旧資産保持28日以上を設計上の下限候補とする | 長い候補は事前28日・切替後56日以上。利用状況と保管負担を確認して決める。復旧30分以内も未実測の目標候補。期間満了だけで旧保存を削除せず、旧APIは停止しない |
 | D4 / Web検収後、Android公開準備前 | 試作IDを残し、表示ブランドに依存しない公開用packageを別に確定する | 自分用試用を先行する案もある。公開用ID・署名・DAL・ストア登録の確定や実施はまだない |
@@ -191,13 +191,13 @@ FunctionsのFree枠はWorkersと合算でアカウント全体100,000リクエ�
 
 前版の「学校の既存Pagesを維持してWorkers移行は後段」という推奨は高校版の移行に限る。全学校種別を一つのPagesへ集約する根拠にはしない。P1に対する比較案P2は、学校を一つの配信先にまとめ、有料枠や別配信方式を評価する構成。P1/P2の選択はまだ未採用であり、課金契約・本番URLの変更承認ではない。
 
-**Cloudflareを0 USDで運用できる条件**: 各Pagesがファイル数・単体サイズ内に収まり、Functions/Workersのアカウント合算がFreeの1日10万回とCPU等の実行制限内、Pagesの月500 builds・同時1 build等の共有枠内に収まること。静的配信の閲覧回数には従量課金がないが、現在の学校HTMLはmiddlewareを通るため無条件に静的無料とは数えない。分割しても動的処理・生成の共有枠は増えない。同一リポにGit接続できるPagesは標準5件なので、入口・漢字・かるた等も含めて数え、増枠申請または公開方法を比較する。ルール上の枠を守り、枠回避のためのアカウント増設は前提にしない。
+**Cloudflareを0 USDで運用できる条件**: 各Pagesがファイル数・単体サイズ内に収まり、Functions/Workersのアカウント合算がFreeの1日10万回とCPU等の実行制限内、Pagesの月500 builds・同時1 build等の共有枠内に収まること。静的配信の閲覧回数には従量課金がないが、現在の学校HTMLはmiddlewareを通るため無条件に静的無料とは数えない。分割しても動的処理・生成の共有枠は増えない。同一リポにGit接続できるPagesは標準5件なので、入口・漢字・かるた等も含めて数え、増枠申請または公開方法を比較する。ルール上の枠を守り、枠回避のためのアカウント増設は前提にしない。（10/1 注: 配信は Pages から Workers static assets へ移す決定（9/29）のため、この条件は Workers の枠で読み替える。アカウントを増やさない点はそのまま）
 
 **月5 USDが必要になる条件**: 動的処理のFree上限を超え、その処理を維持する場合などにWorkers Paidを検討する。地域分割をしたから5 USDが必須になるわけではない。Pagesのファイル増枠の有料プランとは別契約であり、Workers Paidだけで既存Pagesの2万ファイル枠が拡大するとは扱わない。
 
 **現在の設計方針（2026-09-27追記）**: 学校・土地・教材など公開情報の原本をローカルのSQLite/MySQL/MariaDB等へ置き、生成時だけ読んでHTML・JSONへ書き出す。Supabaseは認証・お気に入り・メモ・家族共有等の利用者固有データを中心にする。前版の「学校原本もSupabaseへ保管する」費用試算を主案から外す。DBエンジンはSQLiteを採用。最小ID参照表の有無・実配置・更新受付方式は子計画で確定する。現在の原本が移設済みという意味ではなく、以下の参照依存の解消・検収後に実施する別工程である。原本の全件削除や既存保存機能の撤去で無料化しない。本人/家族のRLS・安定した学校/学科IDを維持し、サブドメイン間でログイン状態が自動共有されない点も変わらない。
 
-**生成・配布の主案**: ローカル原本の同一スナップショットから生成し、公開項目と容量を検査した成果物をWranglerでPagesへ配布する。Cloudflare上でのbuildを使わない場合、月500buildの利用は0で、配布回数は別集計。APIのレート制限や既存の自動Git公開との競合、Functionsの同梱、公開先ごとの権限は確認する。新規Direct UploadプロジェクトとGit連携プロジェクトは作成方式に制約があり、既存Git連携にはWranglerで手動配備できるが、設定切替は別途設計する。同一Git連携5件を独自アップロード方式の上限として数えない。ドラッグ＆ドロップは1,000filesでFunctionsの制約もあるため、この規模には使わない。[Direct Upload公式](https://developers.cloudflare.com/pages/get-started/direct-upload/)
+**生成・配布の主案**: ローカル原本の同一スナップショットから生成し、公開項目と容量を検査した成果物をWranglerでPagesへ配布する。Cloudflare上でのbuildを使わない場合、月500buildの利用は0で、配布回数は別集計。APIのレート制限や既存の自動Git公開との競合、Functionsの同梱、公開先ごとの権限は確認する。新規Direct UploadプロジェクトとGit連携プロジェクトは作成方式に制約があり、既存Git連携にはWranglerで手動配備できるが、設定切替は別途設計する。同一Git連携5件を独自アップロード方式の上限として数えない。ドラッグ＆ドロップは1,000filesでFunctionsの制約もあるため、この規模には使わない。[Direct Upload公式](https://developers.cloudflare.com/pages/get-started/direct-upload/)（10/1 注: 配布先は Pages ではなく Workers の versions に変わり、配る主体は運用リポの CI に移す決定（9/29））
 
 Supabase公式比較ではFreeはDB 500 MB/プロジェクト、月間アクティブ利用者50,000、通常転送5 GBとキャッシュ転送5 GBは別枠、ファイルStorage 1 GB、無料activeプロジェクト数制約と非活動時の停止がある。Proは組織あたり月25 USDからで、月10 USDのCompute creditによりMicro 1台分を含む。追加のMicroを月中継続すれば1台あたり約10 USDが増える。DBを共有する案なら地域分割数をそのままDB月額へ掛けない。学校のローカルdist約538 MiBは生成ファイルの合計であり、DB 500 MB枠を超えた証拠ではない。[Supabase料金](https://supabase.com/pricing)・[課金単位](https://supabase.com/docs/guides/platform/billing-on-supabase)・[Compute](https://supabase.com/docs/guides/platform/manage-your-usage/compute)・[転送枠](https://supabase.com/docs/guides/platform/manage-your-usage/egress)
 
@@ -210,9 +210,9 @@ Supabase公式比較ではFreeはDB 500 MB/プロジェクト、月間アクテ�
 | 配信・処理はFree、DBはPro Micro 1台 | 0 USD | 25 USD | 25 USD |
 | 動的処理Paid、DBはPro Micro 1台 | 5 USD | 25 USD | 30 USD |
 
-上表は新規構成を比較する内包枠内の基本料金で、現在の契約・請求額・最大料金の保証ではない。Pages Proを選ぶ費用、R2、超過、追加DB Compute、ドメイン更新、有料の地図・住所検索・AI等は含めず、利用するものを別途加算する。今回の協議だけで契約変更しない。
+上表は新規構成を比較する内包枠内の基本料金で、現在の契約・請求額・最大料金の保証ではない。Pages Proを選ぶ費用、R2、超過、追加DB Compute、ドメイン更新、有料の地図・住所検索・AI等は含めず、利用するものを別途加算する。今回の協議だけで契約変更しない。（10/1 注: ログインと利用者データを Supabase から Cloudflare の D1＋Better Auth へ移す決定（9/30）により、移行後はこの表の Supabase の列がなくなる。移行の計画は docs/local/plan_auth-cloudflare-migration.md）
 
-0 USDの成立を判定するため、現行のSupabaseプラン・組織/プロジェクト数・DB実容量（索引と認証等を含む）・通常/キャッシュ転送の当月値と日次傾向・認証利用者数（匿名を含む）・Storage・Edge Functions・Realtimeの利用量、バックアップ/復元と非活動時の停止条件を確認する。Cloudflareは動的リクエストの日次ピーク・CPU・build回数・各候補生成物を確認する。現時点では実利用量・現請求は未取得。将来校数や転送量を仮定した試算と、観測した数値は分ける。Supabaseを別DBへ置換する場合は認証・RLS・家族共有・バックアップの移植も必要であり、静的配信の分割案に黙って含めない。
+0 USDの成立を判定するため、現行のSupabaseプラン・組織/プロジェクト数・DB実容量（索引と認証等を含む）・通常/キャッシュ転送の当月値と日次傾向・認証利用者数（匿名を含む）・Storage・Edge Functions・Realtimeの利用量、バックアップ/復元と非活動時の停止条件を確認する。Cloudflareは動的リクエストの日次ピーク・CPU・build回数・各候補生成物を確認する。現時点では実利用量・現請求は未取得。将来校数や転送量を仮定した試算と、観測した数値は分ける。Supabaseを別DBへ置換する場合は認証・RLS・家族共有・バックアップの移植も必要であり、静的配信の分割案に黙って含めない。（10/1 注: D1＋Better Auth へ移す決定（9/30）により、移行後の 0 円判定は Supabase ではなく D1 の無料枠（書き込み 1 日 10 万行など）で行う。移行の計画は docs/local/plan_auth-cloudflare-migration.md）
 
 ### 2026-09-27 M1: 実装前の判断表（URL採用反映）
 
@@ -288,6 +288,12 @@ Google・LINE等のOAuth同意画面、利用中の認証メール（件名・�
 合成の別ブランド設定に切り替えたPreviewで、画面・生成HTML・OGP・JSON-LD・manifest・画像に新しい表記が反映されることを確認する。旧表示名の残存検索では、現行の表示と履歴・URL・内部識別子を区別する。同じ学校URL・ID・ログイン・お気に入り・家族メモが使え、設定と資産を元に戻せることを確認する。画像やPWAのキャッシュ更新も確認し、検索エンジン側の表示更新完了は即時検証できるものと扱わない。
 
 ## C3: 総合入口と旧URL互換配信
+
+### 2026-09-29 実apex資産の保持候補
+
+現行apexのCloudflare canonical deployment `e18dfb79-5f4b-4ae3-b283-4ee15eb0b3b8` と、2026-09-01以降の成功した本番配備23件を読み取り調査した。新しい高校候補に存在しない旧資産は181パス、24,773,664 bytesで、各固定配備URLからHTTP 200の実bytes/SHA256/配備元IDをリポ外の作者環境（`school-publications/apex-history-20260929-001/`）に保存した。現行配備だけでは17件で、過去配備由来の164件が漏れる。Cloudflareの資産一覧にある32文字digestはHTTP本文のMD5と一致しないため、保持には取得した実bytesのSHA256を使う。
+
+候補生成器は外部のmanifest SHA256・現行apex配備ID・各ファイルの配備元ID/サイズ/SHA256を照合して旧資産を保持する経路を追加した。181件のローカル隔離コピーとroute inventory照合は成功。2026-09-29夜、CIと同じ手順の合成snapshotに実旧資産181件を渡して候補生成を通しで実行し（exit 0、配備なし）、apex候補内の181件がサイズ・SHA256とも保持manifestと一致した。ただし9月1日からの棚卸しは暫定範囲であり、切替前の旧タブが参照し得る全世代の保証ではない。D3の「28日以上」は切替後の保持期間案で、切替前に遡る期間の決定ではない。旧apex配信やDNSは変更していない。
 
 ### 受入調査で追加した実装・停止条件（2026-09-27）
 
@@ -402,11 +408,11 @@ DB通常送信は月1,000認証利用者×1,500KB/月＋生成管理500MB/月で
 
 ユーザー提案に合わせ、静的な公開情報はローカル原本、利用者固有の保存はオンラインという分離を設計方針へ反映した。SQLite/MySQL/MariaDBの選定や実移設は未実施。元DBを閲覧のたびに公開する構成ではなく、生成済みファイルを配布するので公開済みサイトはPC停止中も閲覧できる。原本更新は次の配布時に反映される。
 
-HTMLの新初期値は共通・運用予算100MB＋累計保存1,000人×60KB＝160MB、Supabase Free500MBの32%。同じ仮定では6,666人まで枠内、6,667人で超過。80%の400MBを設計目安とする場合は5,000人。これはMAU枠ではなく保存総人数で、長文・履歴増加時は1人あたり容量を増やす。共通100MBはスキーマ・拡張・最小設定・運用記録等の予算、認証user行は60KB側に入れ、二重計上を避ける。最小ID索引を残す場合も共通枠へ計上して実測する。
+HTMLの新初期値は共通・運用予算100MB＋累計保存1,000人×60KB＝160MB、Supabase Free500MBの32%。同じ仮定では6,666人まで枠内、6,667人で超過。80%の400MBを設計目安とする場合は5,000人。これはMAU枠ではなく保存総人数で、長文・履歴増加時は1人あたり容量を増やす。共通100MBはスキーマ・拡張・最小設定・運用記録等の予算、認証user行は60KB側に入れ、二重計上を避ける。最小ID索引を残す場合も共通枠へ計上して実測する。（10/1 注: 利用者データを D1 へ移す決定（9/30）により、この人数の上限は D1 の枠で数え直す。移行の計画は docs/local/plan_auth-cloudflare-migration.md）
 
 学校6万校・土地100万件・漢字2,136字・かるた1万枚の原本DBは、学校10KB/校＋土地2KiB/件＋漢字8KiB/字＋かるた2KiB/枚という独立仮定で2,685.978112MB。原本・複製等3本なら約8.058GB、原本用作業予算20GBに対し40.29%。ローカル空き容量の実測ではなく、画像・音声・生成物・一時領域も別に必要。ローカル原本の件数を増やしてもSupabase原本容量を増加させないモデルへ変更した。
 
-配布18先×月4回＝72公開/月だが、ローカル生成＋Wrangler配布ならCloudflare buildは0。比較操作でCloudflare生成へ戻すと72build/月、毎日更新なら540build/月になる。ユーザーDB転送は原本生成読出しを除き、1,000認証利用者×1,500KB/月＋その他運用50MB/月＝1.55GB（31%）。この条件の送信上限は3,300人/月。各仮定は入力で変更でき、実利用量・CPU・ログ・Storageや休止/バックアップ条件は別途確認する。
+配布18先×月4回＝72公開/月だが、ローカル生成＋Wrangler配布ならCloudflare buildは0。比較操作でCloudflare生成へ戻すと72build/月、毎日更新なら540build/月になる。ユーザーDB転送は原本生成読出しを除き、1,000認証利用者×1,500KB/月＋その他運用50MB/月＝1.55GB（31%）。この条件の送信上限は3,300人/月。各仮定は入力で変更でき、実利用量・CPU・ログ・Storageや休止/バックアップ条件は別途確認する。（10/1 注: D1＋Better Auth へ移す決定（9/30）の後は、D1 と Workers に転送量の課金がないため、この送信上限は移行後に当てはまらない）
 
 #### 原本移設の依存と実施順序
 

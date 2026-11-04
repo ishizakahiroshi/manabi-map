@@ -2,7 +2,6 @@ export interface Env {
   SUPABASE_URL?: string
   SUPABASE_ANON_KEY?: string
   SUPABASE_SERVICE_ROLE_KEY?: string
-  ADMIN_USER_ID?: string
 }
 export interface Context { request: Request; env: Env }
 
@@ -10,15 +9,29 @@ export const notFound = () => new Response('Not Found', { status: 404 })
 
 export async function requireAdminUser(context: Context): Promise<Response | { userId: string }> {
   const token = context.request.headers.get('authorization')?.match(/^Bearer\s+(.+)$/i)?.[1]
-  const { SUPABASE_URL: url, SUPABASE_ANON_KEY: anonKey, ADMIN_USER_ID: adminId } = context.env
-  if (!token || !url || !anonKey || !adminId) return notFound()
+  const url = context.env.SUPABASE_URL?.replace(/\/$/, '')
+  const anonKey = context.env.SUPABASE_ANON_KEY
+  if (!token || !url || !anonKey) return notFound()
   try {
-    const response = await fetch(`${url.replace(/\/$/, '')}/auth/v1/user`, {
+    const userResponse = await fetch(`${url}/auth/v1/user`, {
       headers: { apikey: anonKey, authorization: `Bearer ${token}` },
     })
-    if (!response.ok) return notFound()
-    const user = await response.json() as { id?: string }
-    return user.id === adminId && user.id ? { userId: user.id } : notFound()
+    if (!userResponse.ok) return notFound()
+    const user = await userResponse.json() as { id?: unknown }
+    if (typeof user.id !== 'string' || !user.id) return notFound()
+
+    const adminResponse = await fetch(`${url}/rest/v1/rpc/is_admin`, {
+      method: 'POST',
+      headers: {
+        apikey: anonKey,
+        authorization: `Bearer ${token}`,
+        'content-type': 'application/json',
+      },
+      body: '{}',
+    })
+    if (!adminResponse.ok) return notFound()
+    const isAdmin = await adminResponse.json()
+    return isAdmin === true ? { userId: user.id } : notFound()
   } catch { return notFound() }
 }
 

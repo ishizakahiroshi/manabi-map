@@ -1,9 +1,12 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import fs from 'node:fs'
+import fsp from 'node:fs/promises'
+import { createHash } from 'node:crypto'
 import { dirname, join, normalize, resolve } from 'node:path'
+import { tmpdir } from 'node:os'
 import { fileURLToPath } from 'node:url'
-import { allowedCandidateSource, candidateEnvironment, parseCandidateArgs } from './build-school-candidates.mjs'
+import { allowedCandidateSource, candidateEnvironment, checkedLegacyAssetSelection, legacyAssetSelection, parseCandidateArgs } from './build-school-candidates.mjs'
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
 
@@ -38,4 +41,56 @@ test('candidate environment cannot inherit real Vite values, env directory or No
 test('candidate CLI requires explicit single synthetic source pair and isolated output', () => {
   assert.deepEqual(parseCandidateArgs(['--snapshot=a', '--manifest=b', '--output-root=c']), { snapshot: 'a', manifest: 'b', 'output-root': 'c' })
   for (const args of [[], ['--snapshot=a'], ['--snapshot=a', '--manifest=b', '--output-root=c', '--snapshot=d'], ['--school-source=supabase'], ['--snapshot=', '--manifest=b', '--output-root=c']]) assert.throws(() => parseCandidateArgs(args))
+})
+
+test('production legacy inventory CLI accepts only a complete matching path and pin set', () => {
+  const common = ['--snapshot=a', '--manifest=b', '--output-root=c', '--legacy-assets=previous']
+  const manifest = '--legacy-manifest=previous/legacy-assets.json'
+  const hash = `--legacy-manifest-sha256=${'a'.repeat(64)}`
+  const deployment = '--legacy-deployment-id=e18dfb79-5f4b-4ae3-b283-4ee15eb0b3b8'
+  const options = parseCandidateArgs([...common, manifest, hash, deployment])
+  assert.deepEqual(legacyAssetSelection(options), {
+    source: 'previous', manifest: 'previous/legacy-assets.json',
+    pins: { expectedManifestSha256: 'a'.repeat(64), expectedDeploymentId: 'e18dfb79-5f4b-4ae3-b283-4ee15eb0b3b8' },
+  })
+  assert.deepEqual(legacyAssetSelection(parseCandidateArgs(common)), {
+    source: 'previous', manifest: join('previous', 'legacy-assets.json'), pins: {},
+  })
+  for (const suffix of [[manifest], [hash], [deployment], [manifest, hash], [manifest, deployment], [hash, deployment],
+    ['--legacy-manifest=other/legacy-assets.json', hash, deployment],
+    [manifest, '--legacy-manifest-sha256=ABC', deployment],
+    [manifest, hash, '--legacy-deployment-id=unknown'],
+    [manifest, hash, deployment, deployment]]) {
+    assert.throws(() => parseCandidateArgs([...common, ...suffix]))
+  }
+  assert.throws(() => parseCandidateArgs(['--snapshot=a', '--manifest=b', '--output-root=c', manifest, hash, deployment]))
+})
+
+test('legacy manifest preflight rejects production without pins and synthetic with production pins', async (t) => {
+  const root = await fsp.mkdtemp(join(tmpdir(), 'school-legacy-cli-'))
+  t.after(() => fsp.rm(root, { recursive: true, force: true }))
+  const source = join(root, 'previous')
+  await fsp.mkdir(source)
+  const manifest = join(source, 'legacy-assets.json')
+  const deploymentId = 'e18dfb79-5f4b-4ae3-b283-4ee15eb0b3b8'
+  const productionBytes = Buffer.from(JSON.stringify({ format: 'production-legacy-assets', version: 1, deploymentId }))
+  const pins = { 'legacy-assets': source, 'legacy-manifest': manifest,
+    'legacy-manifest-sha256': createHash('sha256').update(productionBytes).digest('hex'), 'legacy-deployment-id': deploymentId }
+  await fsp.writeFile(manifest, productionBytes)
+  await assert.rejects(checkedLegacyAssetSelection({ 'legacy-assets': source }), /matching explicit pin mode/)
+  assert.deepEqual((await checkedLegacyAssetSelection(pins)).pins, {
+    expectedManifestSha256: pins['legacy-manifest-sha256'], expectedDeploymentId: deploymentId,
+  })
+  await assert.rejects(checkedLegacyAssetSelection({ ...pins, 'legacy-manifest-sha256': '0'.repeat(64) }), /pin differs/)
+  await assert.rejects(checkedLegacyAssetSelection({ ...pins, 'legacy-deployment-id': '0'.repeat(8) + '-0000-0000-0000-000000000000' }), /pin differs/)
+  assert.equal((await checkedLegacyAssetSelection(pins)).inventoryVersion, 1)
+  const v2Bytes = Buffer.from(JSON.stringify({ format: 'production-legacy-assets', version: 2, anchorDeploymentId: deploymentId }))
+  await fsp.writeFile(manifest, v2Bytes)
+  const v2Pins = { ...pins, 'legacy-manifest-sha256': createHash('sha256').update(v2Bytes).digest('hex') }
+  assert.equal((await checkedLegacyAssetSelection(v2Pins)).inventoryVersion, 2)
+  await assert.rejects(checkedLegacyAssetSelection({ ...v2Pins, 'legacy-deployment-id': '0'.repeat(8) + '-0000-0000-0000-000000000000' }), /pin differs/)
+  await assert.rejects(checkedLegacyAssetSelection(pins), /pin differs/)
+  await fsp.writeFile(manifest, JSON.stringify({ format: 'synthetic-legacy-assets' }))
+  await assert.rejects(checkedLegacyAssetSelection(pins), /matching explicit pin mode/)
+  assert.deepEqual((await checkedLegacyAssetSelection({ 'legacy-assets': source })).pins, {})
 })

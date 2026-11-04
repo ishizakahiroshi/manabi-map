@@ -103,5 +103,5 @@
 ## 秘密情報と公開 fixture
 
 - 公開 fixture・サンプル設定・例示プロンプトは最初から合成データで書く。実データや外部 KB の表示名を公開ファイルへ残さない。
-- layer 1 は `node scripts/secrets-scan.mjs --staged --block`、layer 2 は `.githooks/pre-commit`、layer 3 は `.github/workflows/secrets-scan.yml`。
+- layer 1 は `npx doxguard scan --staged --block --strict`、layer 2 は `.githooks/pre-commit`、layer 3 は `.github/workflows/secrets-scan.yml`。
 - 秘密値は repo 外の環境へ置き、公開ファイルにはパスや鍵の値を写さない。

@@ -8,6 +8,7 @@ import sys
 import tempfile
 import time
 import unittest
+from unittest.mock import patch
 from urllib.parse import urlsplit
 
 import school_live_publish as pub
@@ -51,6 +52,8 @@ class PublisherTests(unittest.TestCase):
         self.addCleanup(temp.cleanup)
         self.root = Path(temp.name).resolve()
         self.output = self.root / "output"; self.output.mkdir()
+        (self.root / "web/data").mkdir(parents=True)
+        (self.root / "web/data/site.json").write_bytes(encoded({"origin": "https://manabi-map.app"}))
         capture = self.root / "capture.json"; capture.write_bytes(encoded(invented_capture()))
         self.db = self.root / "source.sqlite"
         taken = live.import_capture(capture, self.db, input_sha256=pub.sha(capture.read_bytes()), apply=True)
@@ -74,6 +77,8 @@ class PublisherTests(unittest.TestCase):
         self.calls = []
         self.tamper_path = None
         self.before_spawn_change = False
+        self.before_spawn_project_change = False
+        self.fail_after_upload = False
         self.publisher = pub.SchoolLivePublisher(self.config, runner=self.runner, fetch=self.fetch)
 
     def runner(self, argv, *, cwd, env, control, maximum, before_spawn=None):
@@ -81,6 +86,8 @@ class PublisherTests(unittest.TestCase):
         if before_spawn:
             if self.before_spawn_change:
                 control.queue["revision"] += 1
+            if self.before_spawn_project_change:
+                self.project["canonical_deployment"] = {"id": "third-deployment"}
             before_spawn()
         if "export" in argv:
             out = Path(argv[argv.index("--output") + 1])
@@ -88,8 +95,54 @@ class PublisherTests(unittest.TestCase):
             return encoded(result)
         if "token" in argv:
             return encoded({"type": "oauth", "token": "invented-secret-token"})
+        if argv[-1:] == ["--version"]:
+            return b"Wrangler 4.31.0\n"
+        if any(str(item).endswith("finalize-school-release.mjs") for item in argv):
+            args = dict(item[2:].split("=", 1) for item in argv if item.startswith("--") and "=" in item)
+            build = Path(args["build-root"])
+            self.assertEqual(Path(argv[1]), build / "source/web/scripts/finalize-school-release.mjs")
+            self.assertEqual(Path(cwd), build / "source/web")
+            self.assertEqual(json.loads((build / "source/web/data/site.json").read_bytes())["origin"], self.config["origin"])
+            receipt = json.loads((build / "observed-build.json").read_bytes())
+            functions_inventory = sorted(({
+                **entry, "size": (build / "source" / entry["path"]).stat().st_size,
+            } for entry in receipt["sourceFiles"] if entry["path"].startswith("functions/")),
+                                         key=lambda entry: entry["path"])
+            worker = b"// invented compiled Functions worker\n"
+            worker_sha = pub.sha(worker)
+            binding_sha = args["bindings-sha256"]
+            source_inventory_sha = pub.sha((school.canonical_json(functions_inventory) + "\n").encode())
+            metadata_raw = b'{"version":1}\n'
+            invocation_sha = "c" * 64
+            candidate = {"format": "school-functions-compile-candidate", "version": 1, "status": "success",
+                         "compiler": "wrangler-pages", "compilerVersion": "4.31.0", "invocationSha256": invocation_sha,
+                         "sourceRevision": self.config["revision"], "sourceInventory": functions_inventory,
+                         "sourceInventorySha256": source_inventory_sha, "workerSha256": worker_sha,
+                         "buildMetadataSha256": pub.sha(metadata_raw), "bindingsSha256": binding_sha}
+            functions_root = build / "functions-candidate"; functions_root.mkdir()
+            (build / "dist/_worker.js").write_bytes(worker)
+            (functions_root / "wrangler-build-metadata.json").write_bytes(metadata_raw)
+            compile_raw = (school.canonical_json(candidate) + "\n").encode()
+            (functions_root / "school-functions-compile-receipt.json").write_bytes(compile_raw)
+            generation_raw = (build / "generation/observed-generation.json").read_bytes()
+            completion = {"format": "school-release-completion", "version": 1, "evidence": "observed",
+                          "deploymentPerformed": False, "generation": args["generation"], "generatedAt": "2026-09-28T00:00:00.000Z",
+                          "candidateRevision": self.config["revision"],
+                          "generationReceiptSha256": pub.sha(generation_raw),
+                          "observedBuildSha256": pub.sha((school.canonical_json(receipt) + "\n").encode()),
+                          "producerReceiptSha256": "d" * 64, "projectionGateSha256": "e" * 64,
+                          "functions": {"compileRecordStatus": "success", "sourceRevision": self.config["revision"],
+                              "compileRecordSha256": pub.sha(compile_raw), "compiler": "wrangler-pages", "compilerVersion": "4.31.0",
+                              "invocationSha256": invocation_sha, "buildMetadataSha256": pub.sha(metadata_raw),
+                              "sourceInventorySha256": source_inventory_sha, "workerSha256": worker_sha,
+                              "bindingsSha256": binding_sha}, "packagePin": "f" * 64,
+                          "packageMetadataSha256": "a" * 64, "artifacts": []}
+            (build / "school-release-completion.json").write_bytes((school.canonical_json(completion) + "\n").encode())
+            return b'{"status":"packaged","deploymentPerformed":false}\n'
         if "deploy" in argv:
             self.uploads += 1
+            if self.fail_after_upload:
+                raise ValueError("invented ambiguous upload result")
             self.assertTrue((Path(cwd) / "functions/_middleware.ts").is_file())
             marker = argv[argv.index("--commit-message") + 1]
             self.deployment = {"id": "invented-deployment-1", "environment": "production", "uses_functions": True,
@@ -101,6 +154,10 @@ class PublisherTests(unittest.TestCase):
         build = Path(args["output-root"])
         dist = build / "dist"; dist.mkdir(parents=True)
         source = build / "source/functions"; source.mkdir(parents=True)
+        site = build / "source/web/data/site.json"; site.parent.mkdir(parents=True)
+        site_raw = encoded({"origin": self.config["origin"]}); site.write_bytes(site_raw)
+        finalizer = build / "source/web/scripts/finalize-school-release.mjs"; finalizer.parent.mkdir(parents=True)
+        finalizer_raw = b"// invented isolated finalizer\n"; finalizer.write_bytes(finalizer_raw)
         middleware = b"export const onRequest = async c => c.next();"
         (source / "_middleware.ts").write_bytes(middleware)
         self.files = {"index.html": b"<!doctype html><p>invented school</p>", "404.html": b"<p>invented missing</p>",
@@ -126,7 +183,16 @@ class PublisherTests(unittest.TestCase):
         built = {"format": "observed-school-build", "evidence": "observed", "origin": self.config["origin"], "deploymentPerformed": False,
                  "candidateRevision": self.config["revision"], "appVersion": self.config["version"], "generationReceiptSha256": pub.sha(generated_raw),
                  "publicArtifacts": artifacts, "publicArtifactsSha256": school.content_hash(artifacts),
-                 "sourceFiles": [{"path": "functions/_middleware.ts", "sha256": pub.sha(middleware)}]}
+                 "sourceFiles": [{"path": "functions/_middleware.ts", "sha256": pub.sha(middleware)},
+                                 {"path": "web/data/site.json", "sha256": pub.sha(site_raw)},
+                                 {"path": "web/scripts/finalize-school-release.mjs", "sha256": pub.sha(finalizer_raw)}]}
+        if self.config["origin"] in pub.OVERLAY_ORIGINS:
+            self.assertIn(f'--site-origin={self.config["origin"]}', argv)
+            built["siteOriginOverlay"] = {"path": "web/data/site.json",
+                                          "originalSha256": pub.sha((self.root / "web/data/site.json").read_bytes()),
+                                          "effectiveSha256": pub.sha(site_raw), "origin": self.config["origin"]}
+        else:
+            self.assertFalse(any(item.startswith("--site-origin=") for item in argv))
         (build / "observed-build.json").write_bytes(encoded(built))
         return b"{}"
 
@@ -135,7 +201,8 @@ class PublisherTests(unittest.TestCase):
         if parsed.hostname == "api.cloudflare.com":
             self.assertEqual(headers["Authorization"], "Bearer invented-secret-token")
             if parsed.path.endswith("/deployments"):
-                result = [] if self.deployment is None else [self.deployment]
+                environment = next((item[4:] for item in parsed.query.split("&") if item.startswith("env=")), None)
+                result = [] if self.deployment is None or (environment and self.deployment.get("environment") != environment) else [self.deployment]
             elif "/deployments/" in parsed.path:
                 result = self.deployment
             else:
@@ -188,6 +255,12 @@ class PublisherTests(unittest.TestCase):
     def test_git_auto_deploy_prevents_upload(self):
         self.generated(); self.project["source"]["config"]["production_deployments_enabled"] = True
         with self.assertRaises(pub.PublishError): self.publisher.deploy(self.context, self.control)
+        self.assertEqual(self.uploads, 0)
+
+    def test_direct_upload_other_project_is_not_an_initial_school_target(self):
+        self.project["source"] = None
+        with self.assertRaises(pub.PublishError):
+            self.publisher.generate(self.context, self.control)
         self.assertEqual(self.uploads, 0)
 
     def test_expired_preflight_and_revision_changed_at_spawn_prevent_upload(self):
@@ -247,7 +320,21 @@ class PublisherTests(unittest.TestCase):
         self.generated()
         self.assertEqual(len(list(self.output.iterdir())), 2)
 
-    def bootstrap(self):
+    def empty_school_project(self, origin="https://manabi-map-school.pages.dev"):
+        self.config["project"] = "manabi-map-school"
+        self.config["origin"] = origin
+        self.project.update({"name": "manabi-map-school", "domains": [urlsplit(origin).hostname],
+                             "source": None, "canonical_deployment": None})
+        self.publisher = pub.SchoolLivePublisher(self.config, runner=self.runner, fetch=self.fetch)
+
+    def empty_high_school_project(self, origin="https://manabi-map-high-school.pages.dev"):
+        self.config["project"] = "manabi-map-high-school"
+        self.config["origin"] = origin
+        self.project.update({"name": "manabi-map-high-school", "domains": [urlsplit(origin).hostname],
+                             "source": None, "canonical_deployment": None})
+        self.publisher = pub.SchoolLivePublisher(self.config, runner=self.runner, fetch=self.fetch)
+
+    def bootstrap(self, expected_deployment_id="old-invented"):
         candidate = self.generated()
         root = Path(candidate["evidence_root"])
         # This fixture build stands in for the owner's separately reviewed
@@ -258,7 +345,7 @@ class PublisherTests(unittest.TestCase):
                          "source_file_sha256": pub.sha(self.db.read_bytes()), "source_sha256": candidate["source_sha256"],
                          "snapshot_content_sha256": candidate["snapshot_content_sha256"], "code_sha256": candidate["code_sha256"],
                          "revision": self.config["revision"], "origin": self.config["origin"], "project": self.config["project"],
-                         "expected_deployment_id": "old-invented", "build_receipt": candidate["build_receipt"],
+                         "expected_deployment_id": expected_deployment_id, "build_receipt": candidate["build_receipt"],
                          "export_receipt": candidate["export_receipt"]}
         pin = pub._record(self.root / "bootstrap-authorization.json", authorization)
         self.context["candidate"] = self.publisher.bootstrap_candidate(pin, self.control)
@@ -272,6 +359,172 @@ class PublisherTests(unittest.TestCase):
         self.assertEqual(result["application_receipts_sha256"], pub.sha(b"[]"))
         self.assertTrue(Path(self.context["candidate"]["anchor_path"]).is_file())
         with self.assertRaises(pub.PublishError): self.publisher.bootstrap_deploy(self.context, self.control)
+        self.assertEqual(self.publisher.bootstrap_recover(self.context, self.control), self.context["deployment"])
+        self.publisher.bootstrap_observe(self.context, self.control)
+        self.assertEqual(self.uploads, 1)
+
+    def test_empty_direct_upload_project_creates_first_baseline_and_reads_back(self):
+        self.empty_high_school_project()
+        self.bootstrap(None)
+        del self.control.queue  # Initial baseline is not a fabricated queue publication.
+        with self.assertRaises(pub.PublishError):
+            self.publisher.deploy(self.context, self.control)
+        self.context["deployment"] = self.publisher.bootstrap_deploy(self.context, self.control)
+        self.assertEqual(self.context["deployment"]["deployment_id"], "invented-deployment-1")
+        observation = self.publisher.bootstrap_observe(self.context, self.control)
+        self.assertEqual(observation["application_receipts_sha256"], pub.sha(b"[]"))
+        self.assertTrue(Path(self.context["candidate"]["anchor_path"]).is_file())
+        self.assertEqual(self.uploads, 1)
+        self.assertEqual(self.publisher.bootstrap_recover(self.context, self.control), self.context["deployment"])
+        self.assertEqual(self.uploads, 1)
+
+    def test_full_app_cannot_start_new_baseline_on_directory_project(self):
+        self.empty_school_project()
+        self.bootstrap(None)
+        with self.assertRaises(pub.PublishError):
+            self.publisher.bootstrap_deploy(self.context, self.control)
+        self.assertEqual(self.uploads, 0)
+
+    def test_full_app_cannot_replace_existing_directory_baseline(self):
+        self.empty_school_project()
+        self.project["canonical_deployment"] = {"id": "old-invented"}
+        self.bootstrap("old-invented")
+        with self.assertRaises(pub.PublishError):
+            self.publisher.bootstrap_deploy(self.context, self.control)
+        with self.assertRaises(pub.PublishError):
+            self.publisher.deploy(self.context, self.control)
+        root = Path(self.context["candidate"]["evidence_root"])
+        self.assertFalse((root / "upload-started.json").exists())
+        self.assertEqual(self.uploads, 0)
+
+    def test_high_school_target_pair_is_exact(self):
+        for project, origin in (("manabi-map-school", "https://high-school.manabi-map.app"),
+                                ("manabi-map-high-school", "https://school.manabi-map.app"),
+                                ("manabi-map-high-school", "https://manabi-map.app")):
+            with self.assertRaises(pub.PublishError):
+                pub.SchoolLivePublisher({**self.config, "project": project, "origin": origin},
+                                        runner=self.runner, fetch=self.fetch)
+        with self.assertRaises(pub.PublishError):
+            pub.SchoolLivePublisher({**self.config, "project": "manabi-map-high-school",
+                                     "origin": "https://high-school.manabi-map.app", "branch": "preview"},
+                                    runner=self.runner, fetch=self.fetch)
+        self.empty_high_school_project("https://high-school.manabi-map.app")
+        candidate = self.generated()
+        self.publisher._candidate(candidate, self.control)
+
+    def test_school_origin_receipt_and_original_site_pin_reject_drift(self):
+        self.empty_school_project()
+        candidate = self.generated()
+        receipt_path = Path(candidate["build_receipt"]["path"])
+        original = receipt_path.read_bytes()
+        changed = json.loads(original)
+        changed["siteOriginOverlay"]["origin"] = "https://wrong.invalid"
+        altered = encoded(changed)
+        receipt_path.write_bytes(altered)
+        candidate["build_receipt"]["sha256"] = pub.sha(altered)
+        with self.assertRaises(pub.PublishError):
+            self.publisher._candidate(candidate, self.control)
+        receipt_path.write_bytes(original)
+        candidate["build_receipt"]["sha256"] = pub.sha(original)
+        (self.root / "web/data/site.json").write_bytes(encoded({"origin": "https://changed.invalid"}))
+        with self.assertRaises(pub.PublishError):
+            self.publisher.deploy({"candidate": candidate}, self.control)
+        self.assertEqual(self.uploads, 0)
+
+    def test_custom_school_origin_uses_overlay_and_rejects_wrong_receipt(self):
+        self.empty_school_project("https://school.manabi-map.app")
+        candidate = self.generated()
+        receipt_path = Path(candidate["build_receipt"]["path"])
+        original = receipt_path.read_bytes()
+        built = json.loads(original)
+        overlay = built["siteOriginOverlay"]
+        self.assertEqual(built["origin"], self.config["origin"])
+        self.assertEqual(overlay["origin"], self.config["origin"])
+        self.assertEqual(overlay["originalSha256"], pub.sha((self.root / "web/data/site.json").read_bytes()))
+        self.assertEqual(overlay["effectiveSha256"], pub.sha((Path(candidate["evidence_root"]) / "build/source/web/data/site.json").read_bytes()))
+        self.publisher._candidate(candidate, self.control)
+        built["siteOriginOverlay"]["origin"] = "https://manabi-map-school.pages.dev"
+        altered = encoded(built)
+        receipt_path.write_bytes(altered)
+        candidate["build_receipt"]["sha256"] = pub.sha(altered)
+        with self.assertRaises(pub.PublishError):
+            self.publisher._candidate(candidate, self.control)
+        receipt_path.write_bytes(original)
+        candidate["build_receipt"]["sha256"] = pub.sha(original)
+        (self.root / "web/data/site.json").write_bytes(encoded({"origin": "https://changed.invalid"}))
+        with self.assertRaises(pub.PublishError):
+            self.publisher._candidate(candidate, self.control)
+        self.assertEqual(self.uploads, 0)
+
+    def test_school_overlay_reads_trusted_repo_site_outside_external_source_reader(self):
+        self.empty_school_project()
+        candidate = self.generated()
+        original_read = pub.live._read
+        site = self.root / "web/data/site.json"
+
+        def external_only(path, *args, **kwargs):
+            if Path(path) == site:
+                raise live.LiveSourceError("repository paths are forbidden")
+            return original_read(path, *args, **kwargs)
+
+        with patch.object(pub.live, "_read", side_effect=external_only):
+            self.publisher._candidate(candidate, self.control)
+
+    def test_apex_and_school_origins_execute_the_pinned_isolated_finalizer(self):
+        self.generated()
+        self.empty_school_project("https://school.manabi-map.app")
+        self.generated()
+
+    def test_empty_project_is_rechecked_before_spawn_and_recovery_is_safe(self):
+        self.empty_high_school_project()
+        self.bootstrap(None)
+        self.before_spawn_project_change = True
+        with self.assertRaises(pub.PublishError):
+            self.publisher.bootstrap_deploy(self.context, self.control)
+        root = Path(self.context["candidate"]["evidence_root"])
+        self.assertFalse((root / "upload-started.json").exists())
+        self.assertEqual(self.uploads, 0)
+        self.before_spawn_project_change = False
+        self.project["canonical_deployment"] = None
+        self.context["deployment"] = self.publisher.bootstrap_recover(self.context, self.control)
+        self.publisher.bootstrap_observe(self.context, self.control)
+        self.assertEqual(self.uploads, 1)
+
+    def test_empty_project_with_prior_history_or_unknown_upload_stops(self):
+        self.empty_high_school_project()
+        self.bootstrap(None)
+        self.deployment = {"id": "other-deployment", "environment": "preview"}
+        with self.assertRaises(pub.PublishError):
+            self.publisher.bootstrap_deploy(self.context, self.control)
+        self.assertEqual(self.uploads, 0)
+        self.deployment["environment"] = "production"
+        with self.assertRaises(pub.PublishError):
+            self.publisher.bootstrap_deploy(self.context, self.control)
+        self.assertEqual(self.uploads, 0)
+        self.deployment = None
+        self.fail_after_upload = True
+        with self.assertRaises(pub.PublishError):
+            self.publisher.bootstrap_deploy(self.context, self.control)
+        root = Path(self.context["candidate"]["evidence_root"])
+        self.assertTrue((root / "upload-started.json").exists())
+        self.assertEqual(self.uploads, 1)
+        with self.assertRaises(pub.PublishError):
+            self.publisher.bootstrap_recover(self.context, self.control)
+        self.assertEqual(self.uploads, 1)
+        self.assertFalse((root / "anchor.json").exists())
+
+    def test_first_baseline_readback_failure_keeps_upload_evidence_without_anchor(self):
+        self.empty_high_school_project()
+        self.bootstrap(None)
+        self.context["deployment"] = self.publisher.bootstrap_deploy(self.context, self.control)
+        self.tamper_path = "/"
+        with self.assertRaises(pub.PublishError):
+            self.publisher.bootstrap_observe(self.context, self.control)
+        root = Path(self.context["candidate"]["evidence_root"])
+        self.assertTrue((root / "bootstrap-receipt.json").is_file())
+        self.assertFalse((root / "anchor.json").exists())
+        self.assertEqual(self.uploads, 1)
+        self.tamper_path = None
         self.assertEqual(self.publisher.bootstrap_recover(self.context, self.control), self.context["deployment"])
         self.publisher.bootstrap_observe(self.context, self.control)
         self.assertEqual(self.uploads, 1)
@@ -313,6 +566,29 @@ class PublisherTests(unittest.TestCase):
             pub.run_process([sys.executable, "-B", "-c", "import time; print('invented-sensitive'); time.sleep(5)"],
                             cwd=self.root, env=pub.environment({}), control=self.control)
         self.assertNotIn("sensitive", str(caught.exception))
+
+    def test_native_process_failure_reports_only_bounded_metadata(self):
+        diagnostics = []
+        with self.assertRaises(pub.PublishError) as caught:
+            pub.run_process([sys.executable, "-B", "-c", "import sys; print('invented-sensitive'); sys.exit(7)"],
+                            cwd=self.root, env=pub.environment({}), control=self.control,
+                            diagnostic_sink=diagnostics.append)
+        self.assertNotIn("sensitive", str(caught.exception))
+        self.assertEqual(len(diagnostics), 1)
+        self.assertEqual(set(diagnostics[0]), {"returncode_before_termination", "stdout_bytes", "stderr_bytes", "output_limit_exceeded"})
+        self.assertEqual(diagnostics[0]["returncode_before_termination"], 7)
+        self.assertGreater(diagnostics[0]["stdout_bytes"], 0)
+        self.assertFalse(diagnostics[0]["output_limit_exceeded"])
+
+    def test_owner_process_sink_receives_failure_metadata(self):
+        diagnostics = []
+        reader = pub.SchoolLivePublisher(self.config, process_diagnostic_sink=diagnostics.append)
+        with self.assertRaises(pub.PublishError):
+            reader._run([sys.executable, "-B", "-c", "import sys; sys.exit(9)"], self.root, self.control)
+        self.assertEqual(len(diagnostics), 1)
+        self.assertEqual(diagnostics[0]["returncode_before_termination"], 9)
+        self.assertEqual(diagnostics[0]["stdout_bytes"], 0)
+        self.assertEqual(diagnostics[0]["stderr_bytes"], 0)
 
     def test_environment_is_allowlisted(self):
         result = pub.environment({"CLOUDFLARE_API_TOKEN": "invented"}, {"PATH": "bin", "NODE_OPTIONS": "injected", "PGPASSWORD": "hidden"})
