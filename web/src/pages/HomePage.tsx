@@ -142,13 +142,11 @@ export function HomePage() {
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         const { latitude: lat, longitude: lng } = pos.coords
-        setSelected({ label: t('home.geoDone'), lat, lng, source: 'geo' })
-        setHint({
-          text: t('home.geoOk', { lat: lat.toFixed(3), lng: lng.toFixed(3) }),
-          tone: 'ok',
-        })
+        // 取れたらそのまま地図へ進む（座標の表示や「地図を見る」の押し直しを挟まない）。
         setCandidates(null)
+        setHint(null)
         toast(t('home.geoDone'))
+        goToMap({ label: t('home.geoDone'), lat, lng, source: 'geo' })
       },
       (err) => {
         const msg =

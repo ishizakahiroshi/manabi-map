@@ -100,7 +100,6 @@ export const en: MessageTree = {
     geo: 'Use current location',
     geoNoSupport: 'This device does not support geolocation',
     geoFetching: 'Getting location… (allow when prompted)',
-    geoOk: '✓ Got location ({lat}, {lng})',
     geoDone: 'Location acquired',
     geoDenied: 'Location permission required (check browser settings)',
     geoUnavailable: 'Could not get location',
