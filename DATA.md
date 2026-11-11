@@ -19,12 +19,14 @@ Manabi Map（まなびマップ）は、親子で学校選びを考えるため�
 
 ## 安定エンドポイント
 
-- 全都道府県: `https://manabi-map.app/api/v1/schools.json`
-- 県別: `https://manabi-map.app/api/v1/schools/<prefecture>.json`（例: `gunma`）
-- メタデータ: `https://manabi-map.app/api/v1/dataset.json`
-- 呼び方の定義（OpenAPI 3.1）: `https://manabi-map.app/api/v1/openapi.json`
+- 全都道府県: `https://high-school.manabi-map.app/api/v1/schools.json`
+- 県別: `https://high-school.manabi-map.app/api/v1/schools/<prefecture>.json`（例: `gunma`）
+- メタデータ: `https://high-school.manabi-map.app/api/v1/dataset.json`
+- 呼び方の定義（OpenAPI 3.1）: `https://high-school.manabi-map.app/api/v1/openapi.json`
 
-いずれもリリース時に更新する静的 JSON です。検索条件付きリクエストや POST は提供しません。`/api/v1/` 内では後方互換性を維持し、破壊的変更が必要な場合は `/api/v2/` を新設します。
+いずれもリリース時に更新する静的 JSON です。
+
+以前のアドレス `https://manabi-map.app/api/v1/` も、これまでの利用者のために同じファイル名で応答を続けます。中身は上の `high-school.manabi-map.app` と同じものを返します（転送ではなく 200 で返します）。新しく使う場合は `high-school.manabi-map.app` を使ってください。検索条件付きリクエストや POST は提供しません。`/api/v1/` 内では後方互換性を維持し、破壊的変更が必要な場合は `/api/v2/` を新設します。
 
 認証は不要で、CORS はすべての origin に開いています（`Access-Control-Allow-Origin: *`）。ブラウザ上で動くプログラムからもそのまま読めます。
 

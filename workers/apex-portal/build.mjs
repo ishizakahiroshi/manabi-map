@@ -28,7 +28,10 @@ const files = {
   '/sitemap.xml': ['application/xml; charset=utf-8', '<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>https://manabi-map.app/</loc></url></urlset>\n'],
   '/llms.txt': ['text/plain; charset=utf-8', '# まなびマップ\n\n学ぶことと通う場所を見つける入口です。\n\n学校の種類を選ぶ: https://school.manabi-map.app/\n高校・高専: https://high-school.manabi-map.app/\n地ファクト: https://home.manabi-map.app/\nたねもじ（漢字）: https://kanji.manabi-map.app/\n'],
 }
-const code = `const files = ${JSON.stringify(files)};\nexport default { async fetch(request) {\n const url = new URL(request.url);\n if (!['GET','HEAD'].includes(request.method)) return new Response('Method Not Allowed', {status:405, headers:{Allow:'GET, HEAD'}});\n const file = files[url.pathname];\n if (!file) return new Response('Not Found', {status:404});\n const headers = {'Content-Type':file[0], 'X-Content-Type-Options':'nosniff', 'Referrer-Policy':'no-referrer', 'Content-Security-Policy':"default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; frame-ancestors 'none'", 'Cache-Control':'public, max-age=300'};\n if (url.hostname !== 'manabi-map.app') headers['X-Robots-Tag'] = 'noindex';\n return new Response(request.method === 'HEAD' ? null : file[1], {headers});\n} };\n`
+// Worker の本体は runtime.mjs（/api/v1/* の高校版への中継を含む）。本文をそのまま先頭へ写す
+const runtime = await readFile(resolve(import.meta.dirname, 'runtime.mjs'), 'utf8')
+if (/^\s*(?:import|export)\b/m.test(runtime)) throw new Error('runtime.mjs must not import or export')
+const code = `${runtime}\nconst files = ${JSON.stringify(files)};\nexport default { fetch: (request) => handleRequest(request, files, fetch) };\n`
 const output = resolve(process.argv[2] ?? 'dist-apex-portal/worker.mjs')
 await mkdir(dirname(output), { recursive: true })
 await writeFile(output, code, { flag: 'wx' })
