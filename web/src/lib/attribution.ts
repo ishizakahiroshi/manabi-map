@@ -5,6 +5,8 @@
  */
 
 // --- OpenStreetMap（生タイル・ODbL 出典。Protomaps 経由でも OSM 出典は必須） ---
+/** OSM 標準ラスタタイル。高校版の地図と全国版（ほかの校種）の地図が同じ背景を使う。 */
+export const OSM_TILE_URL = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png'
 export const OSM_COPYRIGHT_URL = 'https://www.openstreetmap.org/copyright'
 export const OSM_ATTRIBUTION_TEXT = '© OpenStreetMap contributors'
 export const OSM_ATTRIBUTION_HTML = `© <a href="${OSM_COPYRIGHT_URL}">OpenStreetMap contributors</a>`

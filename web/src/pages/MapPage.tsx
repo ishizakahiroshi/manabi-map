@@ -29,7 +29,7 @@ import {
   resolveInitialMapView,
 } from '../lib/mapView'
 import { departmentUiGroups } from '../lib/school-filter'
-import { OSM_ATTRIBUTION_HTML, PROTOMAPS_ATTRIBUTION_HTML } from '../lib/attribution'
+import { OSM_ATTRIBUTION_HTML, OSM_TILE_URL, PROTOMAPS_ATTRIBUTION_HTML } from '../lib/attribution'
 import { loadLocalHome, useApp } from '../contexts/AppContext'
 import { useSchools } from '../hooks/useSchools'
 import type { useUserData } from '../hooks/useUserData'
@@ -77,7 +77,7 @@ const PMTILES_URL = import.meta.env.VITE_PMTILES_URL as string | undefined
 
 /** OSM 標準ラスタタイルを map に載せる（既定・フォールバック共通経路） */
 function addOsmTileLayer(map: L.Map): void {
-  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  L.tileLayer(OSM_TILE_URL, {
     maxZoom: 18,
     attribution: OSM_ATTRIBUTION_HTML,
   }).addTo(map)
