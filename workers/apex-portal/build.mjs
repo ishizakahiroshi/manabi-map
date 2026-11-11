@@ -1,15 +1,24 @@
 import { readFile, writeFile, mkdir } from 'node:fs/promises'
 import { resolve, dirname } from 'node:path'
+import { brandMark } from '../../web/apex-portal/portal.mjs'
 
 // The portal uses no personal data, analytics, account or third-party assets.
 const root = resolve(import.meta.dirname, '../..')
 const template = await readFile(resolve(root, 'web/apex-portal/index.html'), 'utf8')
 const css = await readFile(resolve(root, 'web/apex-portal/portal.css'), 'utf8')
 // たねもじは 2026-11-04 に kanji.manabi-map.app で公開した（本人の「自走してデプロイまでやっていい」）
-const cards = '<article><h2>たねもじ</h2><p>漢字を学ぶ教材。</p><a class="primary" href="https://kanji.manabi-map.app/">たねもじを開く →</a></article><article><h2>郷土かるた</h2><p>地域のことばや文化に親しむ教材。</p><span class="state">準備中</span></article>'
+const badge = (id) => `<span class="badge" aria-hidden="true"><svg><use href="#pin-${id}"/></svg></span>`
+const cards = `<article>${badge('kanji')}<h2>たねもじ</h2><p>漢字を学ぶ教材。</p><a class="primary" href="https://kanji.manabi-map.app/">たねもじを開く →</a></article><article>${badge('karuta')}<h2>郷土かるた</h2><p>地域のことばや文化に親しむ教材。</p><span class="state">準備中</span></article>`
+// 学校の種類は、学校入口（school.manabi-map.app）を経由せず、ここから直接それぞれの行き先へ送る（2026-11-12 本人の案）。
+// 種類と行き先は学校入口の一覧と同じにする。学校入口の種類が増減したら、ここも合わせる
+const schoolKinds = [
+  ['小学校', 'https://school.manabi-map.app/primary/'], ['中学校', 'https://school.manabi-map.app/middle/'],
+  ['高校・高専', 'https://high-school.manabi-map.app/'], ['大学・短大', 'https://school.manabi-map.app/university/'],
+  ['専修学校（専門学校を含む）', 'https://school.manabi-map.app/vocational/'],
+]
 const values = {
-  origin: 'https://manabi-map.app', brand: 'まなびマップ', schoolBrand: 'Manabi Map（まなびマップ）',
-  schoolAction: '<a class="primary" href="https://school.manabi-map.app/">学校の種類を選ぶ →</a>',
+  origin: 'https://manabi-map.app', brand: 'まなびマップ', brandMark: brandMark(), schoolBrand: 'Manabi Map（まなびマップ）',
+  schoolAction: `<ul class="kinds" aria-label="学校の種類">${schoolKinds.map(([name, url]) => `<li><a class="primary" href="${url}">${name} →</a></li>`).join('')}</ul>`,
   homeAction: '<a class="primary" href="https://home.manabi-map.app/">地ファクトを開く →</a>',
   learningCards: cards, recoveryLink: '', recoveryNotice: '',
 }

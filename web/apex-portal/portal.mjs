@@ -1,9 +1,21 @@
-import { brands } from '../scripts/lib/brands.mjs'
+import { readFileSync } from 'node:fs'
+import { brands, validateBrands } from '../scripts/lib/brands.mjs'
 import deploymentTargets from '../data/deployment-targets.json' with { type: 'json' }
+
+// 総合入口は外部の画像を読まない（CSP は default-src 'none'）。ロゴはブランド設定の SVG を
+// <symbol id="brand-mark"> にして HTML へ埋め込み、ヘッダー・フッター・地図の絵が <use> で参照する。
+export function brandMarkSymbol(svg) {
+  const match = /^<svg\b[^>]*\sviewBox="([\d\s.-]+)"[^>]*>([\s\S]*)<\/svg>$/.exec(String(svg).trim())
+  if (!match || /<script|<style|<foreignObject|<!\[CDATA\[|href\s*=|\son\w+\s*=|url\(|\{\{/i.test(match[2])) throw new Error('Invalid brand mark')
+  const body = match[2].replace(/<!--[\s\S]*?-->/g, '').replace(/\s+/g, ' ').replace(/> </g, '><').trim()
+  return `<symbol id="brand-mark" viewBox="${match[1].trim()}">${body}</symbol>`
+}
+export const brandMark = (config = brands) => brandMarkSymbol(readFileSync(new URL(`../public${validateBrands(config).apex.logo}`, import.meta.url), 'utf8'))
 
 // Candidate-only destinations. Publication flags are deliberately false until verified.
 export const portal = {
   brand: brands.apex.displayName.ja,
+  brandMark: brandMark(),
   schoolBrand: brands['high-school'].displayName.ja,
   services: {
     school: { name: '高校・高専を探す', description: '', url: deploymentTargets.targets['high-school'].origin + '/', published: false },
@@ -13,7 +25,7 @@ export const portal = {
   },
 }
 export function portalWithBrands(config) {
-  return { ...portal, brand: config.apex.displayName.ja, schoolBrand: config['high-school'].displayName.ja }
+  return { ...portal, brand: config.apex.displayName.ja, brandMark: brandMark(config), schoolBrand: config['high-school'].displayName.ja }
 }
 const escape = (value) => String(value).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c])
 function action(service) {
@@ -26,9 +38,9 @@ export function renderEntryPage(template, config = portal) {
   const retired = config.migrationPhase === 'candidate-retired'
   const recoveryLink = retired ? '<a class="recovery" href="/school-recovery-ended.html">旧URLでの手続きについて →</a>' : '<a class="recovery" href="/mypage">旧URLで保存情報・連携を確認する →</a>'
   const recoveryNotice = retired ? '旧URLでの認証・連携・招待の受付は終了しています。新しい高校版でログインし直してください。ゲストの保存情報が自動で移るわけではありません。' : 'ゲストで保存した情報は、旧URLのマイページでLINE・Googleとの連携をご確認ください。認証や家族招待の途中でも、旧URLで手続きを続けられます。'
-  const values = { origin: escape(deploymentTargets.targets.apex.origin), brand: escape(config.brand), schoolBrand: escape(config.schoolBrand), schoolAction: action(config.services.school), homeAction: action(config.services.home), recoveryLink, recoveryNotice,
-    learningCards: ['kanji', 'karuta'].map((id) => { const service = config.services[id]; return `<article><h2>${escape(service.name)}</h2><p>${escape(service.description)}</p>${action(service)}</article>` }).join('') }
-  return template.replace(/\{\{(\w+)\}\}/g, (_, key) => { if (!(key in values)) throw new Error('Unknown portal field'); return values[key] })
+  const values = { origin: escape(deploymentTargets.targets.apex.origin), brand: escape(config.brand), brandMark: config.brandMark, schoolBrand: escape(config.schoolBrand), schoolAction: action(config.services.school), homeAction: action(config.services.home), recoveryLink, recoveryNotice,
+    learningCards: ['kanji', 'karuta'].map((id) => { const service = config.services[id]; return `<article><span class="badge" aria-hidden="true"><svg><use href="#pin-${id}"/></svg></span><h2>${escape(service.name)}</h2><p>${escape(service.description)}</p>${action(service)}</article>` }).join('') }
+  return template.replace(/\{\{(\w+)\}\}/g, (_, key) => { if (typeof values[key] !== 'string') throw new Error('Unknown portal field'); return values[key] })
 }
 
 export function renderRecoveryEnded(config = portal) {

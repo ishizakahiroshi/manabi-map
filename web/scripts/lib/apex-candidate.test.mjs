@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url'
 import { stageSchoolCandidate } from './school-candidate.mjs'
 import { canonicalSchoolSourceJSON } from './school-source.mjs'
 import { createApexCandidate, retainLegacyAssets, verifyCompatibilityGeneration } from './apex-candidate.mjs'
-import { portal, renderEntryPage, renderRecoveryEnded } from '../../apex-portal/portal.mjs'
+import { portal, renderEntryPage, renderRecoveryEnded, brandMarkSymbol } from '../../apex-portal/portal.mjs'
 import { entrySupportFiles } from './entry-metadata.mjs'
 import { onRequest } from '../../../functions/_middleware.ts'
 
@@ -23,6 +23,23 @@ test('portal uses independent brand/service settings and no unpublished links', 
   assert.ok(published.includes('&lt;synthetic&gt;'))
   assert.ok(published.includes('href="https://high-school.manabi-map.app/"'))
   assert.ok(!published.includes('href="https://kanji.'))
+})
+
+test('portal embeds the brand mark from brand settings and every <use> target exists in the page', async () => {
+  const template = await fs.readFile(join(portalRoot, 'index.html'), 'utf8')
+  const html = renderEntryPage(template)
+  const used = [...html.matchAll(/<use\b[^>]*\shref="([^"]*)"/g)].map((m) => m[1])
+  assert.ok(used.includes('#brand-mark') && used.includes('#pin-kanji') && used.includes('#pin-karuta') && used.includes('#pin-home'))
+  for (const ref of used) assert.ok(/^#[\w-]+$/.test(ref) && html.includes(` id="${ref.slice(1)}"`), ref)
+  assert.ok(!/<script|<img\b/.test(html))
+  const replaced = renderEntryPage(template, { ...portal, brandMark: brandMarkSymbol('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><!-- synthetic --><circle id="synthetic-mark" r="5"/></svg>') })
+  assert.ok(replaced.includes('<symbol id="brand-mark" viewBox="0 0 10 10"><circle id="synthetic-mark" r="5"/></symbol>'))
+  assert.ok(!replaced.includes('synthetic -->'))
+  assert.throws(() => renderEntryPage(template, { ...portal, brandMark: undefined }), /Unknown portal field/)
+  for (const bad of ['<svg viewBox="0 0 1 1"><script>x</script></svg>', '<svg viewBox="0 0 1 1"><use href="https://example.test/a.svg#x"/></svg>',
+    '<svg viewBox="0 0 1 1"><path onload="x"/></svg>', '<svg viewBox="0 0 1 1"><path fill="url(#x)"/></svg>', '<svg><path/></svg>', '<p>not svg</p>']) {
+    assert.throws(() => brandMarkSymbol(bad), /Invalid brand mark/)
+  }
 })
 
 test('same completed generation reaches both origins; partial update fails and restore recovers', async (t) => {

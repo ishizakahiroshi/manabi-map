@@ -2,18 +2,63 @@
 <html lang="ja">
 <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="robots" content="noindex"><meta name="referrer" content="no-referrer"><title>{{brand}} | 学ぶことも、通う場所も。</title><meta name="description" content="親子が学ぶことと通う場所を見つける総合入口。"><link rel="canonical" href="{{origin}}/"><meta property="og:type" content="website"><meta property="og:title" content="{{brand}} | 学ぶことも、通う場所も。"><meta property="og:description" content="親子が学ぶことと通う場所を見つける総合入口。"><meta property="og:url" content="{{origin}}/"><link rel="stylesheet" href="/portal.css"></head>
 <body>
-  <header><a class="brand" href="/">{{brand}}</a><nav aria-label="ページ内"><a href="#school">学校</a><a href="#learn">学ぶ</a><a href="#home">暮らし</a></nav></header>
+  <svg class="defs" aria-hidden="true" focusable="false">
+    <defs><path id="pin-shape" d="M256 72c-84 0-152 66-152 148 0 108 152 220 152 220s152-112 152-220c0-82-68-148-152-148z" fill="#ff7a3d" stroke="#241f1a" stroke-width="12" stroke-linejoin="round"/></defs>
+    {{brandMark}}
+    <symbol id="pin-kanji" viewBox="96 66 320 384"><use href="#pin-shape"/><rect x="178" y="138" width="156" height="156" rx="26" fill="#fffdf8" stroke="#241f1a" stroke-width="11"/><text x="256" y="256" text-anchor="middle" font-size="112" font-weight="800" fill="#241f1a">漢</text></symbol>
+    <symbol id="pin-karuta" viewBox="96 66 320 384"><use href="#pin-shape"/><g stroke="#241f1a" stroke-width="10" stroke-linejoin="round"><rect x="-50" y="-70" width="100" height="140" rx="14" fill="#ffd9c2" transform="translate(238 220) rotate(-12)"/><rect x="-50" y="-70" width="100" height="140" rx="14" fill="#fffdf8" transform="translate(274 216) rotate(8)"/></g><text x="0" y="34" text-anchor="middle" font-size="92" font-weight="800" fill="#241f1a" transform="translate(274 216) rotate(8)">あ</text></symbol>
+    <symbol id="pin-home" viewBox="96 66 320 384"><use href="#pin-shape"/><g stroke="#241f1a" stroke-width="11" stroke-linejoin="round" stroke-linecap="round"><path d="M296 150v-22h26v46" fill="#fffdf8"/><path d="M190 214v78h132v-78" fill="#fffdf8"/><path d="M170 222 256 150l86 72" fill="#fffdf8"/><path d="M240 292v-40a16 16 0 0 1 32 0v40Z" fill="#ff7a3d" stroke-width="9"/></g></symbol>
+    <symbol id="star" viewBox="-12 -12 24 24"><path d="M0-10C1-3 3-1 10 0 3 1 1 3 0 10-1 3-3 1-10 0-3-1-1-3 0-10Z" stroke="#241f1a" stroke-width="1.6" stroke-linejoin="round"/></symbol>
+  </svg>
+  <header><a class="brand" href="/"><svg aria-hidden="true"><use href="#brand-mark"/></svg>{{brand}}</a><nav aria-label="ページ内"><a href="#school">学校</a><a href="#learn">学ぶ</a><a href="#home">暮らし</a></nav></header>
   <main>
-    <p class="eyebrow">親子の「やってみたい」を、ここから。</p>
-    <h1>学ぶことも、<br>通う場所も。</h1>
-    <p class="lead">学校を探す。漢字を学ぶ。かるたで地域を知る。<br>目的に合った入口を選んで、少し先の毎日へ。</p>
+    <div class="hero">
+      <div>
+        <p class="eyebrow">親子の「やってみたい」を、ここから。</p>
+        <h1><span>学ぶこと</span>も、<br><span>通う場所</span>も。</h1>
+        <p class="lead">学校を探す。漢字を学ぶ。かるたで地域を知る。<br>目的に合った入口を選んで、少し先の毎日へ。</p>
+      </div>
+      <svg class="hero-art" viewBox="0 0 520 430" role="img" aria-label="学校・漢字・かるた・暮らしのピンを一本の道でつないだ地図のイラスト">
+        <defs><clipPath id="map-clip"><rect x="44" y="66" width="432" height="312" rx="34"/></clipPath></defs>
+        <g transform="rotate(-3 260 222)">
+          <rect x="52" y="77" width="432" height="312" rx="34" fill="#241f1a" opacity=".13"/>
+          <rect x="44" y="66" width="432" height="312" rx="34" fill="#fffdf8"/>
+          <g clip-path="url(#map-clip)">
+            <path d="M44 66h176c8 52-34 98-94 106-36 5-64-4-82-14Z" fill="#e6edd4"/>
+            <path d="M476 262c-52-8-98 26-104 76-2 16 2 30 8 40h96Z" fill="#ffe7d6"/>
+            <path d="M324 56c-28 72 42 98 20 162s36 102 16 170" fill="none" stroke="#d9e9ef" stroke-width="24" stroke-linecap="round"/>
+            <path d="M24 270c120-44 214 44 470-14M196 50c16 104-50 196-8 340" fill="none" stroke="#f3e4cf" stroke-width="22" stroke-linecap="round"/>
+            <g stroke="#241f1a" stroke-width="2.5" stroke-linecap="round"><path d="M96 142v-16M136 126v-16"/><circle cx="96" cy="112" r="15" fill="#bcd49c"/><circle cx="136" cy="96" r="15" fill="#bcd49c"/></g>
+            <g transform="translate(96 338)"><circle r="17" fill="#fffdf8" stroke="#241f1a" stroke-width="2.5"/><path d="M0-11 5 3H-5Z" fill="#ff7a3d" stroke="#241f1a" stroke-width="2" stroke-linejoin="round"/><path d="M0 11-5 3H5Z" fill="#fffdf8" stroke="#241f1a" stroke-width="2" stroke-linejoin="round"/></g>
+          </g>
+          <rect x="44" y="66" width="432" height="312" rx="34" fill="none" stroke="#241f1a" stroke-width="3"/>
+        </g>
+        <path class="route" d="M126 300c44-18 82-36 116-58M276 230c46-16 92-24 130-26M422 216c4 54-22 102-58 128" fill="none" stroke="#ff7a3d" stroke-width="5.5" stroke-linecap="round" stroke-dasharray="1 13"/>
+        <g fill="#241f1a" opacity=".2"><ellipse cx="110" cy="302" rx="17" ry="5"/><ellipse cx="258" cy="234" rx="30" ry="8"/><ellipse cx="420" cy="202" rx="17" ry="5"/><ellipse cx="350" cy="354" rx="17" ry="5"/></g>
+        <g class="bob b2"><use href="#pin-kanji" x="70" y="206" width="80" height="96"/></g>
+        <g class="bob b3"><use href="#pin-karuta" x="380" y="106" width="80" height="96"/></g>
+        <g class="bob b4"><use href="#pin-home" x="310" y="258" width="80" height="96"/></g>
+        <g class="bob"><use href="#brand-mark" x="178" y="45" width="160" height="192"/></g>
+        <path d="M58 62a15 15 0 0 1 3-30 21 21 0 0 1 40-5 16 16 0 0 1 13 35Z" fill="#fffdf8" stroke="#241f1a" stroke-width="2.5" stroke-linejoin="round"/>
+        <use class="twinkle" href="#star" x="452" y="40" width="34" height="34" fill="#ff7a3d"/>
+        <use class="twinkle t2" href="#star" x="22" y="190" width="22" height="22" fill="#fffdf8"/>
+        <use class="twinkle t2" href="#star" x="486" y="300" width="20" height="20" fill="#ffc5a3"/>
+      </svg>
+    </div>
     <section id="school" class="school" aria-labelledby="school-title">
       <div><p class="category">通う場所を見つける</p><h2 id="school-title">学校を探す</h2><p class="service-brand">{{schoolBrand}}</p><p>気になる学校を、地図や条件から。<br>親子で比べながら、自分たちに合う場所へ。</p><p class="small">高校・高専と、全国の小学校・中学校・大学・短大・専修学校（専門学校を含む）。小中・大学・専修学校の名前と住所は2026年5月1日時点、位置の資料は2023年度です。</p>{{schoolAction}}{{recoveryLink}}</div>
-      <svg viewBox="0 0 320 230" role="img" aria-label="地図と学校を表すイラスト"><rect x="15" y="20" width="290" height="190" rx="25" fill="#f7e8d4"/><path d="M20 130L300 85M90 25L140 210M225 22L180 210" stroke="#fffaf3" stroke-width="22"/><path d="M92 155V90L155 48L218 90V155Z" fill="#fffaf3" stroke="#241f1a" stroke-width="3"/><path d="M128 155V116H164V155M106 94H124M179 94H198" fill="none" stroke="#241f1a" stroke-width="3"/><path d="M248 107C217 65 274 50 280 78C282 88 264 107 248 122Z" fill="#ff7a3d" stroke="#241f1a" stroke-width="3"/><circle cx="254" cy="80" r="7" fill="#fffaf3"/></svg>
+      <svg viewBox="0 0 320 230" role="img" aria-label="地図と学校を表すイラスト">
+        <defs><clipPath id="school-clip"><rect x="10" y="12" width="300" height="206" rx="30"/></clipPath></defs>
+        <rect x="10" y="12" width="300" height="206" rx="30" fill="#fbead8"/>
+        <g clip-path="url(#school-clip)"><path d="M0 176 320 150M60 0l30 240M262 0l-34 240" stroke="#fffaf3" stroke-width="20"/><path d="M10 12h70l8 60-78 8Z" fill="#e6edd4"/></g>
+        <g stroke="#241f1a" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"><path d="M70 176h180"/><path d="M96 176v-70h128v70" fill="#fffdf8"/><path d="m84 106 76-38 76 38Z" fill="#ffb38b"/><path d="M146 176v-34h28v34" fill="#ff7a3d"/><path d="M114 124h18v18h-18zM188 124h18v18h-18z" fill="#f7f3ea"/><circle cx="160" cy="112" r="13" fill="#fffdf8"/><path d="M160 104v8l5 4" stroke-width="2.2"/><path d="M160 68V46"/><path d="M160 47l20 7-20 7Z" fill="#ff7a3d" stroke-width="2.5"/><path d="M52 176v-16M270 176v-16" stroke-width="2.5"/><circle cx="52" cy="148" r="14" fill="#bcd49c" stroke-width="2.5"/><circle cx="270" cy="148" r="14" fill="#bcd49c" stroke-width="2.5"/></g>
+        <ellipse cx="262" cy="92" rx="11" ry="3.5" fill="#241f1a" opacity=".2"/>
+        <g class="bob b3"><path d="M262 90c-9-10-20-21-20-33a20 20 0 0 1 40 0c0 12-11 23-20 33Z" fill="#ff7a3d" stroke="#241f1a" stroke-width="3" stroke-linejoin="round"/><circle cx="262" cy="57" r="7" fill="#fffdf8" stroke="#241f1a" stroke-width="2.5"/></g>
+      </svg>
     </section>
     <section id="learn" aria-labelledby="learn-title"><p class="eyebrow">家で、いっしょに。</p><h2 id="learn-title">これからのまなび</h2><div class="cards">{{learningCards}}</div></section>
-    <section id="home" class="home"><div><p class="category">学びのまわりの、暮らしも。</p><h2>住まい・暮らしを調べる</h2><p>学校探しとは別の視点で、地域や住まいの選択を考える関連サービスです。</p></div>{{homeAction}}</section>
+    <section id="home" class="home"><span class="badge" aria-hidden="true"><svg><use href="#pin-home"/></svg></span><div><p class="category">学びのまわりの、暮らしも。</p><h2>住まい・暮らしを調べる</h2><p>学校探しとは別の視点で、地域や住まいの選択を考える関連サービスです。</p></div>{{homeAction}}</section>
     <aside><h2>これまで学校サイトを使っていた方へ</h2><p>{{recoveryNotice}}</p>{{recoveryLink}}</aside>
   </main>
-  <footer>{{brand}} · 親子が、学ぶことと通う場所を見つける入口。<p>移行候補のプレビューです。新しい行き先は公開確認後にご案内します。</p></footer>
+  <footer><svg aria-hidden="true"><use href="#brand-mark"/></svg><span>{{brand}} · 親子が、学ぶことと通う場所を見つける入口。</span><p>移行候補のプレビューです。新しい行き先は公開確認後にご案内します。</p></footer>
 </body></html>

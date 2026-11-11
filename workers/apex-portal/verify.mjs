@@ -6,11 +6,22 @@ const get = (path, method = 'GET') => worker.fetch(new Request(`https://manabi-m
 const response = await get('/')
 const html = await response.text()
 assert.equal(response.status, 200)
-assert.match(html, /href="https:\/\/school\.manabi-map\.app\/">学校の種類を選ぶ/)
+// 学校の種類は、学校入口を経由せず、それぞれの行き先へ直接つなぐ
+for (const [name, url] of [['小学校', 'https://school.manabi-map.app/primary/'], ['中学校', 'https://school.manabi-map.app/middle/'],
+  ['高校・高専', 'https://high-school.manabi-map.app/'], ['大学・短大', 'https://school.manabi-map.app/university/'],
+  ['専修学校（専門学校を含む）', 'https://school.manabi-map.app/vocational/']]) {
+  assert.ok(html.includes(`<a class="primary" href="${url}">${name} →</a>`), `学校の種類の行き先が無い: ${name}`)
+}
 assert.match(html, /https:\/\/home\.manabi-map\.app\//)
 assert.match(html, /href="https:\/\/kanji\.manabi-map\.app\/">たねもじを開く/)
 assert.match(html, /rel="canonical" href="https:\/\/manabi-map\.app\//)
 assert.doesNotMatch(html, /noindex|旧URL|移行候補|\{\{/)
+// 絵とロゴは HTML の中の SVG だけで描く（CSP は default-src 'none'）。<use> の参照先がすべて同じ HTML にあること
+assert.match(html, /<symbol id="brand-mark" viewBox="[\d\s.-]+">/)
+const used = [...html.matchAll(/<use\b[^>]*\shref="([^"]*)"/g)].map((m) => m[1])
+assert.ok(used.length > 0)
+for (const ref of used) assert.ok(/^#[\w-]+$/.test(ref) && html.includes(` id="${ref.slice(1)}"`), `<use> の参照先が無い: ${ref}`)
+assert.doesNotMatch(html, /<script|<img\b|<link\b[^>]*stylesheet|url\(\s*["']?(?:https?:|\/\/|data:)/i)
 for (const path of ['/robots.txt', '/sitemap.xml', '/llms.txt']) assert.equal((await get(path)).status, 200)
 const robots = await (await get('/robots.txt')).text()
 assert.match(robots, /User-agent: GPTBot/)
