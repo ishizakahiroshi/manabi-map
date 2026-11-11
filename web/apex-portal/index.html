@@ -5,8 +5,9 @@
   <svg class="defs" aria-hidden="true" focusable="false">
     <defs><path id="pin-shape" d="M256 72c-84 0-152 66-152 148 0 108 152 220 152 220s152-112 152-220c0-82-68-148-152-148z" fill="#ff7a3d" stroke="#241f1a" stroke-width="12" stroke-linejoin="round"/></defs>
     {{brandMark}}
-    <symbol id="pin-kanji" viewBox="96 66 320 384"><use href="#pin-shape"/><rect x="178" y="138" width="156" height="156" rx="26" fill="#fffdf8" stroke="#241f1a" stroke-width="11"/><text x="256" y="256" text-anchor="middle" font-size="112" font-weight="800" fill="#241f1a">漢</text></symbol>
+    <symbol id="pin-kanji" viewBox="96 66 320 384"><use href="#pin-shape"/><rect x="170" y="130" width="172" height="172" rx="20" fill="#f7f3ea" stroke="#241f1a" stroke-width="11"/><path d="M256 142v148M182 216h148" stroke="#241f1a" stroke-width="6" stroke-dasharray="14 12" opacity=".3"/><text x="256" y="262" text-anchor="middle" font-size="124" font-weight="800" fill="#241f1a" font-family="system-ui,'Hiragino Sans','Yu Gothic UI',sans-serif">漢</text></symbol>
     <symbol id="pin-karuta" viewBox="96 66 320 384"><use href="#pin-shape"/><g stroke="#241f1a" stroke-width="10" stroke-linejoin="round"><rect x="-50" y="-70" width="100" height="140" rx="14" fill="#ffd9c2" transform="translate(238 220) rotate(-12)"/><rect x="-50" y="-70" width="100" height="140" rx="14" fill="#fffdf8" transform="translate(274 216) rotate(8)"/></g><text x="0" y="34" text-anchor="middle" font-size="92" font-weight="800" fill="#241f1a" transform="translate(274 216) rotate(8)">あ</text></symbol>
+    <symbol id="mark-chifact" viewBox="0 0 48 48"><path d="M7 7h34v34H7ZM24 7v34" fill="none" stroke="#28766c" stroke-width="4.5" stroke-linejoin="round"/></symbol>
     <symbol id="pin-home" viewBox="96 66 320 384"><use href="#pin-shape"/><g stroke="#241f1a" stroke-width="11" stroke-linejoin="round" stroke-linecap="round"><path d="M296 150v-22h26v46" fill="#fffdf8"/><path d="M190 214v78h132v-78" fill="#fffdf8"/><path d="M170 222 256 150l86 72" fill="#fffdf8"/><path d="M240 292v-40a16 16 0 0 1 32 0v40Z" fill="#ff7a3d" stroke-width="9"/></g></symbol>
     <symbol id="star" viewBox="-12 -12 24 24"><path d="M0-10C1-3 3-1 10 0 3 1 1 3 0 10-1 3-3 1-10 0-3-1-1-3 0-10Z" stroke="#241f1a" stroke-width="1.6" stroke-linejoin="round"/></symbol>
   </svg>
@@ -57,7 +58,7 @@
       </svg>
     </section>
     <section id="learn" aria-labelledby="learn-title"><p class="eyebrow">家で、いっしょに。</p><h2 id="learn-title">これからのまなび</h2><div class="cards">{{learningCards}}</div></section>
-    <section id="home" class="home"><span class="badge" aria-hidden="true"><svg><use href="#pin-home"/></svg></span><div><p class="category">学びのまわりの、暮らしも。</p><h2>住まい・暮らしを調べる</h2><p>学校探しとは別の視点で、地域や住まいの選択を考える関連サービスです。</p></div>{{homeAction}}</section>
+    <section id="home" class="home"><span class="badge" aria-hidden="true"><svg><use href="#mark-chifact"/></svg></span><div><p class="category">学びのまわりの、暮らしも。</p><h2>住まい・暮らしを調べる</h2>{{homeBrand}}<p>学校探しとは別の視点で、地域や住まいの選択を考える関連サービスです。</p></div>{{homeAction}}</section>
     <aside><h2>これまで学校サイトを使っていた方へ</h2><p>{{recoveryNotice}}</p>{{recoveryLink}}</aside>
   </main>
   <footer><svg aria-hidden="true"><use href="#brand-mark"/></svg><span>{{brand}} · 親子が、学ぶことと通う場所を見つける入口。</span><p>移行候補のプレビューです。新しい行き先は公開確認後にご案内します。</p></footer>

@@ -13,6 +13,7 @@ for (const [name, url] of [['小学校', 'https://school.manabi-map.app/primary/
   assert.ok(html.includes(`<a class="primary" href="${url}">${name} →</a>`), `学校の種類の行き先が無い: ${name}`)
 }
 assert.match(html, /https:\/\/home\.manabi-map\.app\//)
+assert.ok(html.includes('<p class="service-brand chifact">chifact<span>.</span><small>｜地ファクト</small></p>'), '地ファクトのロゴの文字が無い')
 assert.match(html, /href="https:\/\/kanji\.manabi-map\.app\/">たねもじを開く/)
 assert.match(html, /rel="canonical" href="https:\/\/manabi-map\.app\//)
 assert.doesNotMatch(html, /noindex|旧URL|移行候補|\{\{/)

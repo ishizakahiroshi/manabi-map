@@ -38,7 +38,7 @@ export function renderEntryPage(template, config = portal) {
   const retired = config.migrationPhase === 'candidate-retired'
   const recoveryLink = retired ? '<a class="recovery" href="/school-recovery-ended.html">旧URLでの手続きについて →</a>' : '<a class="recovery" href="/mypage">旧URLで保存情報・連携を確認する →</a>'
   const recoveryNotice = retired ? '旧URLでの認証・連携・招待の受付は終了しています。新しい高校版でログインし直してください。ゲストの保存情報が自動で移るわけではありません。' : 'ゲストで保存した情報は、旧URLのマイページでLINE・Googleとの連携をご確認ください。認証や家族招待の途中でも、旧URLで手続きを続けられます。'
-  const values = { origin: escape(deploymentTargets.targets.apex.origin), brand: escape(config.brand), brandMark: config.brandMark, schoolBrand: escape(config.schoolBrand), schoolAction: action(config.services.school), homeAction: action(config.services.home), recoveryLink, recoveryNotice,
+  const values = { origin: escape(deploymentTargets.targets.apex.origin), brand: escape(config.brand), brandMark: config.brandMark, schoolBrand: escape(config.schoolBrand), schoolAction: action(config.services.school), homeAction: action(config.services.home), homeBrand: '', recoveryLink, recoveryNotice,
     learningCards: ['kanji', 'karuta'].map((id) => { const service = config.services[id]; return `<article><span class="badge" aria-hidden="true"><svg><use href="#pin-${id}"/></svg></span><h2>${escape(service.name)}</h2><p>${escape(service.description)}</p>${action(service)}</article>` }).join('') }
   return template.replace(/\{\{(\w+)\}\}/g, (_, key) => { if (typeof values[key] !== 'string') throw new Error('Unknown portal field'); return values[key] })
 }

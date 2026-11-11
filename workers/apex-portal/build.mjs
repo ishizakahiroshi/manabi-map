@@ -20,6 +20,8 @@ const values = {
   origin: 'https://manabi-map.app', brand: 'まなびマップ', brandMark: brandMark(), schoolBrand: 'Manabi Map（まなびマップ）',
   schoolAction: `<ul class="kinds" aria-label="学校の種類">${schoolKinds.map(([name, url]) => `<li><a class="primary" href="${url}">${name} →</a></li>`).join('')}</ul>`,
   homeAction: '<a class="primary" href="https://home.manabi-map.app/">地ファクトを開く →</a>',
+  // 地ファクトのロゴは文字（chifact. と名前）。書体・色・点の色は地ファクトの画面と同じにする
+  homeBrand: '<p class="service-brand chifact">chifact<span>.</span><small>｜地ファクト</small></p>',
   learningCards: cards, recoveryLink: '', recoveryNotice: '',
 }
 const html = template.replace(/<meta name="robots" content="noindex">/, '')
