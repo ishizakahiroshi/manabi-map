@@ -12,10 +12,23 @@ export function brandMarkSymbol(svg) {
 }
 export const brandMark = (config = brands) => brandMarkSymbol(readFileSync(new URL(`../public${validateBrands(config).apex.logo}`, import.meta.url), 'utf8'))
 
+// タブのアイコンも HTML へ埋め込む。CSP の img-src は data: だけを許すので、画像を通信で取りに行くことは無い。
+// 高校版・学校入口と同じアイコン（web/public の favicon.svg と 32px の PNG）を使う。SVG を読めないブラウザは PNG を使う。
+export function faviconLinks(svg, png) {
+  const text = String(svg).trim()
+  if (!/^<svg\b[\s\S]*<\/svg>$/.test(text) || /<script|<foreignObject|\son\w+\s*=|href\s*=\s*["'](?!#)|\{\{/i.test(text)) throw new Error('Invalid favicon')
+  if (!(png instanceof Uint8Array) || png.length > 4096 || Buffer.from(png.subarray(0, 8)).toString('hex') !== '89504e470d0a1a0a') throw new Error('Invalid favicon')
+  const minified = text.replace(/<!--[\s\S]*?-->/g, '').replace(/\s+/g, ' ').replace(/> </g, '><')
+  return `<link rel="icon" type="image/png" sizes="32x32" href="data:image/png;base64,${Buffer.from(png).toString('base64')}"><link rel="icon" type="image/svg+xml" sizes="any" href="data:image/svg+xml;base64,${Buffer.from(minified).toString('base64')}">`
+}
+const publicFile = (name) => readFileSync(new URL(`../public/${name}`, import.meta.url))
+export const favicon = () => faviconLinks(publicFile('favicon.svg').toString('utf8'), publicFile('favicon-32.png'))
+
 // Candidate-only destinations. Publication flags are deliberately false until verified.
 export const portal = {
   brand: brands.apex.displayName.ja,
   brandMark: brandMark(),
+  favicon: favicon(),
   schoolBrand: brands['high-school'].displayName.ja,
   services: {
     school: { name: '高校・高専を探す', description: '', url: deploymentTargets.targets['high-school'].origin + '/', published: false },
@@ -38,7 +51,7 @@ export function renderEntryPage(template, config = portal) {
   const retired = config.migrationPhase === 'candidate-retired'
   const recoveryLink = retired ? '<a class="recovery" href="/school-recovery-ended.html">旧URLでの手続きについて →</a>' : '<a class="recovery" href="/mypage">旧URLで保存情報・連携を確認する →</a>'
   const recoveryNotice = retired ? '旧URLでの認証・連携・招待の受付は終了しています。新しい高校版でログインし直してください。ゲストの保存情報が自動で移るわけではありません。' : 'ゲストで保存した情報は、旧URLのマイページでLINE・Googleとの連携をご確認ください。認証や家族招待の途中でも、旧URLで手続きを続けられます。'
-  const values = { origin: escape(deploymentTargets.targets.apex.origin), brand: escape(config.brand), brandMark: config.brandMark, schoolBrand: escape(config.schoolBrand), schoolAction: action(config.services.school), homeAction: action(config.services.home), homeBrand: '', recoveryLink, recoveryNotice,
+  const values = { origin: escape(deploymentTargets.targets.apex.origin), brand: escape(config.brand), brandMark: config.brandMark, favicon: config.favicon, schoolBrand: escape(config.schoolBrand), schoolAction: action(config.services.school), homeAction: action(config.services.home), homeBrand: '', recoveryLink, recoveryNotice,
     learningCards: ['kanji', 'karuta'].map((id) => { const service = config.services[id]; return `<article><span class="badge" aria-hidden="true"><svg><use href="#pin-${id}"/></svg></span><h2>${escape(service.name)}</h2><p>${escape(service.description)}</p>${action(service)}</article>` }).join('') }
   return template.replace(/\{\{(\w+)\}\}/g, (_, key) => { if (typeof values[key] !== 'string') throw new Error('Unknown portal field'); return values[key] })
 }

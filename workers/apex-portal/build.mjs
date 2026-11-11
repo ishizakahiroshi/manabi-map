@@ -1,6 +1,6 @@
 import { readFile, writeFile, mkdir } from 'node:fs/promises'
 import { resolve, dirname } from 'node:path'
-import { brandMark } from '../../web/apex-portal/portal.mjs'
+import { brandMark, favicon } from '../../web/apex-portal/portal.mjs'
 
 // The portal uses no personal data, analytics, account or third-party assets.
 const root = resolve(import.meta.dirname, '../..')
@@ -17,7 +17,7 @@ const schoolKinds = [
   ['専修学校（専門学校を含む）', 'https://school.manabi-map.app/vocational/'],
 ]
 const values = {
-  origin: 'https://manabi-map.app', brand: 'まなびマップ', brandMark: brandMark(), schoolBrand: 'Manabi Map（まなびマップ）',
+  origin: 'https://manabi-map.app', brand: 'まなびマップ', brandMark: brandMark(), favicon: favicon(), schoolBrand: 'Manabi Map（まなびマップ）',
   schoolAction: `<ul class="kinds" aria-label="学校の種類">${schoolKinds.map(([name, url]) => `<li><a class="primary" href="${url}">${name} →</a></li>`).join('')}</ul>`,
   homeAction: '<a class="primary" href="https://home.manabi-map.app/">地ファクトを開く →</a>',
   // 地ファクトのロゴは文字（chifact. と名前）。書体・色・点の色は地ファクトの画面と同じにする

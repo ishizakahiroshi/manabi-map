@@ -15,7 +15,8 @@ const API_PATH = /^\/api\/v1\/(?:(?:schools|dataset|openapi)\.json|schools\/[a-z
 const API_FORWARD_REQUEST = ['if-none-match', 'if-modified-since']
 const API_PASS_RESPONSE = ['content-type', 'cache-control', 'etag', 'last-modified']
 const COMMON_HEADERS = { 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer' }
-const PAGE_CSP = "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; frame-ancestors 'none'"
+// 画像は HTML に埋め込んだもの（data:）だけを許す。タブのアイコンを出すためで、通信で取りに行く画像は今までどおり止める
+const PAGE_CSP = "default-src 'none'; img-src data:; style-src 'unsafe-inline'; base-uri 'none'; frame-ancestors 'none'"
 const API_CSP = "default-src 'none'; frame-ancestors 'none'"
 
 const notFound = () => new Response('Not Found', { status: 404 })

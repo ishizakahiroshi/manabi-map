@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url'
 import { stageSchoolCandidate } from './school-candidate.mjs'
 import { canonicalSchoolSourceJSON } from './school-source.mjs'
 import { createApexCandidate, retainLegacyAssets, verifyCompatibilityGeneration } from './apex-candidate.mjs'
-import { portal, renderEntryPage, renderRecoveryEnded, brandMarkSymbol } from '../../apex-portal/portal.mjs'
+import { portal, renderEntryPage, renderRecoveryEnded, brandMarkSymbol, faviconLinks } from '../../apex-portal/portal.mjs'
 import { entrySupportFiles } from './entry-metadata.mjs'
 import { onRequest } from '../../../functions/_middleware.ts'
 
@@ -40,6 +40,21 @@ test('portal embeds the brand mark from brand settings and every <use> target ex
     '<svg viewBox="0 0 1 1"><path onload="x"/></svg>', '<svg viewBox="0 0 1 1"><path fill="url(#x)"/></svg>', '<svg><path/></svg>', '<p>not svg</p>']) {
     assert.throws(() => brandMarkSymbol(bad), /Invalid brand mark/)
   }
+})
+
+test('portal embeds the tab icon as data URIs and never points an icon at the network', async () => {
+  const template = await fs.readFile(join(portalRoot, 'index.html'), 'utf8')
+  const html = renderEntryPage(template)
+  assert.match(html, /<link rel="icon" type="image\/png" sizes="32x32" href="data:image\/png;base64,[A-Za-z0-9+/]+=*"><link rel="icon" type="image\/svg\+xml" sizes="any" href="data:image\/svg\+xml;base64,[A-Za-z0-9+/]+=*">/)
+  assert.ok(!/<link rel="[^"]*icon[^"]*"[^>]*href="(?!data:)/.test(html))
+  const png = Buffer.from('89504e470d0a1a0a00', 'hex')
+  const links = faviconLinks('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1 1">\r\n  <!-- synthetic -->\r\n  <rect width="1" height="1"/>\r\n</svg>\r\n', png)
+  const svg = Buffer.from(links.match(/svg\+xml;base64,([A-Za-z0-9+/=]+)"/)[1], 'base64').toString('utf8')
+  assert.equal(svg, '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1 1"><rect width="1" height="1"/></svg>')
+  assert.throws(() => faviconLinks('<svg><script>x</script></svg>', png), /Invalid favicon/)
+  assert.throws(() => faviconLinks('<svg><image href="https://example.test/a.png"/></svg>', png), /Invalid favicon/)
+  assert.throws(() => faviconLinks('<svg></svg>', Buffer.from('not a png image')), /Invalid favicon/)
+  assert.throws(() => faviconLinks('<svg></svg>', Buffer.alloc(5000, 1)), /Invalid favicon/)
 })
 
 test('same completed generation reaches both origins; partial update fails and restore recovers', async (t) => {
