@@ -316,6 +316,8 @@ portal用のHTML・CSS・ブランド設定・robots・sitemap・404・セキュ
 
 一つの配信元で両originの互換APIを返す方式を選ぶ場合は、上の複製手順をその方式の受入条件へ置き換える。URL、CORS、応答形式、終了しない方針は維持し、追加基盤・費用・障害時の依存先を明示する。
 
+**2026-11-11 決定・実施（一つの配信元方式）**: 旧apexの `/api/v1/*` は、旧Pagesが登録の無いままCNAMEで応答し続けており、データが2026-09-27で止まっていた。複製案は採らず、総合入口のWorker（`workers/apex-portal/runtime.mjs`）に `manabi-map.app/api/v1/*` の経路を足し、high-schoolの同じファイルを中継して200・CORSで返す方式にした（本人決定）。中継は公開データのファイル名（`schools.json`・`dataset.json`・`openapi.json`・`schools/<県>.json`）に合うGET/HEADだけで、Cookie等は渡さず、高校版の異常は502にする。データを配る先はhigh-schoolの1か所になり、上の複製手順と両originの世代照合は不要になった。追加基盤・費用はWorkerの要求数のみ、障害時の依存先はhigh-schoolのWorker。戻すときは経路を外せば旧Pagesの応答に戻る（旧Pagesを消した後は戻し先が無くなる）。公開URLで5ファイルがhigh-schoolとバイト一致することを確認した。
+
 portalとサービスカードはC2の機能識別子ごとのブランド設定を参照し、表示名と接続URLを別フィールドで持つ。学校の改名は学校カードにも反映し、portal自身や他サービスの改名を強制しない。ブランド変更手順に設定・資産・静的ページの再生成、手動文書の差替え、Preview検収、本番反映、戻し方を記載する。観測結果から自動改名する処理は導入しない。既存Pagesのmain自動デプロイと、今回未決定の両配信先の同期方式を区別する。
 
 hostを限定したzoneの転送ルールと、portal側で返す例外を分ける。apex `/`・公開API・認証callback・旧APIのPOSTを包括301で巻き込まない。学校の `_redirects` を両ホスト共通の転送表にしない。現在のFunctions対象では `_redirects` が適用されない場合もあるため、転送を処理する層を各行で決める。[公式Redirects仕様](https://developers.cloudflare.com/pages/configuration/redirects/)

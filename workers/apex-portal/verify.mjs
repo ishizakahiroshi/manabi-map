@@ -19,4 +19,72 @@ assert.equal((await get('/')).headers.get('x-robots-tag'), null)
 assert.equal((await get('/', 'HEAD')).status, 200)
 assert.equal((await get('/', 'POST')).status, 405)
 assert.equal((await get('/unknown')).status, 404)
-console.log('経路と検索情報の確認に成功')
+
+// /api/v1/* は高校版の同じファイルを中継する。外へ出ないよう fetch を差し替えて確かめる
+const calls = []
+let upstreamReply = () => new Response('{"api_version":"v1"}\n', {
+  status: 200,
+  headers: { 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age=3600', ETag: '"abc"', 'Set-Cookie': 'x=1', 'X-Frame-Options': 'DENY' },
+})
+globalThis.fetch = async (input, init = {}) => {
+  calls.push({ url: String(input), method: init.method, headers: new Headers(init.headers), redirect: init.redirect })
+  return upstreamReply()
+}
+const api = (path, init = {}) => worker.fetch(new Request(`https://manabi-map.app${path}`, init))
+
+for (const path of ['/api/v1/schools.json', '/api/v1/dataset.json', '/api/v1/openapi.json', '/api/v1/schools/gunma.json']) {
+  calls.length = 0
+  const res = await api(`${path}?utm_source=x`, { headers: { Cookie: 'session=secret', Authorization: 'Bearer t', 'If-None-Match': '"old"' } })
+  assert.equal(res.status, 200, path)
+  assert.equal(await res.text(), '{"api_version":"v1"}\n')
+  assert.equal(res.headers.get('content-type'), 'application/json')
+  assert.equal(res.headers.get('access-control-allow-origin'), '*')
+  assert.equal(res.headers.get('cache-control'), 'public, max-age=3600')
+  assert.equal(res.headers.get('etag'), '"abc"')
+  assert.equal(res.headers.get('x-content-type-options'), 'nosniff')
+  assert.equal(res.headers.get('set-cookie'), null, '高校版の Cookie を返さない')
+  assert.equal(calls.length, 1)
+  assert.equal(calls[0].url, `https://high-school.manabi-map.app${path}`, '問い合わせ文字列を落として高校版の同じパスへ')
+  assert.equal(calls[0].method, 'GET')
+  assert.equal(calls[0].redirect, 'manual')
+  assert.equal(calls[0].headers.get('cookie'), null, 'Cookie を高校版へ渡さない')
+  assert.equal(calls[0].headers.get('authorization'), null)
+  assert.equal(calls[0].headers.get('if-none-match'), '"old"')
+}
+
+// HEAD は本文なし。304 はそのまま返す
+const head = await api('/api/v1/schools.json', { method: 'HEAD' })
+assert.equal(head.status, 200)
+assert.equal(calls.at(-1).method, 'HEAD')
+assert.equal(await head.text(), '')
+upstreamReply = () => new Response(null, { status: 304, headers: { ETag: '"abc"' } })
+const notModified = await api('/api/v1/schools.json', { headers: { 'If-None-Match': '"abc"' } })
+assert.equal(notModified.status, 304)
+assert.equal(notModified.headers.get('access-control-allow-origin'), '*')
+
+// 公開データのファイル名に合わない道は、高校版へ問い合わせずに 404
+for (const path of ['/api/v1/secrets', '/api/v1/env', '/api/v1/schools/', '/api/v1/schools/Gunma.json', '/api/v1/schools/gunma/x.json',
+  '/api/v1/schools/..%2fdataset.json', '/api/v1/schools.json/', '/api/v1/', '/api/v2/schools.json', '/api/admin/me']) {
+  calls.length = 0
+  assert.equal((await api(path)).status, 404, path)
+  assert.equal(calls.length, 0, `${path} は中継しない`)
+}
+assert.equal((await api('/api/v1/schools.json', { method: 'POST' })).status, 405)
+assert.equal((await api('/api/v1/schools.json', { method: 'OPTIONS' })).status, 405)
+
+// 高校版の異常は 502 にして、別の中身を 200 で返さない
+const failures = [
+  ['404', () => new Response('nf', { status: 404 }), 404],
+  ['500', () => new Response('err', { status: 500 }), 502],
+  ['301', () => new Response(null, { status: 301, headers: { Location: 'https://example.com/' } }), 502],
+  ['HTML', () => new Response('<html>', { status: 200, headers: { 'Content-Type': 'text/html' } }), 502],
+  ['JSON に似た型', () => new Response('{}', { status: 200, headers: { 'Content-Type': 'application/jsonx' } }), 502],
+  ['通信失敗', () => { throw new TypeError('network') }, 502],
+]
+for (const [label, reply, status] of failures) {
+  upstreamReply = reply
+  const res = await api('/api/v1/schools.json')
+  assert.equal(res.status, status, label)
+  assert.equal(res.headers.get('access-control-allow-origin'), null, `${label} に CORS を付けない`)
+}
+console.log('経路と検索情報、公開データの中継の確認に成功')
