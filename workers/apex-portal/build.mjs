@@ -2,7 +2,8 @@ import { readFile, writeFile, mkdir } from 'node:fs/promises'
 import { resolve, dirname } from 'node:path'
 import { brandMark, favicon } from '../../web/apex-portal/portal.mjs'
 
-// The portal uses no personal data, analytics, account or third-party assets.
+// The portal itself holds no personal data, account or third-party assets. Visits are counted by cookieless
+// Cloudflare Web Analytics, whose beacon Cloudflare injects at the edge (see PAGE_CSP in runtime.mjs).
 const root = resolve(import.meta.dirname, '../..')
 const template = await readFile(resolve(root, 'web/apex-portal/index.html'), 'utf8')
 const css = await readFile(resolve(root, 'web/apex-portal/portal.css'), 'utf8')
@@ -22,6 +23,9 @@ const values = {
   homeAction: '<a class="primary" href="https://home.manabi-map.app/">地ファクトを開く →</a>',
   // 地ファクトのロゴは文字（chifact. と名前）。書体・色・点の色は地ファクトの画面と同じにする
   homeBrand: '<p class="service-brand chifact">chifact<span>.</span><small>｜地ファクト</small></p>',
+  // 訪問を数えていること（Cookie を使わないアクセス解析）を確かめられるよう、プライバシーポリシーへつなぐ。
+  // ポリシーの本文は高校版が配っている。呼び名は高校版のフッター（web/data/site-footer-links.json）と同じにする
+  footerLinks: '<a href="https://high-school.manabi-map.app/legal/privacy/">プライバシーポリシー</a>',
   learningCards: cards, recoveryLink: '', recoveryNotice: '',
 }
 const html = template.replace(/<meta name="robots" content="noindex">/, '')

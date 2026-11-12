@@ -17,6 +17,8 @@ assert.ok(html.includes('<p class="service-brand chifact">chifact<span>.</span><
 assert.match(html, /href="https:\/\/kanji\.manabi-map\.app\/">たねもじを開く/)
 assert.match(html, /rel="canonical" href="https:\/\/manabi-map\.app\//)
 assert.doesNotMatch(html, /noindex|旧URL|移行候補|\{\{/)
+// フッターからプライバシーポリシー（高校版が配る本文）へつなぐ。訪問を数えていることを利用者が確かめられるようにする
+assert.match(html, /<footer>[\s\S]*<a href="https:\/\/high-school\.manabi-map\.app\/legal\/privacy\/">プライバシーポリシー<\/a><\/footer>/)
 // 絵とロゴは HTML の中の SVG だけで描く（CSP は default-src 'none'）。<use> の参照先がすべて同じ HTML にあること
 assert.match(html, /<symbol id="brand-mark" viewBox="[\d\s.-]+">/)
 const used = [...html.matchAll(/<use\b[^>]*\shref="([^"]*)"/g)].map((m) => m[1])
