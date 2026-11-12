@@ -24,7 +24,11 @@ assert.ok(used.length > 0)
 for (const ref of used) assert.ok(/^#[\w-]+$/.test(ref) && html.includes(` id="${ref.slice(1)}"`), `<use> の参照先が無い: ${ref}`)
 assert.doesNotMatch(html, /<script|<img\b|<link\b[^>]*stylesheet|url\(\s*["']?(?:https?:|\/\/|data:)/i)
 // タブのアイコンは HTML に埋め込み、CSP は埋め込んだ画像（data:）だけを許す。通信で取りに行く画像は止めたまま
-assert.equal(response.headers.get('content-security-policy'), "default-src 'none'; img-src data:; style-src 'unsafe-inline'; base-uri 'none'; frame-ancestors 'none'")
+// スクリプトと通信は、Cloudflare Web Analytics の読み込み元と送信先だけを許す。HTML 自身にはスクリプトを書かない（上の検査）
+const csp = response.headers.get('content-security-policy')
+assert.equal(csp, "default-src 'none'; script-src https://static.cloudflareinsights.com; connect-src https://manabi-map.app/cdn-cgi/rum https://cloudflareinsights.com; img-src data:; style-src 'unsafe-inline'; base-uri 'none'; frame-ancestors 'none'")
+const directive = (name) => csp.split('; ').find((part) => part.startsWith(`${name} `)) ?? ''
+for (const name of ['script-src', 'connect-src']) assert.doesNotMatch(directive(name), /'self'|'unsafe-inline'|'unsafe-eval'|\*|data:|blob:/, `${name} を広げない`)
 assert.match(html, /<link rel="icon" type="image\/png" sizes="32x32" href="data:image\/png;base64,[A-Za-z0-9+/]+=*">/)
 assert.match(html, /<link rel="icon" type="image\/svg\+xml" sizes="any" href="data:image\/svg\+xml;base64,[A-Za-z0-9+/]+=*">/)
 assert.doesNotMatch(html, /<link rel="[^"]*icon[^"]*"[^>]*href="(?!data:)/)

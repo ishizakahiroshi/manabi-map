@@ -16,7 +16,10 @@ const API_FORWARD_REQUEST = ['if-none-match', 'if-modified-since']
 const API_PASS_RESPONSE = ['content-type', 'cache-control', 'etag', 'last-modified']
 const COMMON_HEADERS = { 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer' }
 // 画像は HTML に埋め込んだもの（data:）だけを許す。タブのアイコンを出すためで、通信で取りに行く画像は今までどおり止める
-const PAGE_CSP = "default-src 'none'; img-src data:; style-src 'unsafe-inline'; base-uri 'none'; frame-ancestors 'none'"
+// スクリプトは Cloudflare Web Analytics（Cookie を使わない計測。Cloudflare が配信のときに差し込む）だけを許す。
+// 送信先は同じサイトの /cdn-cgi/rum の 1 本（2026-11-12 実測）と、Cloudflare の案内にある cloudflareinsights.com。
+// これが無いと総合入口の訪問が数えられない。ほかのスクリプトと通信は今までどおり止める
+const PAGE_CSP = "default-src 'none'; script-src https://static.cloudflareinsights.com; connect-src https://manabi-map.app/cdn-cgi/rum https://cloudflareinsights.com; img-src data:; style-src 'unsafe-inline'; base-uri 'none'; frame-ancestors 'none'"
 const API_CSP = "default-src 'none'; frame-ancestors 'none'"
 
 const notFound = () => new Response('Not Found', { status: 404 })
