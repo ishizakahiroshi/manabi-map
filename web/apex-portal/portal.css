@@ -54,7 +54,7 @@ p{line-height:1.9}
 .cards{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:22px}
 .cards article{display:grid;grid-template-columns:auto 1fr;gap:6px 20px;align-items:start;padding:28px;min-width:0}
 .cards .badge{grid-row:1/4}
-.cards article:nth-child(2) .badge{background:#eef0d8}
+.cards article:last-child .badge{background:#eef0d8}
 .cards h2{margin:4px 0 0}
 .cards p{margin:0 0 10px}
 .cards .state,.cards .primary{justify-self:start}

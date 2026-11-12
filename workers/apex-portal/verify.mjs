@@ -15,6 +15,7 @@ for (const [name, url] of [['小学校', 'https://school.manabi-map.app/primary/
 assert.match(html, /https:\/\/home\.manabi-map\.app\//)
 assert.ok(html.includes('<p class="service-brand chifact">chifact<span>.</span><small>｜地ファクト</small></p>'), '地ファクトのロゴの文字が無い')
 assert.match(html, /href="https:\/\/kanji\.manabi-map\.app\/">たねもじを開く/)
+assert.match(html, /href="https:\/\/english\.manabi-map\.app\/">たねワードを開く/)
 assert.match(html, /rel="canonical" href="https:\/\/manabi-map\.app\//)
 assert.doesNotMatch(html, /noindex|旧URL|移行候補|\{\{/)
 // フッターからプライバシーポリシー（高校版が配る本文）へつなぐ。訪問を数えていることを利用者が確かめられるようにする

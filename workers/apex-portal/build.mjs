@@ -8,8 +8,9 @@ const root = resolve(import.meta.dirname, '../..')
 const template = await readFile(resolve(root, 'web/apex-portal/index.html'), 'utf8')
 const css = await readFile(resolve(root, 'web/apex-portal/portal.css'), 'utf8')
 // たねもじは 2026-11-04 に kanji.manabi-map.app で公開した（本人の「自走してデプロイまでやっていい」）
+// たねワード（英語）は 2026-11-13 に english.manabi-map.app で公開した。印はアプリのアイコンと同じ絵（英語のノートの線と A）
 const badge = (id) => `<span class="badge" aria-hidden="true"><svg><use href="#pin-${id}"/></svg></span>`
-const cards = `<article>${badge('kanji')}<h2>たねもじ</h2><p>漢字を学ぶ教材。</p><a class="primary" href="https://kanji.manabi-map.app/">たねもじを開く →</a></article><article>${badge('karuta')}<h2>郷土かるた</h2><p>地域のことばや文化に親しむ教材。</p><span class="state">準備中</span></article>`
+const cards = `<article>${badge('kanji')}<h2>たねもじ</h2><p>漢字を学ぶ教材。</p><a class="primary" href="https://kanji.manabi-map.app/">たねもじを開く →</a></article><article>${badge('english')}<h2>たねワード</h2><p>英単語を学ぶ教材。</p><a class="primary" href="https://english.manabi-map.app/">たねワードを開く →</a></article><article>${badge('karuta')}<h2>郷土かるた</h2><p>地域のことばや文化に親しむ教材。</p><span class="state">準備中</span></article>`
 // 学校の種類は、学校入口（school.manabi-map.app）を経由せず、ここから直接それぞれの行き先へ送る（2026-11-12 本人の案）。
 // 種類と行き先は学校入口の一覧と同じにする。学校入口の種類が増減したら、ここも合わせる
 const schoolKinds = [
@@ -41,7 +42,7 @@ const files = {
   '/': ['text/html; charset=utf-8', html],
   '/robots.txt': ['text/plain; charset=utf-8', 'User-agent: *\nAllow: /\nDisallow: /auth/\nDisallow: /mypage\nDisallow: /favorites\nDisallow: /compare\nDisallow: /family/\n\nUser-agent: meta-externalagent\nUser-agent: Amazonbot\nUser-agent: GPTBot\nUser-agent: ClaudeBot\nUser-agent: CCBot\nUser-agent: Bytespider\nAllow: /api/v1/\nAllow: /data/\nDisallow: /\n\nSitemap: https://manabi-map.app/sitemap.xml\n'],
   '/sitemap.xml': ['application/xml; charset=utf-8', '<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>https://manabi-map.app/</loc></url></urlset>\n'],
-  '/llms.txt': ['text/plain; charset=utf-8', '# まなびマップ\n\n学ぶことと通う場所を見つける入口です。\n\n学校の種類を選ぶ: https://school.manabi-map.app/\n高校・高専: https://high-school.manabi-map.app/\n地ファクト: https://home.manabi-map.app/\nたねもじ（漢字）: https://kanji.manabi-map.app/\n'],
+  '/llms.txt': ['text/plain; charset=utf-8', '# まなびマップ\n\n学ぶことと通う場所を見つける入口です。\n\n学校の種類を選ぶ: https://school.manabi-map.app/\n高校・高専: https://high-school.manabi-map.app/\n地ファクト: https://home.manabi-map.app/\nたねもじ（漢字）: https://kanji.manabi-map.app/\nたねワード（英語）: https://english.manabi-map.app/\n'],
 }
 // Worker の本体は runtime.mjs（/api/v1/* の高校版への中継を含む）。本文をそのまま先頭へ写す
 const runtime = await readFile(resolve(import.meta.dirname, 'runtime.mjs'), 'utf8')
