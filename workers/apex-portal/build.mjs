@@ -43,10 +43,12 @@ if (html.includes('{{') || html.includes('noindex') || html.includes('旧URL')) 
 // ここには書かない（古くならないように、行き先だけを並べる）。機械が読む一覧は /api/catalog.json（runtime.mjs）
 const dataKinds = [
   ['高校・高専', 'https://high-school.manabi-map.app/data/', 'https://high-school.manabi-map.app/api/v1/dataset.json', 'CC BY-SA 4.0'],
-  ['小学校', 'https://school.manabi-map.app/data/', 'https://school.manabi-map.app/api/v1/primary/dataset.json', null],
-  ['中学校', 'https://school.manabi-map.app/data/', 'https://school.manabi-map.app/api/v1/middle/dataset.json', null],
-  ['大学・短大', 'https://school.manabi-map.app/data/', 'https://school.manabi-map.app/api/v1/university/dataset.json', null],
-  ['専修学校（専門学校を含む）', 'https://school.manabi-map.app/data/', 'https://school.manabi-map.app/api/v1/vocational/dataset.json', null],
+  // 4 種は国の資料（文部科学省の学校コード・国土数値情報）を結び付けたもので、元の資料に合わせて CC BY 4.0。
+  // 高校・高専は学びマップが一次資料から集めたデータで CC BY-SA 4.0。正本は各 dataset.json の license
+  ['小学校', 'https://school.manabi-map.app/data/', 'https://school.manabi-map.app/api/v1/primary/dataset.json', 'CC BY 4.0'],
+  ['中学校', 'https://school.manabi-map.app/data/', 'https://school.manabi-map.app/api/v1/middle/dataset.json', 'CC BY 4.0'],
+  ['大学・短大', 'https://school.manabi-map.app/data/', 'https://school.manabi-map.app/api/v1/university/dataset.json', 'CC BY 4.0'],
+  ['専修学校（専門学校を含む）', 'https://school.manabi-map.app/data/', 'https://school.manabi-map.app/api/v1/vocational/dataset.json', 'CC BY 4.0'],
 ]
 const dataPage = `<!doctype html><html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>公開データ・API | ${values.brand}</title>`
   + `<link rel="canonical" href="https://manabi-map.app/data/">${values.favicon}`
@@ -55,7 +57,7 @@ const dataPage = `<!doctype html><html lang="ja"><head><meta charset="utf-8"><me
   + '<h2>全部の一覧（機械向け）</h2><p><a href="/api/catalog.json">/api/catalog.json</a> に、学校の種類ごとの件数・ライセンス・API の URL をまとめています。</p>'
   + '<h2>学校の種類ごと</h2><p>ファイルの大きさと SHA-256、保存用のリンクは、それぞれの説明のページにあります。</p><ul>'
   + dataKinds.map(([name, page, dataset, license]) => `<li><a href="${page}">${name}</a>（<a href="${dataset}">dataset.json</a>${license ? `・${license}` : ''}）</li>`).join('')
-  + '</ul><p>小学校・中学校・大学短大・専修学校は、文部科学省の学校コードと国土数値情報の位置を結び付けたデータで、ライセンスと出典表記は各 dataset.json に書いてあります。</p>'
+  + '</ul><p>ライセンスが種類で違うのは、データの元が違うためです。高校・高専は学びマップが学校・教育委員会などの一次資料から集めたデータで、CC BY-SA 4.0 です。小学校・中学校・大学短大・専修学校は、文部科学省の学校コードと国土数値情報（CC BY 4.0）の位置を結び付けたデータで、元の資料に合わせて CC BY 4.0 です。出典表記は各 dataset.json の attribution にあります。</p>'
   + '<p><a href="https://manabi-map.app/api/v1/dataset.json">https://manabi-map.app/api/v1/</a> は、高校版の /api/v1/ と同じファイルを返す互換の入口です。</p>'
   + '<p><a href="/">まなびマップの入口へ</a></p></main></body></html>\n'
 const files = {
