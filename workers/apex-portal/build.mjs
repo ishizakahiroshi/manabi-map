@@ -20,8 +20,9 @@ const css = `${await readFile(resolve(root, 'web/apex-portal/portal.css'), 'utf8
 // たねもじは 2026-11-04 に kanji.manabi-map.app で公開した（本人の「自走してデプロイまでやっていい」）
 // たねワード（英語）は 2026-11-13 に english.manabi-map.app で公開した。印はアプリのアイコンと同じ絵（英語のノートの線と A）
 // たねちず（社会）・たねさんすう（算数）・たねデジ（情報）は 2026-11-14 に shakai. / math. / joho.manabi-map.app で公開した（本人承認 2026-11-14 01:41 検討シート P7）。印は各アプリのアイコンと同じ絵
+// たねにほん（社会・都道府県）は 2026-11-14 に nihon.manabi-map.app で公開した（本人承認 2026-11-14）。社会なので色はたねちずと同じ黄。印はアプリのアイコンと同じ絵（地図ピンと日本列島）
 const badge = (id) => `<span class="badge" aria-hidden="true"><svg><use href="#pin-${id}"/></svg></span>`
-const cards = `<article data-subject="kokugo">${badge('kanji')}<h2>たねもじ</h2><p>漢字を学ぶ教材。</p><a class="primary" href="https://kanji.manabi-map.app/">たねもじを開く →</a></article><article data-subject="english">${badge('english')}<h2>たねワード</h2><p>英単語を学ぶ教材。</p><a class="primary" href="https://english.manabi-map.app/">たねワードを開く →</a></article><article data-subject="shakai">${badge('shakai')}<h2>たねちず</h2><p>都道府県・県庁所在地・地図記号・山と川を学ぶ教材。</p><a class="primary" href="https://shakai.manabi-map.app/">たねちずを開く →</a></article><article data-subject="math">${badge('math')}<h2>たねさんすう</h2><p>小学校の算数（数と計算）を学ぶ教材。</p><a class="primary" href="https://math.manabi-map.app/">たねさんすうを開く →</a></article><article data-subject="joho">${badge('joho')}<h2>たねデジ</h2><p>ローマ字・タイピング・プログラミングの考え方を学ぶ教材。</p><a class="primary" href="https://joho.manabi-map.app/">たねデジを開く →</a></article><article>${badge('karuta')}<h2>郷土かるた</h2><p>地域のことばや文化に親しむ教材。</p><span class="state">準備中</span></article>`
+const cards = `<article data-subject="kokugo">${badge('kanji')}<h2>たねもじ</h2><p>漢字を学ぶ教材。</p><a class="primary" href="https://kanji.manabi-map.app/">たねもじを開く →</a></article><article data-subject="english">${badge('english')}<h2>たねワード</h2><p>英単語を学ぶ教材。</p><a class="primary" href="https://english.manabi-map.app/">たねワードを開く →</a></article><article data-subject="shakai">${badge('shakai')}<h2>たねちず</h2><p>都道府県・県庁所在地・地図記号・山と川を学ぶ教材。</p><a class="primary" href="https://shakai.manabi-map.app/">たねちずを開く →</a></article><article data-subject="math">${badge('math')}<h2>たねさんすう</h2><p>小学校の算数（数と計算）を学ぶ教材。</p><a class="primary" href="https://math.manabi-map.app/">たねさんすうを開く →</a></article><article data-subject="joho">${badge('joho')}<h2>たねデジ</h2><p>ローマ字・タイピング・プログラミングの考え方を学ぶ教材。</p><a class="primary" href="https://joho.manabi-map.app/">たねデジを開く →</a></article><article data-subject="shakai">${badge('nihon')}<h2>たねにほん</h2><p>47 都道府県の場所・形・県庁所在地を学ぶ教材。</p><a class="primary" href="https://nihon.manabi-map.app/">たねにほんを開く →</a></article><article>${badge('karuta')}<h2>郷土かるた</h2><p>地域のことばや文化に親しむ教材。</p><span class="state">準備中</span></article>`
 // 学校の種類は、学校入口（school.manabi-map.app）を経由せず、ここから直接それぞれの行き先へ送る（2026-11-12 本人の案）。
 // 種類と行き先は学校入口の一覧と同じにする。学校入口の種類が増減したら、ここも合わせる
 const schoolKinds = [
@@ -49,6 +50,7 @@ const values = {
 const promises = '<ul class="promises" aria-label="使う前に"><li>どれも無料</li><li>会員登録なし</li><li>お気に入りや学習の記録は、お使いの端末の中に保存</li></ul>'
 // 更新情報。新しい順に足す。日付は公開した日（build.mjs のコメント・ops の証拠と同じ）
 const news = [
+  ['2026-11-14', '都道府県の場所・形・県庁所在地を学ぶ「たねにほん」を公開しました。', 'https://nihon.manabi-map.app/'],
   ['2026-11-14', '社会の「たねちず」・算数の「たねさんすう」・情報の「たねデジ」を公開しました。', '/#learn'],
   ['2026-11-13', '英単語を学ぶ「たねワード」を公開しました。', 'https://english.manabi-map.app/'],
   ['2026-11-13', '全部の学校の種類の公開データの一覧を公開しました。', '/data/'],
@@ -109,18 +111,18 @@ const privacyPage = `<!doctype html><html lang="ja"><head><meta charset="utf-8">
   // 学校入口（school /privacy/）と地ファクト（home /privacy）は 2026-11-14 に作って公開した
   + '<li><a href="https://school.manabi-map.app/privacy/">小学校・中学校・大学短大・専修学校（学校入口）</a></li>'
   + '<li><a href="https://kanji.manabi-map.app/privacy">たねもじ</a></li><li><a href="https://english.manabi-map.app/privacy">たねワード</a></li>'
-  + '<li><a href="https://shakai.manabi-map.app/privacy">たねちず</a></li><li><a href="https://math.manabi-map.app/privacy">たねさんすう</a></li><li><a href="https://joho.manabi-map.app/privacy">たねデジ</a></li>'
+  + '<li><a href="https://shakai.manabi-map.app/privacy">たねちず</a></li><li><a href="https://math.manabi-map.app/privacy">たねさんすう</a></li><li><a href="https://joho.manabi-map.app/privacy">たねデジ</a></li><li><a href="https://nihon.manabi-map.app/privacy">たねにほん</a></li>'
   + '<li><a href="https://home.manabi-map.app/privacy">地ファクト</a></li></ul>'
   + '<h2 id="terms">6. 利用規約</h2><p>利用規約はサービスごとにあります。</p><ul>'
   + '<li><a href="https://high-school.manabi-map.app/legal/terms/">高校・高専（Manabi Map）</a></li><li><a href="https://kanji.manabi-map.app/terms">たねもじ</a></li><li><a href="https://english.manabi-map.app/terms">たねワード</a></li>'
-  + '<li><a href="https://shakai.manabi-map.app/terms">たねちず</a></li><li><a href="https://math.manabi-map.app/terms">たねさんすう</a></li><li><a href="https://joho.manabi-map.app/terms">たねデジ</a></li></ul>'
-  + '<h2>7. 改定</h2><p>2026-11-13 制定。2026-11-14 たねもじ・たねワード・学校入口・地ファクトのポリシーと、各サービスの利用規約へのリンクを追加。2026-11-14 たねちず・たねさんすう・たねデジのポリシーと利用規約へのリンクを追加。</p>'
+  + '<li><a href="https://shakai.manabi-map.app/terms">たねちず</a></li><li><a href="https://math.manabi-map.app/terms">たねさんすう</a></li><li><a href="https://joho.manabi-map.app/terms">たねデジ</a></li><li><a href="https://nihon.manabi-map.app/terms">たねにほん</a></li></ul>'
+  + '<h2>7. 改定</h2><p>2026-11-13 制定。2026-11-14 たねもじ・たねワード・学校入口・地ファクトのポリシーと、各サービスの利用規約へのリンクを追加。2026-11-14 たねちず・たねさんすう・たねデジのポリシーと利用規約へのリンクを追加。2026-11-14 たねにほんのポリシーと利用規約へのリンクを追加。</p>'
   + '<p><a href="/">まなびマップの入口へ</a></p></main></body></html>\n'
 const files = {
   '/': ['text/html; charset=utf-8', html],
   '/robots.txt': ['text/plain; charset=utf-8', 'User-agent: *\nAllow: /\nDisallow: /auth/\nDisallow: /mypage\nDisallow: /favorites\nDisallow: /compare\nDisallow: /family/\n\nUser-agent: meta-externalagent\nUser-agent: Amazonbot\nUser-agent: GPTBot\nUser-agent: ClaudeBot\nUser-agent: CCBot\nUser-agent: Bytespider\nAllow: /api/v1/\nAllow: /api/catalog.json\nAllow: /data/\nDisallow: /\n\nSitemap: https://manabi-map.app/sitemap.xml\n'],
   '/sitemap.xml': ['application/xml; charset=utf-8', '<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>https://manabi-map.app/</loc></url><url><loc>https://manabi-map.app/data/</loc></url><url><loc>https://manabi-map.app/legal/privacy/</loc></url></urlset>\n'],
-  '/llms.txt': ['text/plain; charset=utf-8', '# まなびマップ\n\n学ぶことと通う場所を見つける入口です。\n\n学校の種類を選ぶ: https://school.manabi-map.app/\n高校・高専: https://high-school.manabi-map.app/\n地ファクト: https://home.manabi-map.app/\nたねもじ（漢字）: https://kanji.manabi-map.app/\nたねワード（英語）: https://english.manabi-map.app/\nたねちず（社会）: https://shakai.manabi-map.app/\nたねさんすう（算数）: https://math.manabi-map.app/\nたねデジ（情報）: https://joho.manabi-map.app/\n\n## 公開データ（API）\n\n全部の学校の種類の一覧: https://manabi-map.app/api/catalog.json\n説明: https://manabi-map.app/data/\n'],
+  '/llms.txt': ['text/plain; charset=utf-8', '# まなびマップ\n\n学ぶことと通う場所を見つける入口です。\n\n学校の種類を選ぶ: https://school.manabi-map.app/\n高校・高専: https://high-school.manabi-map.app/\n地ファクト: https://home.manabi-map.app/\nたねもじ（漢字）: https://kanji.manabi-map.app/\nたねワード（英語）: https://english.manabi-map.app/\nたねちず（社会）: https://shakai.manabi-map.app/\nたねさんすう（算数）: https://math.manabi-map.app/\nたねデジ（情報）: https://joho.manabi-map.app/\nたねにほん（社会・都道府県）: https://nihon.manabi-map.app/\n\n## 公開データ（API）\n\n全部の学校の種類の一覧: https://manabi-map.app/api/catalog.json\n説明: https://manabi-map.app/data/\n'],
   '/data/': ['text/html; charset=utf-8', dataPage],
   '/legal/privacy/': ['text/html; charset=utf-8', privacyPage],
 }

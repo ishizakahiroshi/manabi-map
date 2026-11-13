@@ -32,7 +32,11 @@ for (const [subject, name, host] of [['shakai', 'たねちず', 'shakai'], ['mat
   assert.ok(html.includes(`href="https://${host}.manabi-map.app/">${name}を開く →</a>`), `${name} の行き先が無い`)
   assert.ok(html.includes(`.cards article[data-subject="${subject}"]{--s-accent:`), `${name} の色が無い`)
 }
-assert.equal((html.match(/<article data-subject=/g) || []).length, 5, '公開していない教科のカードが入っている')
+// たねにほん（2026-11-14 公開）。社会なので data-subject はたねちずと同じ shakai、印は pin-nihon
+assert.match(html, /<article data-subject="shakai"><span class="badge"[^>]*><svg><use href="#pin-nihon"\/><\/svg><\/span><h2>たねにほん<\/h2>/)
+assert.ok(html.includes('href="https://nihon.manabi-map.app/">たねにほんを開く →</a>'), 'たねにほん の行き先が無い')
+assert.ok(html.includes('<symbol id="pin-nihon"'), 'たねにほん の印が無い')
+assert.equal((html.match(/<article data-subject=/g) || []).length, 6, '公開していない教科のカードが入っている')
 assert.match(html, /rel="canonical" href="https:\/\/manabi-map\.app\//)
 assert.doesNotMatch(html, /noindex|旧URL|移行候補|\{\{/)
 // フッターから総合入口のプライバシーポリシーへつなぐ。訪問を数えていることを利用者が確かめられるようにする（2026-11-13 に高校版のページから切り替え）
