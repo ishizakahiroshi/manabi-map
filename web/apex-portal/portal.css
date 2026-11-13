@@ -47,6 +47,9 @@ p{line-height:1.9}
 .primary:active{transform:translate(2px,2px);box-shadow:1px 1px 0 var(--ink)}
 .kinds{display:flex;flex-wrap:wrap;gap:12px 10px;list-style:none;margin:18px 0 0;padding:0}
 .kinds .primary{min-height:46px;padding:8px 18px}
+/* 学校の種類の色（2026-11-14）。値は school-themes.json から --k-button / --k-hover で入る。色の値をここに書かない */
+.kinds .primary[data-kind]{background:var(--k-button)}
+.kinds .primary[data-kind]:hover{background:var(--k-hover)}
 .state{display:inline-flex;align-items:center;min-height:44px;font-size:13px;font-weight:700;line-height:1.6;border:2px dashed #b9ab97;border-radius:22px;padding:8px 18px;color:#635343}
 .recovery{margin-top:8px;font-size:13px}
 .badge{width:92px;height:92px;border-radius:50%;background:var(--peach);display:grid;place-items:center}

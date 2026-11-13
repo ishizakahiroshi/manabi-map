@@ -10,7 +10,13 @@ const template = await readFile(resolve(root, 'web/apex-portal/index.html'), 'ut
 const themes = JSON.parse(await readFile(resolve(root, 'web/apex-portal/subject-themes.json'), 'utf8'))
 const subjectCss = Object.entries(themes.subjects).map(([id, t]) =>
   `.cards article[data-subject="${id}"]{--s-accent:${t.accent};--s-soft:${t.soft};--s-text:${t.text};--s-on-accent:${themes.onAccent}}`).join('\n')
-const css = `${await readFile(resolve(root, 'web/apex-portal/portal.css'), 'utf8')}\n${subjectCss}\n`
+// 学校の種類の色（2026-11-14）。行き先の画面のボタンと同じ色にする。値は school-themes.json の 1 か所
+const schoolThemes = JSON.parse(await readFile(resolve(root, 'web/apex-portal/school-themes.json'), 'utf8')).kinds
+const kindCss = Object.entries(schoolThemes).map(([id, t]) => {
+  if (![t.button, t.hover].every((v) => /^#[\da-f]{6}$/i.test(v ?? ''))) throw new Error(`Invalid school theme: ${id}`)
+  return `.kinds a[data-kind="${id}"]{--k-button:${t.button};--k-hover:${t.hover}}`
+}).join('\n')
+const css = `${await readFile(resolve(root, 'web/apex-portal/portal.css'), 'utf8')}\n${subjectCss}\n${kindCss}\n`
 // たねもじは 2026-11-04 に kanji.manabi-map.app で公開した（本人の「自走してデプロイまでやっていい」）
 // たねワード（英語）は 2026-11-13 に english.manabi-map.app で公開した。印はアプリのアイコンと同じ絵（英語のノートの線と A）
 // たねちず（社会）・たねさんすう（算数）・たねデジ（情報）は 2026-11-14 に shakai. / math. / joho.manabi-map.app で公開した（本人承認 2026-11-14 01:41 検討シート P7）。印は各アプリのアイコンと同じ絵
@@ -19,13 +25,14 @@ const cards = `<article data-subject="kokugo">${badge('kanji')}<h2>たねもじ<
 // 学校の種類は、学校入口（school.manabi-map.app）を経由せず、ここから直接それぞれの行き先へ送る（2026-11-12 本人の案）。
 // 種類と行き先は学校入口の一覧と同じにする。学校入口の種類が増減したら、ここも合わせる
 const schoolKinds = [
-  ['小学校', 'https://school.manabi-map.app/primary/'], ['中学校', 'https://school.manabi-map.app/middle/'],
-  ['高校・高専', 'https://high-school.manabi-map.app/'], ['大学・短大', 'https://school.manabi-map.app/university/'],
-  ['専修学校（専門学校を含む）', 'https://school.manabi-map.app/vocational/'],
+  ['primary', '小学校', 'https://school.manabi-map.app/primary/'], ['middle', '中学校', 'https://school.manabi-map.app/middle/'],
+  ['high-school', '高校・高専', 'https://high-school.manabi-map.app/'], ['university', '大学・短大', 'https://school.manabi-map.app/university/'],
+  ['vocational', '専修学校（専門学校を含む）', 'https://school.manabi-map.app/vocational/'],
 ]
+for (const [id] of schoolKinds) if (!schoolThemes[id]) throw new Error(`School theme missing: ${id}`)
 const values = {
   origin: 'https://manabi-map.app', brand: 'まなびマップ', brandMark: brandMark(), favicon: favicon(), schoolBrand: 'Manabi Map（まなびマップ）',
-  schoolAction: `<ul class="kinds" aria-label="学校の種類">${schoolKinds.map(([name, url]) => `<li><a class="primary" href="${url}">${name} →</a></li>`).join('')}</ul>`,
+  schoolAction: `<ul class="kinds" aria-label="学校の種類">${schoolKinds.map(([id, name, url]) => `<li><a class="primary" data-kind="${id}" href="${url}">${name} →</a></li>`).join('')}</ul>`,
   homeAction: '<a class="primary" href="https://home.manabi-map.app/">地ファクトを開く →</a>',
   // 地ファクトのロゴは文字（chifact. と名前）。書体・色・点の色は地ファクトの画面と同じにする
   homeBrand: '<p class="service-brand chifact">chifact<span>.</span><small>｜地ファクト</small></p>',

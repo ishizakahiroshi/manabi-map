@@ -7,11 +7,14 @@ const response = await get('/')
 const html = await response.text()
 assert.equal(response.status, 200)
 // 学校の種類は、学校入口を経由せず、それぞれの行き先へ直接つなぐ
-for (const [name, url] of [['小学校', 'https://school.manabi-map.app/primary/'], ['中学校', 'https://school.manabi-map.app/middle/'],
-  ['高校・高専', 'https://high-school.manabi-map.app/'], ['大学・短大', 'https://school.manabi-map.app/university/'],
-  ['専修学校（専門学校を含む）', 'https://school.manabi-map.app/vocational/']]) {
-  assert.ok(html.includes(`<a class="primary" href="${url}">${name} →</a>`), `学校の種類の行き先が無い: ${name}`)
+// 色は行き先の画面と同じ（school-themes.json。2026-11-14）
+for (const [kind, name, url] of [['primary', '小学校', 'https://school.manabi-map.app/primary/'], ['middle', '中学校', 'https://school.manabi-map.app/middle/'],
+  ['high-school', '高校・高専', 'https://high-school.manabi-map.app/'], ['university', '大学・短大', 'https://school.manabi-map.app/university/'],
+  ['vocational', '専修学校（専門学校を含む）', 'https://school.manabi-map.app/vocational/']]) {
+  assert.ok(html.includes(`<a class="primary" data-kind="${kind}" href="${url}">${name} →</a>`), `学校の種類の行き先が無い: ${name}`)
+  assert.ok(html.includes(`.kinds a[data-kind="${kind}"]{--k-button:#`), `学校の種類の色が無い: ${name}`)
 }
+assert.ok(html.includes('.kinds a[data-kind="primary"]{--k-button:#efc5c3;'), '小学校の色が学校入口の画面と違う')
 assert.match(html, /https:\/\/home\.manabi-map\.app\//)
 assert.ok(html.includes('<p class="service-brand chifact">chifact<span>.</span><small>｜地ファクト</small></p>'), '地ファクトのロゴの文字が無い')
 assert.match(html, /href="https:\/\/kanji\.manabi-map\.app\/">たねもじを開く/)
