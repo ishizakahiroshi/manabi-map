@@ -18,8 +18,22 @@ assert.match(html, /href="https:\/\/kanji\.manabi-map\.app\/">たねもじを開
 assert.match(html, /href="https:\/\/english\.manabi-map\.app\/">たねワードを開く/)
 assert.match(html, /rel="canonical" href="https:\/\/manabi-map\.app\//)
 assert.doesNotMatch(html, /noindex|旧URL|移行候補|\{\{/)
-// フッターからプライバシーポリシー（高校版が配る本文）へつなぐ。訪問を数えていることを利用者が確かめられるようにする
-assert.match(html, /<footer>[\s\S]*<a href="https:\/\/high-school\.manabi-map\.app\/legal\/privacy\/">プライバシーポリシー<\/a><\/footer>/)
+// フッターから総合入口のプライバシーポリシーへつなぐ。訪問を数えていることを利用者が確かめられるようにする（2026-11-13 に高校版のページから切り替え）
+assert.match(html, /<footer>[\s\S]*<a href="\/legal\/privacy\/">プライバシーポリシー<\/a><\/footer>/)
+assert.doesNotMatch(html, /high-school\.manabi-map\.app\/legal\/privacy/)
+{
+  const res = await get('/legal/privacy/')
+  const body = await res.text()
+  assert.equal(res.status, 200)
+  assert.match(body, /<h1>まなびマップ プライバシーポリシー<\/h1>/)
+  assert.match(body, /Cloudflare Web Analytics/)
+  assert.match(body, /rel="canonical" href="https:\/\/manabi-map\.app\/legal\/privacy\/"/)
+  assert.ok(body.includes('href="https://high-school.manabi-map.app/legal/privacy/"'), '高校版のポリシーへつなぐ')
+  assert.doesNotMatch(body, /<script|<img\b|<link\b[^>]*stylesheet|\{\{/i)
+  const redirect = await get('/legal/privacy')
+  assert.equal(redirect.status, 301); assert.equal(redirect.headers.get('location'), '/legal/privacy/')
+  assert.match(await (await get('/sitemap.xml')).text(), /https:\/\/manabi-map\.app\/legal\/privacy\//)
+}
 // 絵とロゴは HTML の中の SVG だけで描く（CSP は default-src 'none'）。<use> の参照先がすべて同じ HTML にあること
 assert.match(html, /<symbol id="brand-mark" viewBox="[\d\s.-]+">/)
 const used = [...html.matchAll(/<use\b[^>]*\shref="([^"]*)"/g)].map((m) => m[1])

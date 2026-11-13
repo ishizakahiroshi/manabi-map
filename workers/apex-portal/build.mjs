@@ -25,9 +25,10 @@ const values = {
   // 地ファクトのロゴは文字（chifact. と名前）。書体・色・点の色は地ファクトの画面と同じにする
   homeBrand: '<p class="service-brand chifact">chifact<span>.</span><small>｜地ファクト</small></p>',
   // 訪問を数えていること（Cookie を使わないアクセス解析）を確かめられるよう、プライバシーポリシーへつなぐ。
-  // ポリシーの本文は高校版が配っている。呼び名は高校版のフッター（web/data/site-footer-links.json）と同じにする
+  // 総合入口のポリシーは総合入口が自分で配る（/legal/privacy/。2026-11-13 本人決定。以前は高校版のページへ飛ばしていた）。
+  // 呼び名は高校版のフッター（web/data/site-footer-links.json）と同じにする
   // 公開データ（API）の案内（/data/）へもつなぐ（2026-11-13 本人決定）
-  footerLinks: '<a href="/data/">公開データ・API</a> <a href="https://high-school.manabi-map.app/legal/privacy/">プライバシーポリシー</a>',
+  footerLinks: '<a href="/data/">公開データ・API</a> <a href="/legal/privacy/">プライバシーポリシー</a>',
   learningCards: cards, recoveryLink: '', recoveryNotice: '',
 }
 const html = template.replace(/<meta name="robots" content="noindex">/, '')
@@ -60,12 +61,30 @@ const dataPage = `<!doctype html><html lang="ja"><head><meta charset="utf-8"><me
   + '</ul><p>ライセンスが種類で違うのは、データの元が違うためです。高校・高専は学びマップが学校・教育委員会などの一次資料から集めたデータで、CC BY-SA 4.0 です。小学校・中学校・大学短大・専修学校は、文部科学省の学校コードと国土数値情報（CC BY 4.0）の位置を結び付けたデータで、元の資料に合わせて CC BY 4.0 です。出典表記は各 dataset.json の attribution にあります。</p>'
   + '<p><a href="https://manabi-map.app/api/v1/dataset.json">https://manabi-map.app/api/v1/</a> は、高校版の /api/v1/ と同じファイルを返す互換の入口です。</p>'
   + '<p><a href="/">まなびマップの入口へ</a></p></main></body></html>\n'
+// /legal/privacy/: 総合入口（manabi-map.app）だけのプライバシーポリシー。書くのは runtime.mjs と PAGE_CSP で実際にしていることだけ。
+// 各サービスの中での扱いは、それぞれのサービスのポリシーが正本なので、ここには写さず行き先だけを並べる
+const privacyPage = `<!doctype html><html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>プライバシーポリシー | ${values.brand}</title>`
+  + `<link rel="canonical" href="https://manabi-map.app/legal/privacy/">${values.favicon}`
+  + '<style>body{font-family:system-ui,sans-serif;line-height:1.7;max-width:760px;margin:0 auto;padding:16px;color:#222}li{margin:6px 0}</style></head><body><main>'
+  + `<h1>${values.brand} プライバシーポリシー</h1>`
+  + `<p>この文書は、${values.brand}の入口（https://manabi-map.app/）での情報の扱いを書いたものです。入口から開く各サービスでの扱いは、それぞれのサービスのプライバシーポリシーをご覧ください。</p>`
+  + '<h2>1. 運営者・連絡先</h2><ul><li>運営者: ishizakahiroshi（個人による OSS プロジェクト）</li><li>連絡先: <a href="https://high-school.manabi-map.app/legal/privacy/">高校・高専のプライバシーポリシー</a>の「1. 運営者・連絡先」にあるメールアドレス</li></ul>'
+  + '<h2>2. 入口で受け取る情報</h2><p>入口には、ログイン・入力欄・お気に入りなどの機能はありません。氏名・メールアドレスなどの個人情報は受け取りません。Cookie も使いません。</p>'
+  + '<h2>3. アクセス解析</h2><p>訪問の数を知るために、Cloudflare Web Analytics を使っています。Cookie を使わない計測で、ページの表示や読み込みの速さなどが Cloudflare へ送られます。詳しくは <a href="https://www.cloudflare.com/privacypolicy/">Cloudflare のプライバシーポリシー</a>をご覧ください。ほかの解析・広告のスクリプトは読み込みません。</p>'
+  + '<h2>4. 配信の記録</h2><p>入口は Cloudflare のサービスで配信しています。配信のため、Cloudflare が IP アドレスなどの通信の情報を扱います。</p>'
+  + '<h2>5. 各サービスのプライバシーポリシー</h2><ul>'
+  + '<li><a href="https://high-school.manabi-map.app/legal/privacy/">高校・高専（Manabi Map）</a></li>'
+  // 2026-11-13 時点で、ほかのサービス（school / home / kanji / english）には専用のポリシーのページが無い（実物を開いて確認）。できたらここへ足す
+  + '</ul><p>小学校・中学校・大学短大・専修学校、地ファクト、たねもじ、たねワードには、まだ専用のプライバシーポリシーがありません。用意したら、ここに載せます。</p>'
+  + '<h2>6. 改定</h2><p>2026-11-13 制定。</p>'
+  + '<p><a href="/">まなびマップの入口へ</a></p></main></body></html>\n'
 const files = {
   '/': ['text/html; charset=utf-8', html],
   '/robots.txt': ['text/plain; charset=utf-8', 'User-agent: *\nAllow: /\nDisallow: /auth/\nDisallow: /mypage\nDisallow: /favorites\nDisallow: /compare\nDisallow: /family/\n\nUser-agent: meta-externalagent\nUser-agent: Amazonbot\nUser-agent: GPTBot\nUser-agent: ClaudeBot\nUser-agent: CCBot\nUser-agent: Bytespider\nAllow: /api/v1/\nAllow: /api/catalog.json\nAllow: /data/\nDisallow: /\n\nSitemap: https://manabi-map.app/sitemap.xml\n'],
-  '/sitemap.xml': ['application/xml; charset=utf-8', '<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>https://manabi-map.app/</loc></url><url><loc>https://manabi-map.app/data/</loc></url></urlset>\n'],
+  '/sitemap.xml': ['application/xml; charset=utf-8', '<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>https://manabi-map.app/</loc></url><url><loc>https://manabi-map.app/data/</loc></url><url><loc>https://manabi-map.app/legal/privacy/</loc></url></urlset>\n'],
   '/llms.txt': ['text/plain; charset=utf-8', '# まなびマップ\n\n学ぶことと通う場所を見つける入口です。\n\n学校の種類を選ぶ: https://school.manabi-map.app/\n高校・高専: https://high-school.manabi-map.app/\n地ファクト: https://home.manabi-map.app/\nたねもじ（漢字）: https://kanji.manabi-map.app/\nたねワード（英語）: https://english.manabi-map.app/\n\n## 公開データ（API）\n\n全部の学校の種類の一覧: https://manabi-map.app/api/catalog.json\n説明: https://manabi-map.app/data/\n'],
   '/data/': ['text/html; charset=utf-8', dataPage],
+  '/legal/privacy/': ['text/html; charset=utf-8', privacyPage],
 }
 // Worker の本体は runtime.mjs（/api/v1/* の高校版への中継を含む）。本文をそのまま先頭へ写す
 const runtime = await readFile(resolve(import.meta.dirname, 'runtime.mjs'), 'utf8')

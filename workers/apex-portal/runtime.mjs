@@ -108,6 +108,7 @@ async function handleRequest(request, files, fetchImpl) {
   if (url.pathname.startsWith('/api/v1/')) return proxyPublicApi(request, url, fetchImpl)
   if (url.pathname === '/api/catalog.json') return catalog(request, fetchImpl)
   if (url.pathname === '/data') return new Response(null, { status: 301, headers: { ...COMMON_HEADERS, Location: '/data/' } })
+  if (url.pathname === '/legal/privacy') return new Response(null, { status: 301, headers: { ...COMMON_HEADERS, Location: '/legal/privacy/' } })
   const file = files[url.pathname]
   if (!file) return notFound()
   const headers = { ...COMMON_HEADERS, 'Content-Type': file[0], 'Content-Security-Policy': PAGE_CSP, 'Cache-Control': 'public, max-age=300' }
