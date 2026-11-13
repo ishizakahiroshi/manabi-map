@@ -26,7 +26,8 @@ const values = {
   homeBrand: '<p class="service-brand chifact">chifact<span>.</span><small>｜地ファクト</small></p>',
   // 訪問を数えていること（Cookie を使わないアクセス解析）を確かめられるよう、プライバシーポリシーへつなぐ。
   // ポリシーの本文は高校版が配っている。呼び名は高校版のフッター（web/data/site-footer-links.json）と同じにする
-  footerLinks: '<a href="https://high-school.manabi-map.app/legal/privacy/">プライバシーポリシー</a>',
+  // 公開データ（API）の案内（/data/）へもつなぐ（2026-11-13 本人決定）
+  footerLinks: '<a href="/data/">公開データ・API</a> <a href="https://high-school.manabi-map.app/legal/privacy/">プライバシーポリシー</a>',
   learningCards: cards, recoveryLink: '', recoveryNotice: '',
 }
 const html = template.replace(/<meta name="robots" content="noindex">/, '')
@@ -38,11 +39,31 @@ const html = template.replace(/<meta name="robots" content="noindex">/, '')
     return values[key]
   })
 if (html.includes('{{') || html.includes('noindex') || html.includes('旧URL')) throw new Error('Invalid public portal')
+// /data/: 全部の学校の種類の公開データへの案内（人が読むページ）。件数・大きさ・SHA-256 は各サイトの /data/ と dataset.json が正本なので、
+// ここには書かない（古くならないように、行き先だけを並べる）。機械が読む一覧は /api/catalog.json（runtime.mjs）
+const dataKinds = [
+  ['高校・高専', 'https://high-school.manabi-map.app/data/', 'https://high-school.manabi-map.app/api/v1/dataset.json', 'CC BY-SA 4.0'],
+  ['小学校', 'https://school.manabi-map.app/data/', 'https://school.manabi-map.app/api/v1/primary/dataset.json', null],
+  ['中学校', 'https://school.manabi-map.app/data/', 'https://school.manabi-map.app/api/v1/middle/dataset.json', null],
+  ['大学・短大', 'https://school.manabi-map.app/data/', 'https://school.manabi-map.app/api/v1/university/dataset.json', null],
+  ['専修学校（専門学校を含む）', 'https://school.manabi-map.app/data/', 'https://school.manabi-map.app/api/v1/vocational/dataset.json', null],
+]
+const dataPage = `<!doctype html><html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>公開データ・API | ${values.brand}</title>`
+  + `<link rel="canonical" href="https://manabi-map.app/data/">${values.favicon}`
+  + '<style>body{font-family:system-ui,sans-serif;line-height:1.7;max-width:760px;margin:0 auto;padding:16px;color:#222}code{word-break:break-all}li{margin:6px 0}</style></head><body><main>'
+  + `<h1>公開データ・API</h1><p>${values.brand}は、学校の種類ごとの基本情報を、固定 URL の JSON で配っています。認証は不要で、どのサイトからも読めます。</p>`
+  + '<h2>全部の一覧（機械向け）</h2><p><a href="/api/catalog.json">/api/catalog.json</a> に、学校の種類ごとの件数・ライセンス・API の URL をまとめています。</p>'
+  + '<h2>学校の種類ごと</h2><p>ファイルの大きさと SHA-256、保存用のリンクは、それぞれの説明のページにあります。</p><ul>'
+  + dataKinds.map(([name, page, dataset, license]) => `<li><a href="${page}">${name}</a>（<a href="${dataset}">dataset.json</a>${license ? `・${license}` : ''}）</li>`).join('')
+  + '</ul><p>小学校・中学校・大学短大・専修学校は、文部科学省の学校コードと国土数値情報の位置を結び付けたデータで、ライセンスと出典表記は各 dataset.json に書いてあります。</p>'
+  + '<p><a href="https://manabi-map.app/api/v1/dataset.json">https://manabi-map.app/api/v1/</a> は、高校版の /api/v1/ と同じファイルを返す互換の入口です。</p>'
+  + '<p><a href="/">まなびマップの入口へ</a></p></main></body></html>\n'
 const files = {
   '/': ['text/html; charset=utf-8', html],
-  '/robots.txt': ['text/plain; charset=utf-8', 'User-agent: *\nAllow: /\nDisallow: /auth/\nDisallow: /mypage\nDisallow: /favorites\nDisallow: /compare\nDisallow: /family/\n\nUser-agent: meta-externalagent\nUser-agent: Amazonbot\nUser-agent: GPTBot\nUser-agent: ClaudeBot\nUser-agent: CCBot\nUser-agent: Bytespider\nAllow: /api/v1/\nAllow: /data/\nDisallow: /\n\nSitemap: https://manabi-map.app/sitemap.xml\n'],
-  '/sitemap.xml': ['application/xml; charset=utf-8', '<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>https://manabi-map.app/</loc></url></urlset>\n'],
-  '/llms.txt': ['text/plain; charset=utf-8', '# まなびマップ\n\n学ぶことと通う場所を見つける入口です。\n\n学校の種類を選ぶ: https://school.manabi-map.app/\n高校・高専: https://high-school.manabi-map.app/\n地ファクト: https://home.manabi-map.app/\nたねもじ（漢字）: https://kanji.manabi-map.app/\nたねワード（英語）: https://english.manabi-map.app/\n'],
+  '/robots.txt': ['text/plain; charset=utf-8', 'User-agent: *\nAllow: /\nDisallow: /auth/\nDisallow: /mypage\nDisallow: /favorites\nDisallow: /compare\nDisallow: /family/\n\nUser-agent: meta-externalagent\nUser-agent: Amazonbot\nUser-agent: GPTBot\nUser-agent: ClaudeBot\nUser-agent: CCBot\nUser-agent: Bytespider\nAllow: /api/v1/\nAllow: /api/catalog.json\nAllow: /data/\nDisallow: /\n\nSitemap: https://manabi-map.app/sitemap.xml\n'],
+  '/sitemap.xml': ['application/xml; charset=utf-8', '<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>https://manabi-map.app/</loc></url><url><loc>https://manabi-map.app/data/</loc></url></urlset>\n'],
+  '/llms.txt': ['text/plain; charset=utf-8', '# まなびマップ\n\n学ぶことと通う場所を見つける入口です。\n\n学校の種類を選ぶ: https://school.manabi-map.app/\n高校・高専: https://high-school.manabi-map.app/\n地ファクト: https://home.manabi-map.app/\nたねもじ（漢字）: https://kanji.manabi-map.app/\nたねワード（英語）: https://english.manabi-map.app/\n\n## 公開データ（API）\n\n全部の学校の種類の一覧: https://manabi-map.app/api/catalog.json\n説明: https://manabi-map.app/data/\n'],
+  '/data/': ['text/html; charset=utf-8', dataPage],
 }
 // Worker の本体は runtime.mjs（/api/v1/* の高校版への中継を含む）。本文をそのまま先頭へ写す
 const runtime = await readFile(resolve(import.meta.dirname, 'runtime.mjs'), 'utf8')

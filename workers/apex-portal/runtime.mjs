@@ -57,12 +57,57 @@ async function proxyPublicApi(request, url, fetchImpl) {
   return new Response(withBody ? upstream.body : null, { status: upstream.status, headers })
 }
 
+// /api/catalog.json は、学びマップの全部の学校の種類の公開 API をまとめた一覧（2026-11-13 本人決定）。
+// データはここに持たず、高校版と学校入口の dataset.json をその場で読んで、件数・ライセンス・URL だけを並べる。
+// /api/v1/* は高校版の互換の入口のまま変えない（使っている人のプログラムを壊さないため）。
+const SCHOOL_ORIGIN = 'https://school.manabi-map.app'
+const KIND_ID = /^[a-z][a-z_]{0,30}$/
+
+async function readDataset(fetchImpl, origin) {
+  const res = await fetchImpl(`${origin}/api/v1/dataset.json`, { method: 'GET', redirect: 'manual' })
+  if (res.status !== 200 || !/^application\/json(?:\s*;|$)/i.test(res.headers.get('content-type') ?? '')) {
+    await res.body?.cancel()
+    throw new Error('upstream')
+  }
+  return res.json()
+}
+
+async function catalog(request, fetchImpl) {
+  let hs, school
+  try {
+    ;[hs, school] = await Promise.all([readDataset(fetchImpl, API_ORIGIN), readDataset(fetchImpl, SCHOOL_ORIGIN)])
+  } catch {
+    return badGateway()
+  }
+  const count = (v) => (Number.isInteger(v) && v >= 0 ? v : null)
+  const text = (v) => (typeof v === 'string' && v.length <= 200 ? v : null)
+  const kinds = Array.isArray(school?.kinds) ? school.kinds.filter((k) => KIND_ID.test(k?.id ?? '')) : []
+  const datasets = [
+    { id: 'high_school', label: '高校・高専', school_count: count(hs?.school_count), license: text(hs?.license), generated_at: text(hs?.generated_at),
+      dataset_url: `${API_ORIGIN}/api/v1/dataset.json`, schools_url: `${API_ORIGIN}/api/v1/schools.json`, openapi_url: `${API_ORIGIN}/api/v1/openapi.json`, data_page: `${API_ORIGIN}/data/` },
+    ...kinds.map((k) => ({ id: k.id, label: text(k.label), school_count: count(k.school_count), license: text(k.license), generated_at: null,
+      dataset_url: `${SCHOOL_ORIGIN}/api/v1/${k.id}/dataset.json`, schools_url: `${SCHOOL_ORIGIN}/api/v1/${k.id}/schools.json`, openapi_url: `${SCHOOL_ORIGIN}/api/v1/openapi.json`, data_page: `${SCHOOL_ORIGIN}/data/` })),
+  ]
+  const body = JSON.stringify({
+    name: 'まなびマップ 公開データの一覧', catalog_version: 1,
+    description: '学びマップの学校の種類ごとの公開 API の入口です。データ本体・大きさ・SHA-256 は各 dataset_url にあります。認証は不要で、CORS はすべての origin に開いています。',
+    total_school_count: datasets.every((d) => d.school_count !== null) ? datasets.reduce((s, d) => s + d.school_count, 0) : null,
+    datasets,
+    compatibility: 'https://manabi-map.app/api/v1/ は高校版の /api/v1/ と同じファイルを返す互換の入口です。',
+    data_page: 'https://manabi-map.app/data/',
+  }, null, 2) + '\n'
+  const headers = { ...COMMON_HEADERS, 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'public, max-age=3600', 'Access-Control-Allow-Origin': '*', 'Content-Security-Policy': API_CSP }
+  return new Response(request.method === 'HEAD' ? null : body, { headers })
+}
+
 async function handleRequest(request, files, fetchImpl) {
   const url = new URL(request.url)
   if (!['GET', 'HEAD'].includes(request.method)) {
     return new Response('Method Not Allowed', { status: 405, headers: { Allow: 'GET, HEAD' } })
   }
   if (url.pathname.startsWith('/api/v1/')) return proxyPublicApi(request, url, fetchImpl)
+  if (url.pathname === '/api/catalog.json') return catalog(request, fetchImpl)
+  if (url.pathname === '/data') return new Response(null, { status: 301, headers: { ...COMMON_HEADERS, Location: '/data/' } })
   const file = files[url.pathname]
   if (!file) return notFound()
   const headers = { ...COMMON_HEADERS, 'Content-Type': file[0], 'Content-Security-Policy': PAGE_CSP, 'Cache-Control': 'public, max-age=300' }

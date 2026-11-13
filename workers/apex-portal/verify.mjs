@@ -111,4 +111,40 @@ for (const [label, reply, status] of failures) {
   assert.equal(res.status, status, label)
   assert.equal(res.headers.get('access-control-allow-origin'), null, `${label} に CORS を付けない`)
 }
+// /data/ は全種類の案内。/data は /data/ へ。トップのフッターからつながる
+const dataRes = await get('/data/')
+const dataHtml = await dataRes.text()
+assert.equal(dataRes.status, 200)
+assert.match(dataHtml, /href="\/api\/catalog\.json"/)
+for (const kind of ['primary', 'middle', 'university', 'vocational']) assert.ok(dataHtml.includes(`https://school.manabi-map.app/api/v1/${kind}/dataset.json`), kind)
+assert.ok(dataHtml.includes('https://high-school.manabi-map.app/data/'))
+assert.doesNotMatch(dataHtml, /<script|<img\b|<link\b[^>]*stylesheet/i)
+const toData = await get('/data')
+assert.equal(toData.status, 301); assert.equal(toData.headers.get('location'), '/data/')
+assert.match(html, /<footer>[\s\S]*<a href="\/data\/">公開データ・API<\/a>/)
+assert.match(await (await get('/robots.txt')).text(), /Allow: \/api\/catalog\.json/)
+assert.match(await (await get('/sitemap.xml')).text(), /https:\/\/manabi-map\.app\/data\//)
+
+// /api/catalog.json は高校版と学校入口の dataset.json を読んでまとめる
+const datasets = {
+  'https://high-school.manabi-map.app/api/v1/dataset.json': { school_count: 5088, license: 'CC BY-SA 4.0', generated_at: '2026-11-13T00:00:00Z' },
+  'https://school.manabi-map.app/api/v1/dataset.json': { kinds: [{ id: 'primary', label: '小学校', school_count: 100, license: 'CC BY 4.0' }, { id: 'Bad/Id', label: 'x', school_count: 1 }] },
+}
+calls.length = 0
+globalThis.fetch = async (input, init = {}) => {
+  calls.push({ url: String(input), method: init.method })
+  const body = datasets[String(input)]
+  return body ? new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } }) : new Response('nf', { status: 404 })
+}
+const cat = await api('/api/catalog.json?x=1')
+assert.equal(cat.status, 200)
+assert.equal(cat.headers.get('access-control-allow-origin'), '*')
+const catBody = await cat.json()
+assert.deepEqual(catBody.datasets.map((d) => [d.id, d.school_count]), [['high_school', 5088], ['primary', 100]])
+assert.equal(catBody.total_school_count, 5188)
+assert.equal(catBody.datasets[1].dataset_url, 'https://school.manabi-map.app/api/v1/primary/dataset.json')
+assert.deepEqual(calls.map((c) => c.url).sort(), Object.keys(datasets).sort())
+datasets['https://school.manabi-map.app/api/v1/dataset.json'] = undefined
+assert.equal((await api('/api/catalog.json')).status, 502, '片方が読めなければ 502')
+assert.equal((await api('/api/catalog.json', { method: 'POST' })).status, 405)
 console.log('経路と検索情報、公開データの中継の確認に成功')
