@@ -19,7 +19,12 @@ assert.match(html, /href="https:\/\/english\.manabi-map\.app\/">たねワード�
 assert.match(html, /rel="canonical" href="https:\/\/manabi-map\.app\//)
 assert.doesNotMatch(html, /noindex|旧URL|移行候補|\{\{/)
 // フッターから総合入口のプライバシーポリシーへつなぐ。訪問を数えていることを利用者が確かめられるようにする（2026-11-13 に高校版のページから切り替え）
-assert.match(html, /<footer>[\s\S]*<a href="\/legal\/privacy\/">プライバシーポリシー<\/a><\/footer>/)
+assert.match(html, /<footer>[\s\S]*<a href="\/legal\/privacy\/">プライバシーポリシー・利用規約<\/a>[\s\S]*<\/footer>/)
+// 運営者とソース、安心材料、お知らせ（2026-11-14）。準備中のかるたは最初の案内に書かない
+assert.match(html, /<footer>[\s\S]*<a href="https:\/\/ishizakahiroshi\.com\/">運営者<\/a>[\s\S]*<a href="https:\/\/github\.com\/ishizakahiroshi\/manabi-map">/)
+assert.match(html, /<ul class="promises"[^>]*><li>どれも無料<\/li>/)
+assert.match(html, /<section id="news"[\s\S]*<time datetime="2026-11-13">/)
+assert.doesNotMatch(html, /<p class="lead">[^<]*かるた/)
 assert.doesNotMatch(html, /high-school\.manabi-map\.app\/legal\/privacy/)
 {
   const res = await get('/legal/privacy/')

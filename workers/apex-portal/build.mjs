@@ -28,10 +28,28 @@ const values = {
   // 総合入口のポリシーは総合入口が自分で配る（/legal/privacy/。2026-11-13 本人決定。以前は高校版のページへ飛ばしていた）。
   // 呼び名は高校版のフッター（web/data/site-footer-links.json）と同じにする
   // 公開データ（API）の案内（/data/）へもつなぐ（2026-11-13 本人決定）
-  footerLinks: '<a href="/data/">公開データ・API</a> <a href="/legal/privacy/">プライバシーポリシー</a>',
+  // 運営者とソースもフッターから見えるようにする（2026-11-14 本人決定）。利用規約はサービスごとにあるので、ポリシーのページから各サービスの規約へつなぐ
+  footerLinks: '<a href="/data/">公開データ・API</a> <a href="/legal/privacy/">プライバシーポリシー・利用規約</a> <a href="https://ishizakahiroshi.com/">運営者</a> <a href="https://github.com/ishizakahiroshi/manabi-map">ソースコード（GitHub）</a>',
   learningCards: cards, recoveryLink: '', recoveryNotice: '',
 }
-const html = template.replace(/<meta name="robots" content="noindex">/, '')
+// 2026-11-14 本人決定: 安心材料の 1 行・更新情報を足し、準備中のかるたを最初の案内から外す。
+// 書くのは確かめた事実だけ（無料・登録なし・記録は端末の中は、たねもじ・たねワードの規約と高校版の構成で確認）
+const promises = '<ul class="promises" aria-label="使う前に"><li>どれも無料</li><li>会員登録なし</li><li>お気に入りや学習の記録は、お使いの端末の中に保存</li></ul>'
+// 更新情報。新しい順に足す。日付は公開した日（build.mjs のコメント・ops の証拠と同じ）
+const news = [
+  ['2026-11-13', '英単語を学ぶ「たねワード」を公開しました。', 'https://english.manabi-map.app/'],
+  ['2026-11-13', '全部の学校の種類の公開データの一覧を公開しました。', '/data/'],
+  ['2026-11-04', '漢字を学ぶ「たねもじ」を公開しました。', 'https://kanji.manabi-map.app/'],
+]
+const newsSection = `<section id="news" class="news" aria-labelledby="news-title"><h2 id="news-title">お知らせ</h2><ul>${news.map(([date, text, url]) => `<li><time datetime="${date}">${date.replaceAll('-', '.')}</time><a href="${url}">${text}</a></li>`).join('')}</ul></section>`
+const replaceOnce = (source, from, to) => {
+  if (!source.includes(from)) throw new Error(`template changed: ${from.slice(0, 40)}`)
+  return source.replace(from, to)
+}
+let page = replaceOnce(template, '<p class="lead">学校を探す。漢字を学ぶ。かるたで地域を知る。<br>目的に合った入口を選んで、少し先の毎日へ。</p>',
+  `<p class="lead">学校を探す。漢字や英単語を学ぶ。<br>目的に合った入口を選んで、少し先の毎日へ。</p>${promises}`)
+page = replaceOnce(page, '    <aside>', `    ${newsSection}\n    <aside>`)
+const html = page.replace(/<meta name="robots" content="noindex">/, '')
   .replace('<link rel="stylesheet" href="/portal.css">', `<style>${css}</style>`)
   .replace(/\s*<aside><h2>これまで学校サイトを使っていた方へ<\/h2>[\s\S]*?<\/aside>/, '')
   .replace('<p>移行候補のプレビューです。新しい行き先は公開確認後にご案内します。</p>', '')
@@ -74,9 +92,13 @@ const privacyPage = `<!doctype html><html lang="ja"><head><meta charset="utf-8">
   + '<h2>4. 配信の記録</h2><p>入口は Cloudflare のサービスで配信しています。配信のため、Cloudflare が IP アドレスなどの通信の情報を扱います。</p>'
   + '<h2>5. 各サービスのプライバシーポリシー</h2><ul>'
   + '<li><a href="https://high-school.manabi-map.app/legal/privacy/">高校・高専（Manabi Map）</a></li>'
-  // 2026-11-13 時点で、ほかのサービス（school / home / kanji / english）には専用のポリシーのページが無い（実物を開いて確認）。できたらここへ足す
-  + '</ul><p>小学校・中学校・大学短大・専修学校、地ファクト、たねもじ、たねワードには、まだ専用のプライバシーポリシーがありません。用意したら、ここに載せます。</p>'
-  + '<h2>6. 改定</h2><p>2026-11-13 制定。</p>'
+  // たねもじ・たねワードはアプリの中に /privacy と /terms がある（各リポの routing.ts。2026-11-14 確認）。
+  // 学校入口（school）と地ファクト（home）には専用のページが無い（2026-11-13 に実物で確認）。できたらここへ足す
+  + '<li><a href="https://kanji.manabi-map.app/privacy">たねもじ</a></li><li><a href="https://english.manabi-map.app/privacy">たねワード</a></li>'
+  + '</ul><p>小学校・中学校・大学短大・専修学校と、地ファクトには、まだ専用のプライバシーポリシーがありません。用意したら、ここに載せます。</p>'
+  + '<h2 id="terms">6. 利用規約</h2><p>利用規約はサービスごとにあります。</p><ul>'
+  + '<li><a href="https://high-school.manabi-map.app/legal/terms/">高校・高専（Manabi Map）</a></li><li><a href="https://kanji.manabi-map.app/terms">たねもじ</a></li><li><a href="https://english.manabi-map.app/terms">たねワード</a></li></ul>'
+  + '<h2>7. 改定</h2><p>2026-11-13 制定。2026-11-14 たねもじ・たねワードのポリシーと、各サービスの利用規約へのリンクを追加。</p>'
   + '<p><a href="/">まなびマップの入口へ</a></p></main></body></html>\n'
 const files = {
   '/': ['text/html; charset=utf-8', html],
