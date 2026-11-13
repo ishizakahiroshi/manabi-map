@@ -15,6 +15,8 @@ for (const [kind, name, url] of [['primary', '小学校', 'https://school.manabi
   assert.ok(html.includes(`.kinds a[data-kind="${kind}"]{--k-button:#`), `学校の種類の色が無い: ${name}`)
 }
 assert.ok(html.includes('.kinds a[data-kind="primary"]{--k-button:#efc5c3;'), '小学校の色が学校入口の画面と違う')
+// 種類ごとに色が違う（大学・短大と専修学校を同じ紫にしない。2026-11-14）
+assert.equal(new Set([...html.matchAll(/\.kinds a\[data-kind="[a-z-]+"\]\{--k-button:(#[0-9a-f]{6})/g)].map((m) => m[1])).size, 5, '同じ色の学校の種類がある')
 assert.match(html, /https:\/\/home\.manabi-map\.app\//)
 assert.ok(html.includes('<p class="service-brand chifact">chifact<span>.</span><small>｜地ファクト</small></p>'), '地ファクトのロゴの文字が無い')
 assert.match(html, /href="https:\/\/kanji\.manabi-map\.app\/">たねもじを開く/)

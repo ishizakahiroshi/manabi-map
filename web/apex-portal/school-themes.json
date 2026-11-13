@@ -1,10 +1,10 @@
 {
-  "note": "学校の種類の色（2026-11-14）。総合入口の学校ボタンを、行き先の画面と同じ色にする。小学校・中学校・大学短大・専修学校の値は学校入口のリポジトリ（manabi-map-school）の web/data/school-themes.json の写しで、正本はそちら。向こうを変えたらここも合わせる。高校・高専は高校版の画面のオレンジ（school-themes.json の high-school の青は高校版の画面では使っていない）。button はボタンの地の色（行き先の主ボタンと同じ）、hover は指を乗せたときの色。文字はどれも黒 #241f1a。",
+  "note": "学校の種類の色（2026-11-14）。総合入口の学校ボタンを、行き先の画面と同じ色にする。button は学校入口のリポジトリ（manabi-map-school）の web/data/school-themes.json の background の写しで、正本はそちら。向こうを変えたらここも合わせる。高校・高専は高校版の画面のオレンジ。専修学校は 2026-11-14 に大学・短大の紫から緑へ分けた。hover は指を乗せたときの色。文字はどれも黒 #241f1a。",
   "kinds": {
     "primary": { "button": "#efc5c3", "hover": "#f6dcda" },
     "middle": { "button": "#eed1df", "hover": "#f5e2eb" },
     "high-school": { "button": "#ff7a3d", "hover": "#ff8f5a" },
     "university": { "button": "#ddd0ee", "hover": "#e9e0f4" },
-    "vocational": { "button": "#ddd0ee", "hover": "#e9e0f4" }
+    "vocational": { "button": "#c6e3da", "hover": "#dcefe9" }
   }
 }
