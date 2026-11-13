@@ -68,7 +68,7 @@ const privacyPage = `<!doctype html><html lang="ja"><head><meta charset="utf-8">
   + '<style>body{font-family:system-ui,sans-serif;line-height:1.7;max-width:760px;margin:0 auto;padding:16px;color:#222}li{margin:6px 0}</style></head><body><main>'
   + `<h1>${values.brand} プライバシーポリシー</h1>`
   + `<p>この文書は、${values.brand}の入口（https://manabi-map.app/）での情報の扱いを書いたものです。入口から開く各サービスでの扱いは、それぞれのサービスのプライバシーポリシーをご覧ください。</p>`
-  + '<h2>1. 運営者・連絡先</h2><ul><li>運営者: ishizakahiroshi（個人による OSS プロジェクト）</li><li>連絡先: <a href="https://high-school.manabi-map.app/legal/privacy/">高校・高専のプライバシーポリシー</a>の「1. 運営者・連絡先」にあるメールアドレス</li></ul>'
+  + '<h2>1. 運営者・連絡先</h2><ul><li>運営者: <a href="https://ishizakahiroshi.com/">ishizakahiroshi</a>（個人による OSS プロジェクト）</li><li>連絡先: <a href="https://high-school.manabi-map.app/legal/privacy/">高校・高専のプライバシーポリシー</a>の「1. 運営者・連絡先」にあるメールアドレス</li></ul>'
   + '<h2>2. 入口で受け取る情報</h2><p>入口には、ログイン・入力欄・お気に入りなどの機能はありません。氏名・メールアドレスなどの個人情報は受け取りません。Cookie も使いません。</p>'
   + '<h2>3. アクセス解析</h2><p>訪問の数を知るために、Cloudflare Web Analytics を使っています。Cookie を使わない計測で、ページの表示や読み込みの速さなどが Cloudflare へ送られます。詳しくは <a href="https://www.cloudflare.com/privacypolicy/">Cloudflare のプライバシーポリシー</a>をご覧ください。ほかの解析・広告のスクリプトは読み込みません。</p>'
   + '<h2>4. 配信の記録</h2><p>入口は Cloudflare のサービスで配信しています。配信のため、Cloudflare が IP アドレスなどの通信の情報を扱います。</p>'
