@@ -21,7 +21,13 @@ assert.match(html, /<article data-subject="kokugo"><span class="badge"[^>]*><svg
 assert.match(html, /<article data-subject="english"><span class="badge"[^>]*><svg><use href="#pin-english"\/><\/svg><\/span><h2>たねワード<\/h2>/)
 assert.ok(html.includes('.cards article[data-subject="kokugo"]{--s-accent:#ff5c6c;--s-soft:#fff0f1;--s-text:#c2182b;--s-on-accent:#241f1a}'), '国語の色が無い')
 assert.ok(html.includes('.cards article[data-subject="english"]{--s-accent:#a57bff;--s-soft:#f5f0ff;--s-text:#6534d6;--s-on-accent:#241f1a}'), '英語の色が無い')
-assert.equal((html.match(/<article data-subject=/g) || []).length, 2, '公開していない教科のカードが入っている')
+// たねちず・たねさんすう・たねデジ（2026-11-14 公開）
+for (const [subject, name, host] of [['shakai', 'たねちず', 'shakai'], ['math', 'たねさんすう', 'math'], ['joho', 'たねデジ', 'joho']]) {
+  assert.match(html, new RegExp(`<article data-subject="${subject}"><span class="badge"[^>]*><svg><use href="#pin-${subject}"/></svg></span><h2>${name}</h2>`))
+  assert.ok(html.includes(`href="https://${host}.manabi-map.app/">${name}を開く →</a>`), `${name} の行き先が無い`)
+  assert.ok(html.includes(`.cards article[data-subject="${subject}"]{--s-accent:`), `${name} の色が無い`)
+}
+assert.equal((html.match(/<article data-subject=/g) || []).length, 5, '公開していない教科のカードが入っている')
 assert.match(html, /rel="canonical" href="https:\/\/manabi-map\.app\//)
 assert.doesNotMatch(html, /noindex|旧URL|移行候補|\{\{/)
 // フッターから総合入口のプライバシーポリシーへつなぐ。訪問を数えていることを利用者が確かめられるようにする（2026-11-13 に高校版のページから切り替え）
