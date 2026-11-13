@@ -16,6 +16,12 @@ assert.match(html, /https:\/\/home\.manabi-map\.app\//)
 assert.ok(html.includes('<p class="service-brand chifact">chifact<span>.</span><small>｜地ファクト</small></p>'), '地ファクトのロゴの文字が無い')
 assert.match(html, /href="https:\/\/kanji\.manabi-map\.app\/">たねもじを開く/)
 assert.match(html, /href="https:\/\/english\.manabi-map\.app\/">たねワードを開く/)
+// 教科の色（案 A）: カードに教科を当て、色の値は subject-themes.json から CSS 変数で入る。教科は名前と絵でも分かる
+assert.match(html, /<article data-subject="kokugo"><span class="badge"[^>]*><svg><use href="#pin-kanji"\/><\/svg><\/span><h2>たねもじ<\/h2>/)
+assert.match(html, /<article data-subject="english"><span class="badge"[^>]*><svg><use href="#pin-english"\/><\/svg><\/span><h2>たねワード<\/h2>/)
+assert.ok(html.includes('.cards article[data-subject="kokugo"]{--s-accent:#ff5c6c;--s-soft:#fff0f1;--s-text:#c2182b;--s-on-accent:#241f1a}'), '国語の色が無い')
+assert.ok(html.includes('.cards article[data-subject="english"]{--s-accent:#a57bff;--s-soft:#f5f0ff;--s-text:#6534d6;--s-on-accent:#241f1a}'), '英語の色が無い')
+assert.equal((html.match(/<article data-subject=/g) || []).length, 2, '公開していない教科のカードが入っている')
 assert.match(html, /rel="canonical" href="https:\/\/manabi-map\.app\//)
 assert.doesNotMatch(html, /noindex|旧URL|移行候補|\{\{/)
 // フッターから総合入口のプライバシーポリシーへつなぐ。訪問を数えていることを利用者が確かめられるようにする（2026-11-13 に高校版のページから切り替え）

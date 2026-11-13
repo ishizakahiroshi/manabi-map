@@ -57,6 +57,9 @@ p{line-height:1.9}
 .cards article{display:grid;grid-template-columns:auto 1fr;gap:6px 20px;align-items:start;padding:28px;min-width:0}
 .cards .badge{grid-row:1/4}
 .cards article:last-child .badge{background:#eef0d8}
+.cards article[data-subject]{background:var(--s-soft)}
+.cards article[data-subject] .badge{background:var(--s-accent);color:var(--s-on-accent)}
+.cards article[data-subject] h2{color:var(--s-text)}
 .cards h2{margin:4px 0 0}
 .cards p{margin:0 0 10px}
 .cards .state,.cards .primary{justify-self:start}

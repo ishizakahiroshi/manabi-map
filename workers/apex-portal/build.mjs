@@ -6,11 +6,15 @@ import { brandMark, favicon } from '../../web/apex-portal/portal.mjs'
 // Cloudflare Web Analytics, whose beacon Cloudflare injects at the edge (see PAGE_CSP in runtime.mjs).
 const root = resolve(import.meta.dirname, '../..')
 const template = await readFile(resolve(root, 'web/apex-portal/index.html'), 'utf8')
-const css = await readFile(resolve(root, 'web/apex-portal/portal.css'), 'utf8')
+// 教科の色（D-K7）は subject-themes.json の 1 か所から CSS 変数として流す（案 A・2026-11-14 本人承認）
+const themes = JSON.parse(await readFile(resolve(root, 'web/apex-portal/subject-themes.json'), 'utf8'))
+const subjectCss = Object.entries(themes.subjects).map(([id, t]) =>
+  `.cards article[data-subject="${id}"]{--s-accent:${t.accent};--s-soft:${t.soft};--s-text:${t.text};--s-on-accent:${themes.onAccent}}`).join('\n')
+const css = `${await readFile(resolve(root, 'web/apex-portal/portal.css'), 'utf8')}\n${subjectCss}\n`
 // たねもじは 2026-11-04 に kanji.manabi-map.app で公開した（本人の「自走してデプロイまでやっていい」）
 // たねワード（英語）は 2026-11-13 に english.manabi-map.app で公開した。印はアプリのアイコンと同じ絵（英語のノートの線と A）
 const badge = (id) => `<span class="badge" aria-hidden="true"><svg><use href="#pin-${id}"/></svg></span>`
-const cards = `<article>${badge('kanji')}<h2>たねもじ</h2><p>漢字を学ぶ教材。</p><a class="primary" href="https://kanji.manabi-map.app/">たねもじを開く →</a></article><article>${badge('english')}<h2>たねワード</h2><p>英単語を学ぶ教材。</p><a class="primary" href="https://english.manabi-map.app/">たねワードを開く →</a></article><article>${badge('karuta')}<h2>郷土かるた</h2><p>地域のことばや文化に親しむ教材。</p><span class="state">準備中</span></article>`
+const cards = `<article data-subject="kokugo">${badge('kanji')}<h2>たねもじ</h2><p>漢字を学ぶ教材。</p><a class="primary" href="https://kanji.manabi-map.app/">たねもじを開く →</a></article><article data-subject="english">${badge('english')}<h2>たねワード</h2><p>英単語を学ぶ教材。</p><a class="primary" href="https://english.manabi-map.app/">たねワードを開く →</a></article><article>${badge('karuta')}<h2>郷土かるた</h2><p>地域のことばや文化に親しむ教材。</p><span class="state">準備中</span></article>`
 // 学校の種類は、学校入口（school.manabi-map.app）を経由せず、ここから直接それぞれの行き先へ送る（2026-11-12 本人の案）。
 // 種類と行き先は学校入口の一覧と同じにする。学校入口の種類が増減したら、ここも合わせる
 const schoolKinds = [

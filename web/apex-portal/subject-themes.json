@@ -1,0 +1,12 @@
+{
+  "note": "教科の色（D-K7・2026-11-13 本人決定）。並びは accent・background・soft・text。accent の上の文字は黒 #241f1a（白は置かない）。総合入口のカードは accent を印の背景、soft をカードの背景、text を見出しの文字に使う（案 A・2026-11-14 本人承認）。色の値はここだけに書き、portal.css に重ねて書かない。",
+  "onAccent": "#241f1a",
+  "subjects": {
+    "kokugo": { "accent": "#ff5c6c", "background": "#ffd6da", "soft": "#fff0f1", "text": "#c2182b" },
+    "english": { "accent": "#a57bff", "background": "#e4d8ff", "soft": "#f5f0ff", "text": "#6534d6" },
+    "math": { "accent": "#4a9bff", "background": "#d3e6ff", "soft": "#eef6ff", "text": "#1259c3" },
+    "shakai": { "accent": "#ffcf1f", "background": "#ffeaa6", "soft": "#fff8dd", "text": "#7a5600" },
+    "rika": { "accent": "#34cf74", "background": "#cdf3dc", "soft": "#ecfbf2", "text": "#0e7539" },
+    "joho": { "accent": "#22c7d6", "background": "#c8f1f5", "soft": "#eafafc", "text": "#086e7b" }
+  }
+}
