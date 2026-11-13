@@ -4,6 +4,8 @@ body{margin:0;background:radial-gradient(#241f1a12 1.2px,transparent 1.4px) 0 0/
 .defs{position:absolute;width:0;height:0}
 header,main,footer{max-width:1080px;margin:auto;padding:24px 28px}
 header{display:flex;align-items:center;justify-content:space-between;gap:12px 16px;flex-wrap:wrap}
+/* ヘッダーは上に固定する（2026-11-13 本人指示）。背景は画面の横幅いっぱいまで塗り、下の内容が透けないようにする */
+header{position:sticky;top:0;z-index:10;padding-top:14px;padding-bottom:14px;background:var(--paper);box-shadow:0 0 0 100vmax var(--paper),0 2px 0 100vmax #241f1a14;clip-path:inset(0 -100vmax -2px)}
 .brand{gap:10px;font-size:23px;font-weight:750;color:var(--ink);text-decoration:none;letter-spacing:.02em}
 .brand svg{width:35px;height:42px;flex:0 0 35px}
 nav{display:flex;gap:8px}
@@ -74,10 +76,13 @@ footer svg{width:20px;height:24px;flex:0 0 20px}
 footer span{flex:1;min-width:0}
 footer a{color:inherit;font-weight:700}
 footer p{flex-basis:100%;margin:0}
-section{scroll-margin-top:20px}
+/* 固定したヘッダーの下に見出しが隠れないよう、ヘッダーの高さ分あける */
+section{scroll-margin-top:100px}
 :where(.brand,.service-brand,footer){overflow-wrap:anywhere;min-width:0}
 @media(max-width:700px){
 header,main,footer{padding-left:20px;padding-right:20px}
+header{padding-top:10px;padding-bottom:10px;row-gap:8px}
+section{scroll-margin-top:140px}
 footer a{flex-basis:100%}
 .hero{grid-template-columns:1fr;padding:8px 0 32px;gap:8px}
 .hero .eyebrow{font-size:12px;letter-spacing:.04em;padding:6px 12px}
