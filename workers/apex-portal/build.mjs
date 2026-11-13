@@ -93,12 +93,13 @@ const privacyPage = `<!doctype html><html lang="ja"><head><meta charset="utf-8">
   + '<h2>5. 各サービスのプライバシーポリシー</h2><ul>'
   + '<li><a href="https://high-school.manabi-map.app/legal/privacy/">高校・高専（Manabi Map）</a></li>'
   // たねもじ・たねワードはアプリの中に /privacy と /terms がある（各リポの routing.ts。2026-11-14 確認）。
-  // 学校入口（school）と地ファクト（home）には専用のページが無い（2026-11-13 に実物で確認）。できたらここへ足す
+  // 学校入口（school /privacy/）と地ファクト（home /privacy）は 2026-11-14 に作って公開した
+  + '<li><a href="https://school.manabi-map.app/privacy/">小学校・中学校・大学短大・専修学校（学校入口）</a></li>'
   + '<li><a href="https://kanji.manabi-map.app/privacy">たねもじ</a></li><li><a href="https://english.manabi-map.app/privacy">たねワード</a></li>'
-  + '</ul><p>小学校・中学校・大学短大・専修学校と、地ファクトには、まだ専用のプライバシーポリシーがありません。用意したら、ここに載せます。</p>'
+  + '<li><a href="https://home.manabi-map.app/privacy">地ファクト</a></li></ul>'
   + '<h2 id="terms">6. 利用規約</h2><p>利用規約はサービスごとにあります。</p><ul>'
   + '<li><a href="https://high-school.manabi-map.app/legal/terms/">高校・高専（Manabi Map）</a></li><li><a href="https://kanji.manabi-map.app/terms">たねもじ</a></li><li><a href="https://english.manabi-map.app/terms">たねワード</a></li></ul>'
-  + '<h2>7. 改定</h2><p>2026-11-13 制定。2026-11-14 たねもじ・たねワードのポリシーと、各サービスの利用規約へのリンクを追加。</p>'
+  + '<h2>7. 改定</h2><p>2026-11-13 制定。2026-11-14 たねもじ・たねワード・学校入口・地ファクトのポリシーと、各サービスの利用規約へのリンクを追加。</p>'
   + '<p><a href="/">まなびマップの入口へ</a></p></main></body></html>\n'
 const files = {
   '/': ['text/html; charset=utf-8', html],
