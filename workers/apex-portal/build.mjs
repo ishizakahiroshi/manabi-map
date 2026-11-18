@@ -84,8 +84,10 @@ const dataKinds = [
   ['大学・短大', 'https://school.manabi-map.app/data/', 'https://school.manabi-map.app/api/v1/university/dataset.json', 'CC BY 4.0'],
   ['専修学校（専門学校を含む）', 'https://school.manabi-map.app/data/', 'https://school.manabi-map.app/api/v1/vocational/dataset.json', 'CC BY 4.0'],
 ]
+// 案内ページも、リンクが共有されたときに入口と同じ画像が出るようにする
+const ogTags = (title, url) => `<meta property="og:type" content="website"><meta property="og:title" content="${title}"><meta property="og:url" content="${url}"><meta property="og:image" content="${values.origin}/og-image.png"><meta property="og:image:width" content="1200"><meta property="og:image:height" content="630"><meta name="twitter:card" content="summary_large_image">`
 const dataPage = `<!doctype html><html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>公開データ・API | ${values.brand}</title>`
-  + `<link rel="canonical" href="https://manabi-map.app/data/">${values.favicon}`
+  + `<link rel="canonical" href="https://manabi-map.app/data/">${ogTags(`公開データ・API | ${values.brand}`, 'https://manabi-map.app/data/')}${values.favicon}`
   + '<style>body{font-family:system-ui,sans-serif;line-height:1.7;max-width:760px;margin:0 auto;padding:16px;color:#222}code{word-break:break-all}li{margin:6px 0}</style></head><body><main>'
   + `<h1>公開データ・API</h1><p>${values.brand}は、学校の種類ごとの基本情報を、固定 URL の JSON で配っています。認証は不要で、どのサイトからも読めます。</p>`
   + '<h2>全部の一覧（機械向け）</h2><p><a href="/api/catalog.json">/api/catalog.json</a> に、学校の種類ごとの件数・ライセンス・API の URL をまとめています。</p>'
@@ -97,7 +99,7 @@ const dataPage = `<!doctype html><html lang="ja"><head><meta charset="utf-8"><me
 // /legal/privacy/: 総合入口（manabi-map.app）だけのプライバシーポリシー。書くのは runtime.mjs と PAGE_CSP で実際にしていることだけ。
 // 各サービスの中での扱いは、それぞれのサービスのポリシーが正本なので、ここには写さず行き先だけを並べる
 const privacyPage = `<!doctype html><html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>プライバシーポリシー | ${values.brand}</title>`
-  + `<link rel="canonical" href="https://manabi-map.app/legal/privacy/">${values.favicon}`
+  + `<link rel="canonical" href="https://manabi-map.app/legal/privacy/">${ogTags(`プライバシーポリシー | ${values.brand}`, 'https://manabi-map.app/legal/privacy/')}${values.favicon}`
   + '<style>body{font-family:system-ui,sans-serif;line-height:1.7;max-width:760px;margin:0 auto;padding:16px;color:#222}li{margin:6px 0}</style></head><body><main>'
   + `<h1>${values.brand} プライバシーポリシー</h1>`
   + `<p>この文書は、${values.brand}の入口（https://manabi-map.app/）での情報の扱いを書いたものです。入口から開く各サービスでの扱いは、それぞれのサービスのプライバシーポリシーをご覧ください。</p>`
@@ -118,8 +120,11 @@ const privacyPage = `<!doctype html><html lang="ja"><head><meta charset="utf-8">
   + '<li><a href="https://shakai.manabi-map.app/terms">たねちず</a></li><li><a href="https://math.manabi-map.app/terms">たねさんすう</a></li><li><a href="https://joho.manabi-map.app/terms">たねデジ</a></li><li><a href="https://nihon.manabi-map.app/terms">たねにほん</a></li></ul>'
   + '<h2>7. 改定</h2><p>2026-11-13 制定。2026-11-14 たねもじ・たねワード・学校入口・地ファクトのポリシーと、各サービスの利用規約へのリンクを追加。2026-11-14 たねちず・たねさんすう・たねデジのポリシーと利用規約へのリンクを追加。2026-11-14 たねにほんのポリシーと利用規約へのリンクを追加。</p>'
   + '<p><a href="/">まなびマップの入口へ</a></p></main></body></html>\n'
+// 共有カード用の画像（X・LINE などのリンクの絵）。scripts/make-og-image.py で作る 1200x630
+const ogImage = (await readFile(resolve(root, 'web/apex-portal/og-image.png'))).toString('base64')
 const files = {
   '/': ['text/html; charset=utf-8', html],
+  '/og-image.png': ['image/png', ogImage, 'base64'],
   '/robots.txt': ['text/plain; charset=utf-8', 'User-agent: *\nAllow: /\nDisallow: /auth/\nDisallow: /mypage\nDisallow: /favorites\nDisallow: /compare\nDisallow: /family/\n\nUser-agent: meta-externalagent\nUser-agent: Amazonbot\nUser-agent: GPTBot\nUser-agent: ClaudeBot\nUser-agent: CCBot\nUser-agent: Bytespider\nAllow: /api/v1/\nAllow: /api/catalog.json\nAllow: /data/\nDisallow: /\n\nSitemap: https://manabi-map.app/sitemap.xml\n'],
   '/sitemap.xml': ['application/xml; charset=utf-8', '<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>https://manabi-map.app/</loc></url><url><loc>https://manabi-map.app/data/</loc></url><url><loc>https://manabi-map.app/legal/privacy/</loc></url></urlset>\n'],
   '/llms.txt': ['text/plain; charset=utf-8', '# まなびマップ\n\n学ぶことと通う場所を見つける入口です。\n\n学校の種類を選ぶ: https://school.manabi-map.app/\n高校・高専: https://high-school.manabi-map.app/\n地ファクト: https://home.manabi-map.app/\nたねもじ（漢字）: https://kanji.manabi-map.app/\nたねワード（英語）: https://english.manabi-map.app/\nたねちず（社会）: https://shakai.manabi-map.app/\nたねさんすう（算数）: https://math.manabi-map.app/\nたねデジ（情報）: https://joho.manabi-map.app/\nたねにほん（社会・都道府県）: https://nihon.manabi-map.app/\n\n## 公開データ（API）\n\n全部の学校の種類の一覧: https://manabi-map.app/api/catalog.json\n説明: https://manabi-map.app/data/\n'],

@@ -113,5 +113,7 @@ async function handleRequest(request, files, fetchImpl) {
   if (!file) return notFound()
   const headers = { ...COMMON_HEADERS, 'Content-Type': file[0], 'Content-Security-Policy': PAGE_CSP, 'Cache-Control': 'public, max-age=300' }
   if (url.hostname !== 'manabi-map.app') headers['X-Robots-Tag'] = 'noindex'
-  return new Response(request.method === 'HEAD' ? null : file[1], { headers })
+  // 画像（共有カード用の og-image.png）は base64 の文字で持ち、返すときにバイトへ戻す
+  const body = file[2] === 'base64' ? Uint8Array.from(atob(file[1]), (c) => c.charCodeAt(0)) : file[1]
+  return new Response(request.method === 'HEAD' ? null : body, { headers })
 }

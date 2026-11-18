@@ -39,6 +39,23 @@ assert.ok(html.includes('<symbol id="pin-nihon"'), 'たねにほん の印が無
 assert.equal((html.match(/<article data-subject=/g) || []).length, 6, '公開していない教科のカードが入っている')
 assert.match(html, /rel="canonical" href="https:\/\/manabi-map\.app\//)
 assert.doesNotMatch(html, /noindex|旧URL|移行候補|\{\{/)
+// 共有カード（X・LINE など）に画像を出す。og:image と twitter:card が無いと、画像の無い灰色の枠になる（2026-11-18）
+assert.ok(html.includes('<meta property="og:image" content="https://manabi-map.app/og-image.png">'), 'og:image が無い')
+assert.ok(html.includes('<meta name="twitter:card" content="summary_large_image">'), 'twitter:card が無い')
+{
+  const img = await get('/og-image.png')
+  const bytes = new Uint8Array(await img.arrayBuffer())
+  assert.equal(img.status, 200)
+  assert.equal(img.headers.get('content-type'), 'image/png')
+  assert.deepEqual([...bytes.slice(0, 8)], [137, 80, 78, 71, 13, 10, 26, 10], 'PNG として返す')
+  assert.equal(new DataView(bytes.buffer).getUint32(16), 1200); assert.equal(new DataView(bytes.buffer).getUint32(20), 630)
+  assert.equal((await get('/og-image.png', 'HEAD')).status, 200)
+  for (const path of ['/data/', '/legal/privacy/']) {
+    const sub = await (await get(path)).text()
+    assert.ok(sub.includes('<meta property="og:image" content="https://manabi-map.app/og-image.png">'), `${path} に og:image が無い`)
+    assert.ok(sub.includes('<meta name="twitter:card" content="summary_large_image">'), `${path} に twitter:card が無い`)
+  }
+}
 // フッターから総合入口のプライバシーポリシーへつなぐ。訪問を数えていることを利用者が確かめられるようにする（2026-11-13 に高校版のページから切り替え）
 assert.match(html, /<footer>[\s\S]*<a href="\/legal\/privacy\/">プライバシーポリシー・利用規約<\/a>[\s\S]*<\/footer>/)
 // 運営者とソース、安心材料、お知らせ（2026-11-14）。準備中のかるたは最初の案内に書かない
